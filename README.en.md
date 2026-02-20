@@ -367,12 +367,6 @@ make help         # list all targets
 
 This project is distributed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
-
-- **Open Source Community**: Go, Cobra, Terraform and all the projects that make this work possible
-- **Contributors**: Everyone who reports bugs, suggests improvements and opens PRs
-- **LINUXtips**: For the inspiration and reference on building quality tools for the DevOps community
-
 ---
 
 ## FAQ
