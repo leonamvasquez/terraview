@@ -3,8 +3,8 @@ package drift
 import (
 	"testing"
 
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 func TestAnalyze_NoDrift(t *testing.T) {

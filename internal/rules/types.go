@@ -1,6 +1,6 @@
 package rules
 
-import "github.com/leonam/terraview/internal/parser"
+import "github.com/leonamvasquez/terraview/internal/parser"
 
 // Severity levels for findings.
 const (

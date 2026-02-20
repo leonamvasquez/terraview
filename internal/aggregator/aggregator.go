@@ -3,8 +3,8 @@ package aggregator
 import (
 	"sort"
 
-	"github.com/leonam/terraview/internal/rules"
-	"github.com/leonam/terraview/internal/scoring"
+	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/scoring"
 )
 
 // ReviewResult is the final aggregated result of a review.

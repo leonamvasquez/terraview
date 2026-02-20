@@ -1,6 +1,6 @@
 package main
 
-import "github.com/leonam/terraview/cmd"
+import "github.com/leonamvasquez/terraview/cmd"
 
 var version = "dev"
 

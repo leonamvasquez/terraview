@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 // Reviewer defines the interface for LLM-based review.

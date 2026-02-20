@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/leonam/terraview/internal/drift"
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
-	"github.com/leonam/terraview/internal/terraformexec"
-	"github.com/leonam/terraview/internal/workspace"
+	"github.com/leonamvasquez/terraview/internal/drift"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/terraformexec"
+	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 // DriftResult holds the analysis of infrastructure drift.

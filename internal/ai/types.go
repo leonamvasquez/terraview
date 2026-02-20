@@ -1,8 +1,8 @@
 package ai
 
 import (
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 // Request holds everything an AI provider needs to perform a review.

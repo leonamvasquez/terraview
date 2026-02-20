@@ -1,4 +1,4 @@
-module github.com/leonam/terraview
+module github.com/leonamvasquez/terraview
 
 go 1.22
 

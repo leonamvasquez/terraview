@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leonam/terraview/internal/ai"
-	"github.com/leonam/terraview/internal/parser"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/ai"
+	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 // llmFinding is the expected JSON shape from any LLM provider.
