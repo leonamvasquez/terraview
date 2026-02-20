@@ -18,7 +18,7 @@ NC='\033[0m'
 
 info()  { echo -e "${CYAN}[info]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[ok]${NC}    $*"; }
-warn()  { echo -e "${YELLOW}[warn]${NC}  $*"; }
+warn()  { echo -e "${YELLOW}[warn]${NC}  $*" >&2; }
 error() { echo -e "${RED}[error]${NC} $*" >&2; }
 
 # Detect OS
