@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	githubRepo   = "leonam/terraview"
+	githubRepo   = "leonamvasquez/terraview"
 	binaryName   = "terraview"
 	githubAPIURL = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
 )
