@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leonam/terraview/internal/terraformexec"
-	"github.com/leonam/terraview/internal/workspace"
+	"github.com/leonamvasquez/terraview/internal/terraformexec"
+	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

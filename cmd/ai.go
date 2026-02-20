@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/leonam/terraview/internal/ai"
-	_ "github.com/leonam/terraview/internal/ai/providers" // register all providers
-	"github.com/leonam/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/ai"
+	_ "github.com/leonamvasquez/terraview/internal/ai/providers" // register all providers
+	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/spf13/cobra"
 )
 

@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/leonam/terraview/internal/installer"
+	"github.com/leonamvasquez/terraview/internal/installer"
 )
 
 const (

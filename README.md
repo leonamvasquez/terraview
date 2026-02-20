@@ -8,13 +8,13 @@ A standalone CLI tool that performs **semantic analysis of Terraform plans** usi
 
 ```bash
 # One-line install
-curl -sSL https://raw.githubusercontent.com/leonam/terraview/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 
 # Install LLM runtime (Ollama)
 terraview install llm
 
 # Or build from source
-git clone https://github.com/leonam/terraview.git
+git clone https://github.com/leonamvasquez/terraview.git
 cd terraview
 make install
 ```
@@ -321,7 +321,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Install terraview
-        run: curl -sSL https://raw.githubusercontent.com/leonam/terraview/main/install.sh | bash
+        run: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 
       - name: Review
         run: terraview review --skip-llm
@@ -339,7 +339,7 @@ jobs:
 terraform-review:
   stage: validate
   script:
-    - curl -sSL https://raw.githubusercontent.com/leonam/terraview/main/install.sh | bash
+    - curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
     - terraview review --skip-llm
   artifacts:
     paths: [review.json, review.md]

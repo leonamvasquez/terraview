@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/leonam/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/parser"
 	"gopkg.in/yaml.v3"
 )
 

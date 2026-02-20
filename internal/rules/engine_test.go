@@ -3,7 +3,7 @@ package rules
 import (
 	"testing"
 
-	"github.com/leonam/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/parser"
 )
 
 func TestGenericRule_MatchesTarget(t *testing.T) {

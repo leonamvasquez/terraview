@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/leonam/terraview/internal/config"
-	"github.com/leonam/terraview/internal/installer"
+	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/installer"
 	"github.com/spf13/cobra"
 )
 

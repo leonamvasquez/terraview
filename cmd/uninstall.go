@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/leonam/terraview/internal/installer"
+	"github.com/leonamvasquez/terraview/internal/installer"
 	"github.com/spf13/cobra"
 )
 

@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # terraview installer
-# Usage: curl -sSL https://raw.githubusercontent.com/leonam/terraview/main/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 
-REPO="leonam/terraview"
+REPO="leonamvasquez/terraview"
 BINARY_NAME="terraview"
 INSTALL_DIR="/usr/local/bin"
 ASSETS_DIR="${HOME}/.terraview"

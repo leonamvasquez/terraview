@@ -3,7 +3,7 @@ package scoring
 import (
 	"math"
 
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 // Score represents the computed quality scores.

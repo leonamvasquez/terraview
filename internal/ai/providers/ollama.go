@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/leonam/terraview/internal/ai"
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/ai"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 const ollamaName = "ollama"

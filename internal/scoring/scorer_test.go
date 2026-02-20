@@ -3,7 +3,7 @@ package scoring
 import (
 	"testing"
 
-	"github.com/leonam/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
 func TestScorer_NoFindings(t *testing.T) {

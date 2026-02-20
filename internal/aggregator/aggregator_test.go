@@ -3,8 +3,8 @@ package aggregator
 import (
 	"testing"
 
-	"github.com/leonam/terraview/internal/rules"
-	"github.com/leonam/terraview/internal/scoring"
+	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/scoring"
 )
 
 func TestAggregate_ExitCodes(t *testing.T) {
