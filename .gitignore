@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+coverage.out
+coverage.html
+
+# Output files
+review.json
+review.md
+drift.json
+plan.json
+tfplan
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor (if used)
+vendor/
