@@ -91,8 +91,10 @@ install: build
 	@cp rules/* $(HOME)/.terraview/rules/
 	@cp $(BUILD_DIR)/$(BINARY_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
 	@chmod +x $(HOME)/.local/bin/$(BINARY_NAME)
+	@ln -sf $(HOME)/.local/bin/$(BINARY_NAME) $(HOME)/.local/bin/tv
 	@echo ""
 	@echo "Installed $(BINARY_NAME) $(VERSION) to ~/.local/bin/"
+	@echo "Alias 'tv' -> $(HOME)/.local/bin/tv"
 	@echo "Assets installed to ~/.terraview/"
 	@if ! echo "$$PATH" | grep -q "$(HOME)/.local/bin"; then \
 		echo ""; \
@@ -111,12 +113,14 @@ install-global: build
 	@cp rules/* $(HOME)/.terraview/rules/
 	sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
 	sudo chmod +x /usr/local/bin/$(BINARY_NAME)
+	sudo ln -sf /usr/local/bin/$(BINARY_NAME) /usr/local/bin/tv
 	@echo "Installed $(BINARY_NAME) $(VERSION) to /usr/local/bin/"
+	@echo "Alias 'tv' -> /usr/local/bin/tv"
 
 uninstall:
 	@echo "Removing $(BINARY_NAME)..."
-	@rm -f $(HOME)/.local/bin/$(BINARY_NAME)
-	@rm -f /usr/local/bin/$(BINARY_NAME) 2>/dev/null || true
+	@rm -f $(HOME)/.local/bin/$(BINARY_NAME) $(HOME)/.local/bin/tv
+	@rm -f /usr/local/bin/$(BINARY_NAME) /usr/local/bin/tv 2>/dev/null || true
 	@rm -rf $(HOME)/.terraview
 	@echo "Uninstalled."
 
