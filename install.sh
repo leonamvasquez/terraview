@@ -126,6 +126,14 @@ main() {
         sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
     fi
 
+    # Create 'tv' alias symlink
+    if [ -w "${INSTALL_DIR}" ]; then
+        ln -sf "${INSTALL_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/tv"
+    else
+        sudo ln -sf "${INSTALL_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/tv"
+    fi
+    ok "Alias 'tv' -> ${INSTALL_DIR}/tv"
+
     # Verify
     if command -v "${BINARY_NAME}" &>/dev/null; then
         ok "Installed successfully!"
@@ -134,7 +142,7 @@ main() {
         echo ""
         echo "  Get started:"
         echo "    cd your-terraform-project"
-        echo "    terraview review"
+        echo "    terraview review   # or: tv review"
         echo ""
     else
         warn "Binary installed but not found in PATH."
