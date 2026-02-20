@@ -23,19 +23,19 @@ import (
 )
 
 var (
-	planFile    string
-	rulesFile   string
-	promptDir   string
-	outputDir   string
-	ollamaURL   string
-	ollamaModel string
-	aiProvider  string
-	timeout     int
-	temperature float64
+	planFile     string
+	rulesFile    string
+	promptDir    string
+	outputDir    string
+	ollamaURL    string
+	ollamaModel  string
+	aiProvider   string
+	timeout      int
+	temperature  float64
 	skipLLM      bool
 	outputFormat string
 	strict       bool
-	safeMode    bool
+	safeMode     bool
 )
 
 var reviewCmd = &cobra.Command{

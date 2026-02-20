@@ -85,25 +85,10 @@ func (s *Scorer) Calculate(findings []rules.Finding, totalResources int) Score {
 		compScore = (compScore*2 + relScore) / 3
 	}
 
-	// Overall = weighted average of all categories
-	// Security has most weight
+	// Overall = weighted average of category scores.
+	// Security has the highest weight. Category scores already penalise
+	// CRITICAL/HIGH findings individually, so no further override is needed.
 	overall := (secScore*3 + compScore*2 + maintScore*1.5 + relScore*1) / 7.5
-
-	// Apply raw-all-findings floor only when CRITICAL findings exist,
-	// to ensure CRITICAL can still zero out the overall score.
-	hasCritical := false
-	for _, f := range findings {
-		if f.Severity == rules.SeverityCritical {
-			hasCritical = true
-			break
-		}
-	}
-	if hasCritical {
-		overallFromAll := s.computeCategoryScore(findings, totalResources)
-		if overallFromAll < overall {
-			overall = overallFromAll
-		}
-	}
 
 	return Score{
 		SecurityScore:        clampScore(secScore),

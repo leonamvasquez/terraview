@@ -18,10 +18,10 @@ const openrouterName = "openrouter"
 
 func init() {
 	ai.Register(openrouterName, NewOpenRouter, ai.ProviderInfo{
-		DisplayName:     "OpenRouter",
-		RequiresKey:     true,
-		EnvVarKey:       "OPENROUTER_API_KEY",
-		DefaultModel:    "google/gemini-2.0-flash-001",
+		DisplayName:  "OpenRouter",
+		RequiresKey:  true,
+		EnvVarKey:    "OPENROUTER_API_KEY",
+		DefaultModel: "google/gemini-2.0-flash-001",
 		SuggestedModels: []string{
 			"google/gemini-2.0-flash-001",
 			"google/gemini-2.0-flash-thinking-exp:free",

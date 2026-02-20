@@ -139,56 +139,36 @@ func runAIList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runModelSelector shows a model picker for the given provider.
+// runModelSelector shows a live-filter model picker for the given provider.
+// Typing filters the list in real-time; Enter confirms or uses the typed text.
 func runModelSelector(p ai.ProviderInfo, currentProvider, currentModel string) (string, bool) {
-	suggestedModels := p.SuggestedModels
 	defaultModel := p.DefaultModel
-
-	// If user already has a model configured for this exact provider, keep it as default
 	if p.Name == currentProvider && currentModel != "" {
 		defaultModel = currentModel
 	}
 
-	if len(suggestedModels) == 0 {
-		// Provider has no suggested models — return default directly
+	if len(p.SuggestedModels) == 0 {
 		return defaultModel, true
 	}
 
-	modelItems := make([]selectItem, 0, len(suggestedModels)+1)
+	modelItems := make([]selectItem, 0, len(p.SuggestedModels))
 	defaultIdx := 0
-	for i, m := range suggestedModels {
-		item := selectItem{
-			Label:    m,
-			Value:    m,
-			IsActive: m == defaultModel,
-		}
+	for i, m := range p.SuggestedModels {
 		if m == defaultModel {
 			defaultIdx = i
 		}
-		modelItems = append(modelItems, item)
-	}
-	// Add "outro modelo" option at the end
-	modelItems = append(modelItems, selectItem{
-		Label: "Digitar outro modelo...",
-		Value: "__custom__",
-	})
-
-	chosenModel, ok := runSelector(fmt.Sprintf("Escolha o modelo para %s:", p.Name), modelItems, defaultIdx)
-	if !ok {
-		return "", false
+		modelItems = append(modelItems, selectItem{
+			Label:    m,
+			Value:    m,
+			IsActive: m == defaultModel,
+		})
 	}
 
-	if chosenModel == "__custom__" {
-		fmt.Printf("  Modelo: ")
-		var custom string
-		fmt.Scan(&custom) //nolint:errcheck
-		if custom == "" {
-			return defaultModel, true
-		}
-		return custom, true
-	}
-
-	return chosenModel, true
+	return runFilterSelector(
+		fmt.Sprintf("Escolha o modelo para %s:", p.Name),
+		modelItems,
+		defaultIdx,
+	)
 }
 
 // runAIUse sets the provider (and optionally model) non-interactively.

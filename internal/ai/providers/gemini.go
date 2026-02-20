@@ -18,10 +18,10 @@ const geminiName = "gemini"
 
 func init() {
 	ai.Register(geminiName, NewGemini, ai.ProviderInfo{
-		DisplayName:     "Google Gemini",
-		RequiresKey:     true,
-		EnvVarKey:       "GEMINI_API_KEY",
-		DefaultModel:    "gemini-2.0-flash",
+		DisplayName:  "Google Gemini",
+		RequiresKey:  true,
+		EnvVarKey:    "GEMINI_API_KEY",
+		DefaultModel: "gemini-2.0-flash",
 		SuggestedModels: []string{
 			"gemini-2.0-flash",
 			"gemini-2.0-pro-exp-02-05",
@@ -53,9 +53,9 @@ type geminiPart struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature  float64 `json:"temperature,omitempty"`
-	MaxOutputTokens int  `json:"maxOutputTokens,omitempty"`
-	ResponseMIMEType string `json:"responseMimeType,omitempty"`
+	Temperature      float64 `json:"temperature,omitempty"`
+	MaxOutputTokens  int     `json:"maxOutputTokens,omitempty"`
+	ResponseMIMEType string  `json:"responseMimeType,omitempty"`
 }
 
 type geminiResponse struct {
