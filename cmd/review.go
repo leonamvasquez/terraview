@@ -137,6 +137,11 @@ func executeReview() (string, int, error) {
 	if ollamaURL != "" {
 		effectiveURL = ollamaURL
 	}
+	// When the provider is not ollama and no explicit URL was given via flag,
+	// clear the URL so each provider falls back to its own default base URL.
+	if ollamaURL == "" && effectiveProvider != "ollama" {
+		effectiveURL = ""
+	}
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
 	if timeout > 0 {
 		effectiveTimeout = timeout

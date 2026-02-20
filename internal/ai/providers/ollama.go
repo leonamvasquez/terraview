@@ -17,8 +17,17 @@ const ollamaName = "ollama"
 
 func init() {
 	ai.Register(ollamaName, NewOllama, ai.ProviderInfo{
-		DisplayName: "Ollama (Local)",
-		RequiresKey: false,
+		DisplayName:     "Ollama (Local)",
+		RequiresKey:     false,
+		DefaultModel:    "llama3.1:8b",
+		SuggestedModels: []string{
+			"llama3.1:8b",
+			"llama3.1:70b",
+			"llama3.2:3b",
+			"mistral:7b",
+			"qwen2.5:7b",
+			"gemma3:9b",
+		},
 	})
 }
 
