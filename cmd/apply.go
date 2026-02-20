@@ -28,7 +28,7 @@ Behavior:
 Examples:
   terraview apply                     # interactive mode
   terraview apply --non-interactive   # CI mode
-  terraview apply --skip-llm          # skip LLM, interactive`,
+  terraview apply --ai                # review with AI, interactive`,
 	RunE: runApply,
 }
 
@@ -43,9 +43,15 @@ func init() {
 	applyCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
 	applyCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
 	applyCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
-	applyCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "Skip AI analysis (hard rules only)")
-	applyCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json (default pretty)")
+	applyCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "[DEPRECATED] AI is now opt-in. Use --ai to enable.")
+	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	applyCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
 	applyCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced resources")
+	applyCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	applyCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
+	applyCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
+	applyCmd.Flags().StringVar(&profileFlag, "profile", "", "Review profile (prod, dev, fintech, startup)")
+	applyCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {

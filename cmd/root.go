@@ -40,8 +40,9 @@ Utilities:
 
 Get started:
   cd my-terraform-project
-  terraview review                  # full review (rules + AI)
-  terraview review --skip-llm       # hard rules only
+  terraview review                  # deterministic rules only
+  terraview review --ai             # review with AI analysis
+  terraview review --diagram        # show infrastructure diagram
   terraview test                    # deterministic checks
   terraview drift                   # detect drift`,
 	SilenceUsage:  true,
