@@ -30,8 +30,10 @@ type Completion struct {
 
 // ProviderInfo describes a registered provider for discovery.
 type ProviderInfo struct {
-	Name        string
-	DisplayName string
-	RequiresKey bool
-	EnvVarKey   string
+	Name            string
+	DisplayName     string
+	RequiresKey     bool
+	EnvVarKey       string
+	DefaultModel    string   // default model pre-selected in the picker
+	SuggestedModels []string // popular models shown in the interactive picker
 }

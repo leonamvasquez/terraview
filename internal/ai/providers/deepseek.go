@@ -18,9 +18,14 @@ const deepseekName = "deepseek"
 
 func init() {
 	ai.Register(deepseekName, NewDeepSeek, ai.ProviderInfo{
-		DisplayName: "DeepSeek",
-		RequiresKey: true,
-		EnvVarKey:   "DEEPSEEK_API_KEY",
+		DisplayName:     "DeepSeek",
+		RequiresKey:     true,
+		EnvVarKey:       "DEEPSEEK_API_KEY",
+		DefaultModel:    "deepseek-chat",
+		SuggestedModels: []string{
+			"deepseek-chat",
+			"deepseek-reasoner",
+		},
 	})
 }
 

@@ -18,9 +18,16 @@ const claudeName = "claude"
 
 func init() {
 	ai.Register(claudeName, NewClaude, ai.ProviderInfo{
-		DisplayName: "Anthropic Claude",
-		RequiresKey: true,
-		EnvVarKey:   "ANTHROPIC_API_KEY",
+		DisplayName:     "Anthropic Claude",
+		RequiresKey:     true,
+		EnvVarKey:       "ANTHROPIC_API_KEY",
+		DefaultModel:    "claude-sonnet-4-20250514",
+		SuggestedModels: []string{
+			"claude-sonnet-4-20250514",
+			"claude-3-5-sonnet-20241022",
+			"claude-3-haiku-20240307",
+			"claude-opus-4-5",
+		},
 	})
 }
 

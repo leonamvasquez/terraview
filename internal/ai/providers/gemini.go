@@ -18,9 +18,16 @@ const geminiName = "gemini"
 
 func init() {
 	ai.Register(geminiName, NewGemini, ai.ProviderInfo{
-		DisplayName: "Google Gemini",
-		RequiresKey: true,
-		EnvVarKey:   "GEMINI_API_KEY",
+		DisplayName:     "Google Gemini",
+		RequiresKey:     true,
+		EnvVarKey:       "GEMINI_API_KEY",
+		DefaultModel:    "gemini-2.0-flash",
+		SuggestedModels: []string{
+			"gemini-2.0-flash",
+			"gemini-2.0-pro-exp-02-05",
+			"gemini-1.5-flash",
+			"gemini-1.5-pro",
+		},
 	})
 }
 

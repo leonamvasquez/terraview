@@ -10,6 +10,51 @@ import (
 
 const configFileName = ".terraview.yaml"
 
+// GlobalConfigDir returns the ~/.terraview directory.
+func GlobalConfigDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".terraview")
+}
+
+// GlobalConfigPath returns the path to the global config (~/.terraview/.terraview.yaml).
+func GlobalConfigPath() string {
+	return filepath.Join(GlobalConfigDir(), configFileName)
+}
+
+// SaveGlobalLLMProvider saves provider and model to the global config file.
+// Creates the file if it doesn't exist; only updates the llm section.
+func SaveGlobalLLMProvider(provider, model string) error {
+	path := GlobalConfigPath()
+
+	// Read existing raw YAML to avoid overwriting other sections
+	existing := make(map[string]interface{})
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+
+	// Update llm.provider and llm.model only
+	llm, _ := existing["llm"].(map[string]interface{})
+	if llm == nil {
+		llm = make(map[string]interface{})
+	}
+	llm["provider"] = provider
+	if model != "" {
+		llm["model"] = model
+	}
+	existing["llm"] = llm
+
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.MkdirAll(GlobalConfigDir(), 0755); err != nil {
+		return fmt.Errorf("failed to create config dir: %w", err)
+	}
+
+	return os.WriteFile(path, data, 0644)
+}
+
 // Config represents the full .terraview.yaml configuration.
 type Config struct {
 	LLM     LLMConfig     `yaml:"llm"`
@@ -96,27 +141,38 @@ func DefaultConfig() Config {
 }
 
 // Load reads .terraview.yaml from the given workspace directory.
-// If the file does not exist, returns DefaultConfig with no error.
-// If the file exists but is invalid, returns an error.
+// It first applies the global ~/.terraview/.terraview.yaml, then overrides
+// with the local workspace config. If neither file exists, returns DefaultConfig.
 func Load(workDir string) (Config, error) {
 	cfg := DefaultConfig()
 
-	configPath := filepath.Join(workDir, configFileName)
-	data, err := os.ReadFile(configPath)
+	// Step 1: Apply global config (lower priority)
+	if data, err := os.ReadFile(GlobalConfigPath()); err == nil {
+		var globalCfg fileConfig
+		if yaml.Unmarshal(data, &globalCfg) == nil {
+			if globalCfg.validate() == nil {
+				cfg = globalCfg.merge(cfg)
+			}
+		}
+	}
+
+	// Step 2: Apply local workspace config (higher priority)
+	localPath := filepath.Join(workDir, configFileName)
+	data, err := os.ReadFile(localPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
-		return cfg, fmt.Errorf("failed to read %s: %w", configPath, err)
+		return cfg, fmt.Errorf("failed to read %s: %w", localPath, err)
 	}
 
 	var fileCfg fileConfig
 	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
-		return cfg, fmt.Errorf("failed to parse %s: %w", configPath, err)
+		return cfg, fmt.Errorf("failed to parse %s: %w", localPath, err)
 	}
 
 	if err := fileCfg.validate(); err != nil {
-		return cfg, fmt.Errorf("invalid %s: %w", configPath, err)
+		return cfg, fmt.Errorf("invalid %s: %w", localPath, err)
 	}
 
 	cfg = fileCfg.merge(cfg)
