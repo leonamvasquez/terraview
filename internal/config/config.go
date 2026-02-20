@@ -188,13 +188,13 @@ type fileConfig struct {
 }
 
 type fileLLMConfig struct {
-	Enabled        *bool            `yaml:"enabled"`
-	Provider       *string          `yaml:"provider"`
-	Model          *string          `yaml:"model"`
-	URL            *string          `yaml:"url"`
-	APIKey         *string          `yaml:"api_key"`
-	TimeoutSeconds *int             `yaml:"timeout_seconds"`
-	Temperature    *float64         `yaml:"temperature"`
+	Enabled        *bool             `yaml:"enabled"`
+	Provider       *string           `yaml:"provider"`
+	Model          *string           `yaml:"model"`
+	URL            *string           `yaml:"url"`
+	APIKey         *string           `yaml:"api_key"`
+	TimeoutSeconds *int              `yaml:"timeout_seconds"`
+	Temperature    *float64          `yaml:"temperature"`
 	Ollama         *fileOllamaConfig `yaml:"ollama"`
 }
 

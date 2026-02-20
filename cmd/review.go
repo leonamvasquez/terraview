@@ -10,10 +10,15 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
+	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/diagram"
+	"github.com/leonamvasquez/terraview/internal/explain"
+	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/llm"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/profile"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scoring"
@@ -23,19 +28,25 @@ import (
 )
 
 var (
-	planFile    string
-	rulesFile   string
-	promptDir   string
-	outputDir   string
-	ollamaURL   string
-	ollamaModel string
-	aiProvider  string
-	timeout     int
-	temperature float64
-	skipLLM      bool
-	outputFormat string
-	strict       bool
-	safeMode    bool
+	planFile        string
+	rulesFile       string
+	promptDir       string
+	outputDir       string
+	ollamaURL       string
+	ollamaModel     string
+	aiProvider      string
+	timeout         int
+	temperature     float64
+	aiEnabled       bool
+	skipLLM         bool
+	outputFormat    string
+	strict          bool
+	safeMode        bool
+	explainFlag     bool
+	diagramFlag     bool
+	blastRadiusFlag bool
+	profileFlag     string
+	findingsFile    string
 )
 
 var reviewCmd = &cobra.Command{
@@ -49,14 +60,20 @@ If --plan is not specified, terraview will automatically run:
   terraform show   (exports JSON)
 
 Examples:
-  terraview review                              # auto-detect and plan
+  terraview review                              # deterministic rules only
   terraview review --plan plan.json             # use existing plan
-  terraview review --skip-llm                   # hard rules only
-  terraview review --provider gemini            # use Gemini AI
+  terraview review --ai                         # enable AI-powered review
+  terraview review --ai --provider gemini       # use Gemini AI
+  terraview review --ai --explain               # AI + natural language explanation
+  terraview review --diagram                    # show ASCII infrastructure diagram
+  terraview review --blast-radius               # analyze dependency blast radius
   terraview review --format compact             # minimal output
   terraview review --format json                # only write review.json
+  terraview review --format sarif               # SARIF output for CI integration
   terraview review --strict                     # HIGH returns exit code 2
-  terraview review --safe                       # safe mode (light model, fewer resources)`,
+  terraview review --safe                       # safe mode (light model, fewer resources)
+  terraview review --profile prod               # production review profile
+  terraview review --findings checkov.json      # import external findings`,
 	RunE: runReview,
 }
 
@@ -70,10 +87,16 @@ func init() {
 	reviewCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
 	reviewCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
 	reviewCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
-	reviewCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "Skip AI analysis (hard rules only)")
-	reviewCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json (default pretty)")
+	reviewCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	reviewCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "[DEPRECATED] AI is now opt-in. Use --ai to enable.")
+	reviewCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
 	reviewCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
 	reviewCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced threads, stricter resource limits")
+	reviewCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	reviewCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
+	reviewCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
+	reviewCmd.Flags().StringVar(&profileFlag, "profile", "", "Review profile (prod, dev, fintech, startup)")
+	reviewCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 }
 
 func runReview(cmd *cobra.Command, args []string) error {
@@ -97,6 +120,17 @@ func executeReview() (string, int, error) {
 		return "", 0, fmt.Errorf("config error: %w", err)
 	}
 	logVerbose("Config loaded from %s", workDir)
+
+	// Apply profile overrides if specified
+	var activeProfile *profile.Profile
+	if profileFlag != "" {
+		activeProfile, err = profile.Load(profileFlag)
+		if err != nil {
+			return "", 0, fmt.Errorf("profile error: %w", err)
+		}
+		profile.Apply(&cfg, activeProfile)
+		logVerbose("Profile %q applied", profileFlag)
+	}
 
 	resolvedPlan := planFile
 
@@ -150,7 +184,20 @@ func executeReview() (string, int, error) {
 	if temperature >= 0 {
 		effectiveTemperature = temperature
 	}
-	effectiveSkipLLM := skipLLM || !cfg.LLM.Enabled
+	// --skip-llm deprecation warning
+	if skipLLM {
+		fmt.Fprintf(os.Stderr, "[terraview] WARNING: --skip-llm is deprecated. AI is now opt-in. Use --ai to enable AI review.\n")
+	}
+
+	// --provider or --model implies --ai
+	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag
+
+	// If AI is configured but not active, show info
+	if cfg.LLM.Enabled && !effectiveAI && !skipLLM {
+		logVerbose("AI is configured but not active. Use --ai to enable.")
+	}
+
+	effectiveSkipLLM := !effectiveAI
 
 	// Resolve output format: CLI flag > config > default
 	effectiveFormat := output.FormatPretty
@@ -231,6 +278,17 @@ func executeReview() (string, int, error) {
 	hardFindings := engine.Evaluate(resources)
 	logVerbose("Hard rules: %d findings", len(hardFindings))
 
+	// 2b. Import external findings if specified
+	if findingsFile != "" {
+		externalFindings, err := importer.Import(findingsFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[terraview] WARNING: Failed to import findings from %s: %v\n", findingsFile, err)
+		} else {
+			hardFindings = append(hardFindings, externalFindings...)
+			logVerbose("Imported %d external findings from %s", len(externalFindings), findingsFile)
+		}
+	}
+
 	// 3. AI review (optional) with lifecycle management
 	var aiFindings []rules.Finding
 	var aiSummary string
@@ -250,7 +308,40 @@ func executeReview() (string, int, error) {
 	sw := cfg.Scoring.SeverityWeights
 	scorer := scoring.NewScorerWithWeights(sw.Critical, sw.High, sw.Medium, sw.Low)
 	agg := aggregator.NewAggregator(scorer)
-	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, aiFindings, aiSummary)
+	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, aiFindings, aiSummary, strict)
+
+	// 4b. Set profile name if used
+	if profileFlag != "" {
+		result.Profile = profileFlag
+	}
+
+	// 4c. Generate diagram if requested (deterministic, no AI)
+	if diagramFlag {
+		gen := diagram.NewGenerator()
+		result.Diagram = gen.Generate(resources)
+		logVerbose("Infrastructure diagram generated")
+	}
+
+	// 4d. Analyze blast radius if requested (deterministic, no AI)
+	if blastRadiusFlag {
+		analyzer := blast.NewAnalyzer()
+		blastResult := analyzer.Analyze(resources)
+		result.BlastRadius = blastResult
+		logVerbose("Blast radius analysis: %s", blastResult.Summary)
+	}
+
+	// 4e. Generate AI explanation if requested
+	if explainFlag && !effectiveSkipLLM {
+		explainer := explain.NewExplainer(nil) // Will use the same AI provider
+		explainCtx := context.Background()
+		explanation, err := explainer.Explain(explainCtx, resources, result.Findings)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[terraview] WARNING: AI explanation failed: %v\n", err)
+		} else {
+			result.Explanation = explanation
+			logVerbose("AI explanation generated")
+		}
+	}
 
 	// 5. Output
 	writer := output.NewWriterWithConfig(output.WriterConfig{
@@ -263,7 +354,15 @@ func executeReview() (string, int, error) {
 	}
 	logVerbose("Written: %s", jsonPath)
 
-	if effectiveFormat != output.FormatJSON {
+	if effectiveFormat == output.FormatSARIF {
+		sarifPath := filepath.Join(resolvedOutput, "review.sarif.json")
+		if err := writer.WriteSARIF(result, sarifPath); err != nil {
+			return resolvedPlan, 0, fmt.Errorf("failed to write SARIF: %w", err)
+		}
+		logVerbose("Written: %s", sarifPath)
+	}
+
+	if effectiveFormat != output.FormatJSON && effectiveFormat != output.FormatSARIF {
 		mdPath := filepath.Join(resolvedOutput, "review.md")
 		if err := writer.WriteMarkdown(result, mdPath); err != nil {
 			return resolvedPlan, 0, fmt.Errorf("failed to write Markdown: %w", err)
@@ -273,6 +372,20 @@ func executeReview() (string, int, error) {
 
 	// 6. Print summary
 	writer.PrintSummary(result)
+
+	// 6b. Print blast radius if generated
+	if blastRadiusFlag && result.BlastRadius != nil {
+		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
+			fmt.Println()
+			fmt.Print(br.FormatPretty())
+		}
+	}
+
+	// 6c. Print diagram if generated
+	if diagramFlag && result.Diagram != "" {
+		fmt.Println()
+		fmt.Println(result.Diagram)
+	}
 
 	// 7. Apply strict mode: HIGH becomes exit code 2
 	exitCode := result.ExitCode
