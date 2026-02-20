@@ -86,8 +86,8 @@ func (w *Writer) PrintSummary(result aggregator.ReviewResult) {
 func (w *Writer) printCompact(result aggregator.ReviewResult) {
 	ratio := fmt.Sprintf("%d findings / %d resources", len(result.Findings), result.TotalResources)
 
-	fmt.Printf("terraview: %s | score=%.1f | exit=%d",
-		ratio, result.Score.OverallScore, result.ExitCode)
+	fmt.Printf("terraview: %s | %s | score=%.1f | exit=%d",
+		result.Verdict.Label, ratio, result.Score.OverallScore, result.ExitCode)
 
 	if len(result.SeverityCounts) > 0 {
 		parts := []string{}
@@ -105,9 +105,59 @@ func (w *Writer) printCompact(result aggregator.ReviewResult) {
 
 func (w *Writer) printFull(result aggregator.ReviewResult) {
 	fmt.Println()
+
+	// Diagram (before verdict)
+	if result.Diagram != "" {
+		fmt.Println(result.Diagram)
+		fmt.Println()
+	}
+
 	fmt.Println("═══════════════════════════════════════════════")
-	fmt.Println("  Terraform Semantic Review Complete")
+	if result.Verdict.Safe {
+		fmt.Println("  VERDICT: SAFE TO APPLY")
+	} else {
+		fmt.Println("  VERDICT: NOT SAFE — review required")
+	}
+	for _, reason := range result.Verdict.Reasons {
+		fmt.Printf("    %s\n", reason)
+	}
 	fmt.Println("═══════════════════════════════════════════════")
+	fmt.Println()
+
+	// AI Explanation (after verdict, before findings)
+	if result.Explanation != nil {
+		fmt.Println("  AI Explanation:")
+		if result.Explanation.Summary != "" {
+			fmt.Printf("  %s\n", result.Explanation.Summary)
+		}
+		fmt.Println()
+		if len(result.Explanation.Risks) > 0 {
+			fmt.Println("  Risks:")
+			for _, r := range result.Explanation.Risks {
+				fmt.Printf("    • %s\n", r)
+			}
+			fmt.Println()
+		}
+		if len(result.Explanation.Suggestions) > 0 {
+			fmt.Println("  Suggestions:")
+			for _, s := range result.Explanation.Suggestions {
+				fmt.Printf("    • %s\n", s)
+			}
+			fmt.Println()
+		}
+	}
+
+	// Blast Radius
+	if result.BlastRadius != nil {
+		fmt.Println(result.BlastRadius)
+		fmt.Println()
+	}
+
+	// Profile
+	if result.Profile != "" {
+		fmt.Printf("  Profile: %s\n\n", result.Profile)
+	}
+
 	fmt.Printf("  Resources analyzed: %d\n", result.TotalResources)
 	fmt.Printf("  Total findings:     %d (%d per resource avg)\n",
 		len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
@@ -148,6 +198,61 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 	sb.WriteString(fmt.Sprintf("**Date:** %s  \n", time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
 	sb.WriteString(fmt.Sprintf("**Plan:** `%s`  \n", result.PlanFile))
 	sb.WriteString(fmt.Sprintf("**Resources Analyzed:** %d  \n\n", result.TotalResources))
+
+	// Verdict section
+	sb.WriteString("## Verdict\n\n")
+	if result.Verdict.Safe {
+		sb.WriteString("**SAFE** — This plan is safe to apply.\n\n")
+	} else {
+		sb.WriteString("**NOT SAFE** — This plan requires review before applying.\n\n")
+	}
+	for _, reason := range result.Verdict.Reasons {
+		sb.WriteString(fmt.Sprintf("- %s\n", reason))
+	}
+	sb.WriteString(fmt.Sprintf("\n*Confidence: %s*\n\n", result.Verdict.Confidence))
+
+	// Profile
+	if result.Profile != "" {
+		sb.WriteString(fmt.Sprintf("**Profile:** %s\n\n", result.Profile))
+	}
+
+	// Diagram
+	if result.Diagram != "" {
+		sb.WriteString("## Infrastructure Diagram\n\n")
+		sb.WriteString("```\n")
+		sb.WriteString(result.Diagram)
+		sb.WriteString("\n```\n\n")
+	}
+
+	// AI Explanation
+	if result.Explanation != nil {
+		sb.WriteString("## AI Explanation\n\n")
+		if result.Explanation.Summary != "" {
+			sb.WriteString(fmt.Sprintf("%s\n\n", result.Explanation.Summary))
+		}
+		if len(result.Explanation.Changes) > 0 {
+			sb.WriteString("### Changes\n\n")
+			for _, c := range result.Explanation.Changes {
+				sb.WriteString(fmt.Sprintf("- %s\n", c))
+			}
+			sb.WriteString("\n")
+		}
+		if len(result.Explanation.Risks) > 0 {
+			sb.WriteString("### Risks\n\n")
+			for _, r := range result.Explanation.Risks {
+				sb.WriteString(fmt.Sprintf("- %s\n", r))
+			}
+			sb.WriteString("\n")
+		}
+		if len(result.Explanation.Suggestions) > 0 {
+			sb.WriteString("### Suggestions\n\n")
+			for _, s := range result.Explanation.Suggestions {
+				sb.WriteString(fmt.Sprintf("- %s\n", s))
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("**Risk Level:** %s\n\n", result.Explanation.RiskLevel))
+	}
 
 	// Score section
 	sb.WriteString("## Quality Score\n\n")

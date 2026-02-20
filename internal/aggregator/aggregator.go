@@ -1,23 +1,38 @@
 package aggregator
 
 import (
+	"fmt"
 	"sort"
 
+	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 )
 
+// Verdict represents the safety assessment of a Terraform plan.
+type Verdict struct {
+	Safe       bool     `json:"safe"`
+	Label      string   `json:"label"`      // "SAFE" or "NOT SAFE"
+	Reasons    []string `json:"reasons"`
+	Confidence string   `json:"confidence"` // "high", "medium", "low"
+}
+
 // ReviewResult is the final aggregated result of a review.
 type ReviewResult struct {
-	PlanFile        string           `json:"plan_file"`
-	TotalResources  int              `json:"total_resources"`
-	Findings        []rules.Finding  `json:"findings"`
-	Score           scoring.Score    `json:"score"`
-	Summary         string           `json:"summary,omitempty"`
-	SeverityCounts  map[string]int   `json:"severity_counts"`
-	CategoryCounts  map[string]int   `json:"category_counts"`
-	MaxSeverity     string           `json:"max_severity"`
-	ExitCode        int              `json:"exit_code"`
+	PlanFile        string                `json:"plan_file"`
+	TotalResources  int                   `json:"total_resources"`
+	Verdict         Verdict               `json:"verdict"`
+	Findings        []rules.Finding       `json:"findings"`
+	Score           scoring.Score         `json:"score"`
+	Summary         string                `json:"summary,omitempty"`
+	Explanation     *explain.Explanation  `json:"explanation,omitempty"`
+	Diagram         string                `json:"diagram,omitempty"`
+	BlastRadius     interface{}           `json:"blast_radius,omitempty"`
+	Profile         string                `json:"profile,omitempty"`
+	SeverityCounts  map[string]int        `json:"severity_counts"`
+	CategoryCounts  map[string]int        `json:"category_counts"`
+	MaxSeverity     string                `json:"max_severity"`
+	ExitCode        int                   `json:"exit_code"`
 }
 
 // Aggregator combines findings from multiple sources and computes the final result.
@@ -31,7 +46,8 @@ func NewAggregator(scorer *scoring.Scorer) *Aggregator {
 }
 
 // Aggregate combines hard-rule findings and LLM findings into a single ReviewResult.
-func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFindings []rules.Finding, llmFindings []rules.Finding, llmSummary string) ReviewResult {
+// When strict is true, HIGH findings also make the verdict NOT SAFE.
+func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFindings []rules.Finding, llmFindings []rules.Finding, llmSummary string, strict bool) ReviewResult {
 	allFindings := make([]rules.Finding, 0, len(hardRuleFindings)+len(llmFindings))
 	allFindings = append(allFindings, hardRuleFindings...)
 	allFindings = append(allFindings, llmFindings...)
@@ -54,9 +70,12 @@ func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFind
 		summary = generateDefaultSummary(allFindings, totalResources)
 	}
 
+	verdict := computeVerdict(allFindings, strict)
+
 	return ReviewResult{
 		PlanFile:       planFile,
 		TotalResources: totalResources,
+		Verdict:        verdict,
 		Findings:       allFindings,
 		Score:          score,
 		Summary:        summary,
@@ -64,6 +83,61 @@ func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFind
 		CategoryCounts: categoryCounts,
 		MaxSeverity:    maxSeverity,
 		ExitCode:       exitCode,
+	}
+}
+
+// computeVerdict determines if a plan is safe to apply.
+// In strict mode, HIGH findings also make the plan NOT SAFE.
+func computeVerdict(findings []rules.Finding, strict bool) Verdict {
+	criticalCount := 0
+	highCount := 0
+	var criticalIDs []string
+	var highIDs []string
+
+	for _, f := range findings {
+		switch f.Severity {
+		case rules.SeverityCritical:
+			criticalCount++
+			criticalIDs = append(criticalIDs, f.RuleID)
+		case rules.SeverityHigh:
+			highCount++
+			highIDs = append(highIDs, f.RuleID)
+		}
+	}
+
+	safe := true
+	var reasons []string
+
+	if criticalCount > 0 {
+		safe = false
+		reasons = append(reasons, fmt.Sprintf("%d CRITICAL finding(s) detected", criticalCount))
+	}
+	if strict && highCount > 0 {
+		safe = false
+		reasons = append(reasons, fmt.Sprintf("%d HIGH finding(s) detected (strict mode)", highCount))
+	}
+
+	if safe && len(findings) == 0 {
+		reasons = append(reasons, "No issues found")
+	} else if safe {
+		reasons = append(reasons, "No CRITICAL or HIGH severity issues")
+	}
+
+	confidence := "high"
+	if criticalCount == 0 && highCount > 0 && !strict {
+		confidence = "medium"
+	}
+
+	label := "SAFE"
+	if !safe {
+		label = "NOT SAFE"
+	}
+
+	return Verdict{
+		Safe:       safe,
+		Label:      label,
+		Reasons:    reasons,
+		Confidence: confidence,
 	}
 }
 
