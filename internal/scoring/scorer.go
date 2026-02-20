@@ -17,9 +17,10 @@ type Score struct {
 // Scorer computes quality scores from findings using proportional penalties.
 //
 // Formula per category:
-//   weighted_sum = sum of severity weights for that category
-//   penalty_ratio = weighted_sum / total_resources
-//   score = 10 - min(penalty_ratio * scale_factor, 10)
+//
+//	weighted_sum = sum of severity weights for that category
+//	penalty_ratio = weighted_sum / total_resources
+//	score = 10 - min(penalty_ratio * scale_factor, 10)
 //
 // Constraints:
 //   - MEDIUM alone can never reduce a category score below 5.0
@@ -87,10 +88,21 @@ func (s *Scorer) Calculate(findings []rules.Finding, totalResources int) Score {
 	// Overall = weighted average of all categories
 	// Security has most weight
 	overall := (secScore*3 + compScore*2 + maintScore*1.5 + relScore*1) / 7.5
-	overallFromAll := s.computeCategoryScore(findings, totalResources)
-	// Use the lower of the two to ensure CRITICAL still zeroes overall
-	if overallFromAll < overall {
-		overall = overallFromAll
+
+	// Apply raw-all-findings floor only when CRITICAL findings exist,
+	// to ensure CRITICAL can still zero out the overall score.
+	hasCritical := false
+	for _, f := range findings {
+		if f.Severity == rules.SeverityCritical {
+			hasCritical = true
+			break
+		}
+	}
+	if hasCritical {
+		overallFromAll := s.computeCategoryScore(findings, totalResources)
+		if overallFromAll < overall {
+			overall = overallFromAll
+		}
 	}
 
 	return Score{
