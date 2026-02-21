@@ -24,6 +24,24 @@ func (s *TfsecScanner) Available() bool {
 	return commandExists("tfsec") || commandExists("trivy")
 }
 
+func (s *TfsecScanner) Priority() int { return 2 }
+
+func (s *TfsecScanner) EnsureInstalled() (bool, InstallHint) {
+	if s.Available() {
+		return true, InstallHint{}
+	}
+	// Try auto-install via bininstaller
+	result := AutoInstallScanner("tfsec")
+	if result.Installed {
+		return true, InstallHint{}
+	}
+	return false, InstallHint{
+		Brew:    "brew install tfsec",
+		URL:     "https://aquasecurity.github.io/tfsec/",
+		Default: "Install with: brew install tfsec (or trivy)",
+	}
+}
+
 func (s *TfsecScanner) Version() string {
 	if commandExists("tfsec") {
 		return getCommandVersion("tfsec")

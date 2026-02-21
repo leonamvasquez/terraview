@@ -12,6 +12,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/blast"
+	"github.com/leonamvasquez/terraview/internal/cluster"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/explain"
@@ -19,7 +20,8 @@ import (
 	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/profile"
+	"github.com/leonamvasquez/terraview/internal/precedence"
+	"github.com/leonamvasquez/terraview/internal/resolver"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
@@ -49,7 +51,6 @@ var (
 	explainFlag       bool
 	diagramFlag       bool
 	blastRadiusFlag   bool
-	profileFlag       string
 	findingsFile      string
 	secondOpinionFlag bool
 	trendFlag         bool
@@ -69,7 +70,7 @@ If --plan is not specified, terraview will automatically run:
   terraform show   (exports JSON)
 
 Examples:
-  terraview plan                              # run all available scanners (default)
+  terraview plan                              # run all available scanners (default --scanners=all)
   terraview plan --scanners checkov,tfsec     # run specific scanners
   terraview plan --ai                         # scanners + AI analysis
   terraview plan --plan plan.json             # use existing plan
@@ -83,7 +84,6 @@ Examples:
   terraview plan --format sarif               # SARIF output for CI integration
   terraview plan --strict                     # HIGH returns exit code 2
   terraview plan --safe                       # safe mode (light model, fewer resources)
-  terraview plan --profile prod               # production review profile
   terraview plan --findings checkov.json      # import external findings`,
 	RunE: runPlan,
 }
@@ -104,12 +104,11 @@ func init() {
 	planCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
 	planCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	planCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
-	planCmd.Flags().StringVar(&profileFlag, "profile", "", "Review profile (prod, dev, fintech, startup)")
 	planCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates deterministic findings (implies --ai)")
 	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
 	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannersFlag, "scanners", "auto", "Run external scanners: auto, checkov, tfsec, terrascan, kics (comma-separated)")
+	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Run external scanners: all, checkov, tfsec, terrascan, kics (comma-separated)")
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
@@ -133,25 +132,6 @@ func executeReview() (string, int, error) {
 		return "", 0, fmt.Errorf("config error: %w", err)
 	}
 	logVerbose("Config loaded from %s", workDir)
-
-	// Apply profile overrides if specified
-	var activeProfile *profile.Profile
-	if profileFlag != "" {
-		activeProfile, err = profile.Load(profileFlag)
-		if err != nil {
-			return "", 0, fmt.Errorf("profile error: %w", err)
-		}
-		profile.Apply(&cfg, activeProfile)
-		logVerbose("Profile %q applied", profileFlag)
-
-		// Profile can override strict mode when CLI hasn't explicitly set it.
-		// CLI --strict defaults to false, so profile strict_mode takes precedence
-		// unless the user explicitly passed --strict.
-		if cfg.Rules.StrictMode != nil && !strict {
-			strict = *cfg.Rules.StrictMode
-			logVerbose("Strict mode set to %v by profile %q", strict, profileFlag)
-		}
-	}
 
 	resolvedPlan := planFile
 
@@ -364,21 +344,46 @@ func executeReview() (string, int, error) {
 		}
 	}
 
+	// 3c. Sort scanner findings by tool precedence
+	if len(hardFindings) > 0 {
+		precedence.SortByPrecedence(hardFindings)
+		logVerbose("Findings sorted by tool precedence (%s first)", hardFindings[0].Source)
+	}
+
+	// 3d. Conflict resolution: merge scanner + AI findings with precedence rules
+	var conflictResult *resolver.ConflictResult
+	if effectiveAI && (len(hardFindings) > 0 || len(aiFindings) > 0) {
+		res := resolver.New()
+		cr := res.Resolve(hardFindings, aiFindings)
+		conflictResult = &cr
+		// Replace separate lists with unified resolved findings
+		hardFindings = resolver.ToFindings(cr.Resolved)
+		aiFindings = nil // absorbed into hardFindings via resolver
+		aiSummary = ""   // preserve any existing summary below
+		logVerbose("Conflict resolution: %d confirmed, %d scanner-priority, %d ai-only, %d scanner-only",
+			cr.Confirmed, cr.ScannerPriority, cr.AIOnly, cr.ScannerOnly)
+	}
+
+	// 3e. Risk clustering: group findings by resource for risk analysis
+	var clusterResult *cluster.ClusterResult
+	if len(hardFindings) > 0 {
+		builder := cluster.NewBuilder()
+		clusterResult = builder.Build(hardFindings)
+		if clusterResult.HighRiskClusters > 0 {
+			logVerbose("Risk clusters: %d total, %d high-risk", len(clusterResult.Clusters), clusterResult.HighRiskClusters)
+		}
+	}
+
 	// 4. Aggregate (with configurable scoring weights)
 	sw := cfg.Scoring.SeverityWeights
 	scorer := scoring.NewScorerWithWeights(sw.Critical, sw.High, sw.Medium, sw.Low)
 	agg := aggregator.NewAggregator(scorer)
 	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, aiFindings, aiSummary, strict)
 
-	// 4a. Apply rule filtering from config/profile
+	// 4a. Apply rule filtering from config
 	if len(cfg.Rules.DisabledRules) > 0 {
 		result.Findings = filterDisabledRules(result.Findings, cfg.Rules.DisabledRules)
 		logVerbose("Filtered %d disabled rules from findings", len(cfg.Rules.DisabledRules))
-	}
-
-	// 4b. Set profile name if used
-	if profileFlag != "" {
-		result.Profile = profileFlag
 	}
 
 	// 4b2. Meta-analysis: unified cross-tool scoring
@@ -451,7 +456,7 @@ func executeReview() (string, int, error) {
 	// 4f. Record score trend if requested
 	if trendFlag {
 		tracker := trend.NewTracker(workDir)
-		trendResult, err := tracker.Record(result.Score, len(result.Findings), result.TotalResources, result.SeverityCounts, profileFlag)
+		trendResult, err := tracker.Record(result.Score, len(result.Findings), result.TotalResources, result.SeverityCounts, "")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s WARNING: trend tracking failed: %v\n", output.Prefix(), err)
 		} else {
@@ -505,7 +510,26 @@ func executeReview() (string, int, error) {
 		}
 	}
 
-	// 6b. Print blast radius if generated
+	// 6b. Print conflict resolution summary if available
+	if conflictResult != nil && effectiveFormat != output.FormatJSON {
+		if brFlag {
+			fmt.Print(resolver.FormatResolutionBR(*conflictResult))
+		} else {
+			fmt.Print(resolver.FormatResolution(*conflictResult))
+		}
+	}
+
+	// 6c. Print risk clusters if available
+	if clusterResult != nil && clusterResult.HighRiskClusters > 0 && effectiveFormat != output.FormatJSON {
+		fmt.Println()
+		if brFlag {
+			fmt.Print(cluster.FormatClustersBR(clusterResult))
+		} else {
+			fmt.Print(cluster.FormatClusters(clusterResult))
+		}
+	}
+
+	// 6d. Print blast radius if generated
 	if blastRadiusFlag && result.BlastRadius != nil {
 		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
 			fmt.Println()

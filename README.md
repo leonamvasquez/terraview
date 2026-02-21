@@ -17,7 +17,11 @@ Ideal para times de DevOps, SRE e Platform Engineering que querem garantir segur
 
 ## Principais Diferenciais
 
-- **Security Scanners**: Integração automática com Checkov, tfsec, Terrascan e KICS — detecta o que está instalado e roda automaticamente
+- **Security Scanners**: Integração automática com Checkov, tfsec, Terrascan e KICS — detecta o que está instalado e roda automaticamente com precedência formal
+- **Precedência Formal de Ferramentas**: Hierarquia de confiança em 4 tiers — scanners (Tier 1-2) > regras determinísticas (Tier 3) > IA (Tier 4)
+- **Resolução de Conflitos Scanner × IA**: Quando scanner e IA divergem na severidade, a precedência do scanner prevalece automaticamente; concordâncias elevam a confiança a 100%
+- **Risk Clusters**: Agrupamento de findings por recurso com score de risco ponderado por severidade e concordância entre ferramentas
+- **Setup Interativo**: `terraview setup` mostra status dos scanners, precedência, providers de IA disponíveis e instruções de instalação
 - **IA Multi-Provider**: Suporte a Ollama (local), Gemini, Claude, DeepSeek e OpenRouter com seleção interativa
 - **Zero Configuração**: Detecta automaticamente projetos Terraform, roda `init + plan + show` sozinho
 - **Seletor Interativo de Providers**: `terraview provider list` abre um picker com setas do teclado para escolher provider e modelo
@@ -91,6 +95,9 @@ terraview --help
 ## Primeiros Passos
 
 ```bash
+# Verificar ambiente: scanners, precedência, providers de IA
+terraview setup
+
 # Navegue para qualquer projeto Terraform
 cd meu-projeto-terraform
 
@@ -268,6 +275,39 @@ terraview provider install      # instalar Ollama + baixar modelo padrão
 terraview provider uninstall    # remover Ollama e dados
 ```
 
+### `terraview setup`
+
+Exibe um diagnóstico interativo do ambiente: scanners disponíveis, precedência de ferramentas e providers de IA configurados.
+
+```bash
+terraview setup              # diagnóstico em inglês
+terraview setup --br         # diagnóstico em português
+```
+
+Exemplo de saída:
+
+```
+  terraview setup
+  ═══════════════
+
+  Security Scanners
+
+  [✓] checkov      3.2.504
+  [✗] tfsec        Install with: brew install tfsec
+  [✗] terrascan    Install with: brew install terrascan
+  [✗] kics         Install with: brew install kics
+
+  Tool Precedence
+  (lower number = higher priority)
+
+  ● 1. Checkov
+  ○ 2. tfsec/Trivy
+  ○ 3. Terrascan
+  ○ 4. KICS
+  ● 5. Deterministic rules
+  ● 6. AI analysis
+```
+
 ### Utilitários
 
 ```bash
@@ -302,7 +342,7 @@ output:
 
 ## Security Scanners
 
-O terraview integra automaticamente com os seguintes scanners externos. Basta tê-los instalados — o terraview detecta e roda automaticamente (`--scanners auto`).
+O terraview integra automaticamente com os seguintes scanners externos. Basta tê-los instalados — o terraview detecta e roda automaticamente (`--scanners all`, padrão).
 
 | Scanner | Descrição | Instalação |
 |---------|-----------|------------|
@@ -314,10 +354,38 @@ O terraview integra automaticamente com os seguintes scanners externos. Basta t�
 Os findings de todos os scanners são normalizados, agregados e exibidos em um scorecard unificado.
 
 ```bash
-terraview plan                              # roda todos os scanners disponíveis
+terraview plan                              # roda todos os scanners disponíveis (--scanners=all)
 terraview plan --scanners checkov,tfsec     # roda apenas os especificados
 terraview plan --findings checkov.json      # importa findings de execução externa
 ```
+
+### Precedência de Ferramentas
+
+Quando múltiplas fontes detectam o mesmo recurso, o terraview aplica uma hierarquia de confiança formal:
+
+| Tier | Rank | Fonte | Peso de Confiança |
+|------|------|-------|-------------------|
+| Tier 1 | 1 | Checkov | 1.00 |
+| Tier 1 | 2 | tfsec / Trivy | 0.95 |
+| Tier 2 | 3 | Terrascan | 0.85 |
+| Tier 2 | 4 | KICS | 0.80 |
+| Tier 3 | 5 | Regras determinísticas | 0.70 |
+| Tier 4 | 6 | IA (LLM) | 0.50 |
+
+### Resolução de Conflitos (Scanner × IA)
+
+Quando `--ai` está ativo, o pipeline resolve conflitos automaticamente:
+
+| Cenário | Ação | Confiança |
+|---------|------|-----------|
+| Scanner e IA concordam (mesma severidade ±1 nível) | **Confirmado** — boost de confiança | 1.00 |
+| Scanner e IA divergem na severidade | **Scanner prevalece** — precedência formal | Peso do scanner |
+| Apenas scanner detectou | **Scanner-only** — mantido como está | Peso do scanner |
+| Apenas IA detectou | **AI-only** — mantido com confiança menor | 0.50 |
+
+### Risk Clusters
+
+Findings são agrupados por recurso em clusters de risco. Recursos com múltiplos findings de alta severidade e concordância entre ferramentas recebem um score de risco maior (0-100), facilitando a priorização.
 
 ## Scores e Exit Codes
 
@@ -386,26 +454,37 @@ terraform-review:
 ## Arquitetura
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                       terraview CLI                       │
-│  plan │ apply │ validate │ drift │ explain │ provider     │
-└──────────────────────┬───────────────────────────────────┘
-                       │
-          ┌────────────┴─────────────┐
-          ▼                          ▼
-┌──────────────────────┐   ┌──────────────────────┐
-│  Security Scanners   │   │    AI Providers       │
-│  Checkov │ tfsec     │   │  Ollama │ Gemini      │
-│  Terrascan │ KICS    │   │  Claude │ DeepSeek    │
-└──────────┬───────────┘   │  OpenRouter           │
-           │               └──────────┬────────────┘
-           │                          │
-           └────────────┬─────────────┘
-                        ▼
-           ┌───────────────────────┐
-           │  Aggregator + Scorer  │
-           │  review.json / .md    │
-           └───────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        terraview CLI                         │
+│  plan │ apply │ validate │ drift │ explain │ provider │ setup│
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+              ┌────────────┴─────────────┐
+              ▼                          ▼
+    ┌──────────────────────┐   ┌──────────────────────┐
+    │  Security Scanners   │   │    AI Providers       │
+    │  Checkov │ tfsec     │   │  Ollama │ Gemini      │
+    │  Terrascan │ KICS    │   │  Claude │ DeepSeek    │
+    └──────────┬───────────┘   │  OpenRouter           │
+               │               └──────────┬────────────┘
+               ▼                          ▼
+    ┌──────────────────────────────────────────────┐
+    │          Precedence Sort (by tier)            │
+    └──────────────────────┬───────────────────────┘
+                           ▼
+    ┌──────────────────────────────────────────────┐
+    │       Conflict Resolver (scanner × AI)        │
+    │  confirmed │ scanner-priority │ ai-only        │
+    └──────────────────────┬───────────────────────┘
+                           ▼
+    ┌──────────────────────────────────────────────┐
+    │        Risk Cluster Builder (by resource)     │
+    └──────────────────────┬───────────────────────┘
+                           ▼
+    ┌──────────────────────────────────────────────┐
+    │          Aggregator + Scorer + Meta           │
+    │           review.json / .md / .sarif          │
+    └──────────────────────────────────────────────┘
 ```
 
 ## Desenvolvimento
@@ -429,6 +508,11 @@ make help         # listar todos os targets
 - [x] Diagrama ASCII de infraestrutura
 - [x] Análise de blast radius
 - [x] Detecção de code smells
+- [x] Setup interativo (`terraview setup`)
+- [x] Precedência formal de ferramentas (4 tiers)
+- [x] Resolução de conflitos Scanner × IA
+- [x] Risk Clusters por recurso
+- [x] Pipeline AI-centric com Precedence → Resolver → Cluster → Aggregator
 - [ ] Suporte a Azure e GCP
 - [ ] Análise com consciência de módulos Terraform
 - [ ] Integração com políticas OPA/Rego
@@ -453,7 +537,7 @@ A: Sim. Os scanners rodam localmente e, usando Ollama como provider de IA, toda 
 A: Sim, se quiser usar a geração automática de planos (`terraview plan` sem `--plan`). Se já tiver um `plan.json`, o Terraform não é necessário.
 
 **Q: Preciso ter algum scanner instalado?**
-A: Recomendado, mas não obrigatório. O terraview detecta automaticamente quais scanners estão disponíveis (`--scanners auto`). Sem nenhum scanner, apenas o pipeline de IA pode ser usado com `--ai`.
+A: Recomendado, mas não obrigatório. O terraview detecta automaticamente quais scanners estão disponíveis (`--scanners=all`, padrão). Use `terraview setup` para ver o status. Sem nenhum scanner, apenas o pipeline de IA pode ser usado com `--ai`.
 
 **Q: Como configuro um provider cloud (Gemini, Claude, etc.)?**
 A: Execute `terraview provider list`, selecione o provider com as setas e confirme. O terraview mostrará qual variável de ambiente configurar (ex: `GEMINI_API_KEY`).
@@ -469,4 +553,10 @@ A: Durante a instalação, é criado um symlink `tv -> terraview`. Você pode us
 
 **Q: Qual a diferença entre `terraview plan` e `terraview validate`?**
 A: `plan` roda scanners e opcionalmente IA para uma análise completa. `validate` roda verificações determinísticas rápidas (fmt, validate, test, scanners) sem suporte a IA — ideal para pré-commit ou CI rápido.
+
+**Q: O que acontece quando scanner e IA discordam?**
+A: O terraview aplica resolução automática de conflitos. Scanners têm precedência formal (Tier 1-2) sobre a IA (Tier 4). Quando ambos detectam o mesmo problema e concordam, a confiança é elevada a 100%. Quando divergem na severidade, a severidade do scanner prevalece.
+
+**Q: O que é `terraview setup`?**
+A: É um comando de diagnóstico que mostra quais scanners estão instalados, a hierarquia de precedência das ferramentas e quais providers de IA estão disponíveis — útil para verificar o ambiente antes de rodar análises.
 

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/leonamvasquez/terraview/internal/output"
+	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +43,7 @@ Provider Management:
 Utilities:
   version     Show version information
   upgrade     Upgrade to the latest version
+  setup       Interactive environment setup
 
 Get started:
   cd my-terraform-project
@@ -74,6 +76,8 @@ func init() {
 	// Utilities
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(upgradeCmd)
+	rootCmd.AddCommand(setupCmd)
+	rootCmd.AddCommand(scannersCmd)
 
 	// Apply pt-BR translations early so --help can use them.
 	// Cobra doesn't call PersistentPreRun on --help, so we check os.Args directly.
@@ -112,6 +116,7 @@ Gerenciamento de Providers:
 Utilitários:
   version     Exibir informações de versão
   upgrade     Atualizar para a versão mais recente
+  setup       Configuração interativa do ambiente
 
 Primeiros passos:
   cd meu-projeto-terraform
@@ -144,7 +149,6 @@ Exemplos:
   terraview plan --format sarif               # saída SARIF para integração CI
   terraview plan --strict                     # HIGH retorna código de saída 2
   terraview plan --safe                       # modo seguro (modelo leve, menos recursos)
-  terraview plan --profile prod               # perfil de revisão para produção
   terraview plan --findings checkov.json      # importar achados externos`
 
 	// apply
@@ -262,9 +266,18 @@ instalado simplesmente confirmará que não há nada a remover.
 Exemplos:
   terraview uninstall llm`
 
-	// version / upgrade
+	// version / upgrade / setup
 	versionCmd.Short = "Exibir a versão do terraview"
 	upgradeCmd.Short = "Atualizar terraview para a versão mais recente"
+	setupCmd.Short = "Configuração interativa do ambiente"
+	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe status
+e sugere comandos de instalação para ferramentas ausentes.
+
+Este comando é informacional e não-destrutivo — apenas verifica o que
+está disponível e oferece dicas de instalação.
+
+Exemplos:
+  terraview setup`
 	upgradeCmd.Long = `Baixa e instala a versão mais recente do terraview via GitHub Releases.
 
 Detecta seu SO e arquitetura automaticamente.
@@ -297,12 +310,11 @@ Exemplos:
 		"explain":        "Gerar explicação em linguagem natural com IA (implica --ai)",
 		"diagram":        "Exibir diagrama ASCII de infraestrutura",
 		"blast-radius":   "Analisar raio de impacto das mudanças",
-		"profile":        "Perfil de revisão (prod, dev, fintech, startup)",
 		"findings":       "Importar achados externos de Checkov/tfsec/Trivy JSON",
 		"second-opinion": "IA valida achados determinísticos (implica --ai)",
 		"trend":          "Rastrear e exibir tendências de score ao longo do tempo",
 		"smell":          "Detectar design smells de infraestrutura",
-		"scanners":       "Executar scanners externos: auto, checkov, tfsec, terrascan, kics (separados por vírgula)",
+		"scanners":       "Executar scanners externos: all, checkov, tfsec, terrascan, kics (separados por vírgula)",
 	})
 	translateFlags(applyCmd, map[string]string{
 		"non-interactive": "Pular prompt de confirmação (para CI)",
@@ -320,7 +332,6 @@ Exemplos:
 		"explain":         "Gerar explicação em linguagem natural com IA (implica --ai)",
 		"diagram":         "Exibir diagrama ASCII de infraestrutura",
 		"blast-radius":    "Analisar raio de impacto das mudanças",
-		"profile":         "Perfil de revisão (prod, dev, fintech, startup)",
 		"findings":        "Importar achados externos de Checkov/tfsec/Trivy JSON",
 	})
 	translateFlags(validateCmd, map[string]string{})
@@ -404,6 +415,9 @@ func (e *ExitError) Error() string {
 // Execute runs the root command.
 func Execute(version string) {
 	Version = version
+
+	// Ensure ~/.terraview/bin is in PATH so scanner binaries are discoverable
+	scanner.EnsureBinDirInPath()
 
 	if err := rootCmd.Execute(); err != nil {
 		var exitErr *ExitError

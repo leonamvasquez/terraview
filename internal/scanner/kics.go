@@ -22,6 +22,24 @@ func (s *KICSScanner) Name() string { return "kics" }
 
 func (s *KICSScanner) Available() bool { return commandExists("kics") }
 
+func (s *KICSScanner) Priority() int { return 4 }
+
+func (s *KICSScanner) EnsureInstalled() (bool, InstallHint) {
+	if s.Available() {
+		return true, InstallHint{}
+	}
+	// Try auto-install via bininstaller
+	result := AutoInstallScanner("kics")
+	if result.Installed {
+		return true, InstallHint{}
+	}
+	return false, InstallHint{
+		Brew:    "brew install kics",
+		URL:     "https://kics.io/",
+		Default: "Install with: brew install kics",
+	}
+}
+
 func (s *KICSScanner) Version() string { return getCommandVersion("kics") }
 
 func (s *KICSScanner) SupportedModes() []ScanMode {

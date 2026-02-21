@@ -22,6 +22,20 @@ func (s *CheckovScanner) Name() string { return "checkov" }
 
 func (s *CheckovScanner) Available() bool { return commandExists("checkov") }
 
+func (s *CheckovScanner) Priority() int { return 1 }
+
+func (s *CheckovScanner) EnsureInstalled() (bool, InstallHint) {
+	if s.Available() {
+		return true, InstallHint{}
+	}
+	return false, InstallHint{
+		Pip:     "pip install checkov",
+		Brew:    "brew install checkov",
+		URL:     "https://www.checkov.io/",
+		Default: "Install with: pip install checkov",
+	}
+}
+
 func (s *CheckovScanner) Version() string {
 	out, err := exec.Command("checkov", "--version").CombinedOutput()
 	if err != nil {
