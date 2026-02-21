@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/leonamvasquez/terraview/internal/output"
 )
 
 // Executor abstracts terraform CLI operations.
@@ -64,11 +66,12 @@ func (e *Executor) Init() error {
 		return nil // already initialized
 	}
 
-	fmt.Println("[terraview] Running terraform init...")
-	_, err := e.runPassthrough("init", "-input=false")
+	fmt.Fprintf(os.Stderr, "%s Running terraform init...\n", output.Prefix())
+	_, err := e.runSilent("init", "-input=false")
 	if err != nil {
 		return fmt.Errorf("terraform init failed: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "%s terraform init ✓\n", output.Prefix())
 	return nil
 }
 
@@ -82,20 +85,33 @@ func (e *Executor) NeedsInit() bool {
 // Plan runs terraform plan and outputs a binary plan file, then converts to JSON.
 // Returns the path to the generated plan.json file.
 func (e *Executor) Plan() (string, error) {
+	unlock, err := acquireLock(e.workDir)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+
 	planBinary := filepath.Join(e.workDir, "tfplan")
 	planJSON := filepath.Join(e.workDir, "plan.json")
 
-	fmt.Println("[terraview] Running terraform plan...")
-	_, err := e.runPassthrough("plan", "-out=tfplan", "-input=false", "-detailed-exitcode")
+	fmt.Fprintf(os.Stderr, "%s Running terraform plan...\n", output.Prefix())
+	stderr, err := e.runSilent("plan", "-out=tfplan", "-input=false", "-detailed-exitcode")
 	// Exit code 2 from terraform plan means changes detected — that's expected
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if exitErr.ExitCode() == 2 {
 				// Changes present — this is normal
 			} else {
+				// Show stderr on failure so user can debug
+				if stderr != "" {
+					fmt.Fprintf(os.Stderr, "%s\n", stderr)
+				}
 				return "", fmt.Errorf("terraform plan failed: %w", err)
 			}
 		} else {
+			if stderr != "" {
+				fmt.Fprintf(os.Stderr, "%s\n", stderr)
+			}
 			return "", fmt.Errorf("terraform plan failed: %w", err)
 		}
 	}
@@ -103,8 +119,9 @@ func (e *Executor) Plan() (string, error) {
 	if _, err := os.Stat(planBinary); err != nil {
 		return "", fmt.Errorf("terraform plan did not produce tfplan file: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "%s terraform plan ✓\n", output.Prefix())
 
-	fmt.Println("[terraview] Exporting plan to JSON...")
+	fmt.Fprintf(os.Stderr, "%s Exporting plan to JSON...\n", output.Prefix())
 	out, err := e.run("show", "-json", "tfplan")
 	if err != nil {
 		return "", fmt.Errorf("terraform show -json failed: %w", err)
@@ -113,13 +130,14 @@ func (e *Executor) Plan() (string, error) {
 	if err := os.WriteFile(planJSON, []byte(out), 0644); err != nil {
 		return "", fmt.Errorf("failed to write plan.json: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "%s plan.json ✓\n", output.Prefix())
 
 	return planJSON, nil
 }
 
 // FmtCheck runs terraform fmt -check and returns whether files are formatted.
 func (e *Executor) FmtCheck() (string, error) {
-	fmt.Println("[terraview] Running terraform fmt -check...")
+	fmt.Printf("%s Running terraform fmt -check...\n", output.Prefix())
 	out, err := e.run("fmt", "-check", "-recursive")
 	if err != nil {
 		return out, fmt.Errorf("terraform fmt check failed (unformatted files detected): %w", err)
@@ -129,7 +147,7 @@ func (e *Executor) FmtCheck() (string, error) {
 
 // Validate runs terraform validate and returns the output.
 func (e *Executor) Validate() (string, error) {
-	fmt.Println("[terraview] Running terraform validate...")
+	fmt.Printf("%s Running terraform validate...\n", output.Prefix())
 	out, err := e.runPassthrough("validate")
 	if err != nil {
 		return out, fmt.Errorf("terraform validate failed: %w", err)
@@ -140,7 +158,7 @@ func (e *Executor) Validate() (string, error) {
 // Test runs terraform test (available in Terraform 1.6+).
 // Returns output and a boolean indicating if the command is available.
 func (e *Executor) Test() (string, bool, error) {
-	fmt.Println("[terraview] Running terraform test...")
+	fmt.Printf("%s Running terraform test...\n", output.Prefix())
 	out, err := e.runPassthrough("test")
 	if err != nil {
 		// Check if it's an "unknown command" error
@@ -159,7 +177,7 @@ func (e *Executor) Apply() error {
 		return fmt.Errorf("no tfplan file found — run 'terraview review' first")
 	}
 
-	fmt.Println("[terraview] Running terraform apply...")
+	fmt.Printf("%s Running terraform apply...\n", output.Prefix())
 	_, err := e.runPassthrough("apply", "tfplan")
 	if err != nil {
 		return fmt.Errorf("terraform apply failed: %w", err)
@@ -204,6 +222,21 @@ func (e *Executor) runPassthrough(args ...string) (string, error) {
 	return combined.String(), err
 }
 
+// runSilent executes terraform capturing all output without displaying it.
+// Returns stderr content for error reporting.
+func (e *Executor) runSilent(args ...string) (string, error) {
+	cmd := exec.Command(e.binaryPath, args...)
+	cmd.Dir = e.workDir
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	return stderr.String(), err
+}
+
 // resolveTerraformBinary finds the terraform binary.
 func resolveTerraformBinary() (string, error) {
 	path, err := exec.LookPath("terraform")
@@ -211,4 +244,23 @@ func resolveTerraformBinary() (string, error) {
 		return "", fmt.Errorf("terraform not found in PATH. Install it from https://developer.hashicorp.com/terraform/install")
 	}
 	return path, nil
+}
+
+// acquireLock creates an exclusive lock file to prevent concurrent plan executions.
+// Returns a cleanup function that releases the lock.
+func acquireLock(dir string) (func(), error) {
+	lockPath := filepath.Join(dir, ".terraview.lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil, fmt.Errorf("another terraview process is running in this directory (lock file: %s). Remove it manually if stale", lockPath)
+		}
+		return nil, fmt.Errorf("failed to create lock file: %w", err)
+	}
+	f.WriteString(fmt.Sprintf("pid=%d\n", os.Getpid()))
+	f.Close()
+
+	return func() {
+		os.Remove(lockPath)
+	}, nil
 }

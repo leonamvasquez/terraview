@@ -1,0 +1,112 @@
+# Terraview GitHub Action - Example Configurations
+#
+# Copy the workflow that best matches your setup to .github/workflows/
+
+# ============================================================
+# Example 1: Basic (deterministic rules only, no AI)
+# ============================================================
+# name: Terraview Basic
+# on:
+#   pull_request:
+#     paths: ['**/*.tf']
+# jobs:
+#   review:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: hashicorp/setup-terraform@v3
+#       - run: |
+#           curl -sSL https://github.com/leonamvasquez/terraview/releases/latest/download/terraview-linux-amd64 -o /usr/local/bin/terraview
+#           chmod +x /usr/local/bin/terraview
+#       - run: terraform init && terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+#       - run: terraview review --plan plan.json --strict
+
+# ============================================================
+# Example 2: With AI (Gemini)
+# ============================================================
+# name: Terraview AI Review
+# on:
+#   pull_request:
+#     paths: ['**/*.tf']
+# jobs:
+#   review:
+#     runs-on: ubuntu-latest
+#     env:
+#       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: hashicorp/setup-terraform@v3
+#       - run: |
+#           curl -sSL https://github.com/leonamvasquez/terraview/releases/latest/download/terraview-linux-amd64 -o /usr/local/bin/terraview
+#           chmod +x /usr/local/bin/terraview
+#       - run: terraform init && terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+#       - run: terraview review --plan plan.json --ai --provider gemini --explain
+
+# ============================================================
+# Example 3: With Checkov integration
+# ============================================================
+# name: Terraview + Checkov
+# on:
+#   pull_request:
+#     paths: ['**/*.tf']
+# jobs:
+#   review:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: hashicorp/setup-terraform@v3
+#       - run: pip install checkov
+#       - run: |
+#           curl -sSL https://github.com/leonamvasquez/terraview/releases/latest/download/terraview-linux-amd64 -o /usr/local/bin/terraview
+#           chmod +x /usr/local/bin/terraview
+#       - run: terraform init && terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+#       - run: checkov -f plan.json --output json > checkov-results.json || true
+#       - run: terraview review --plan plan.json --findings checkov-results.json --profile prod
+
+# ============================================================
+# Example 4: SARIF output for GitHub Security tab
+# ============================================================
+# name: Terraview SARIF
+# on:
+#   pull_request:
+#     paths: ['**/*.tf']
+# permissions:
+#   security-events: write
+# jobs:
+#   review:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: hashicorp/setup-terraform@v3
+#       - run: |
+#           curl -sSL https://github.com/leonamvasquez/terraview/releases/latest/download/terraview-linux-amd64 -o /usr/local/bin/terraview
+#           chmod +x /usr/local/bin/terraview
+#       - run: terraform init && terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+#       - run: terraview review --plan plan.json --format sarif --output sarif-output
+#       - uses: github/codeql-action/upload-sarif@v3
+#         with:
+#           sarif_file: sarif-output/review.sarif.json
+
+# ============================================================
+# Example 5: Multiple environments with profiles
+# ============================================================
+# name: Terraview Multi-Env
+# on:
+#   pull_request:
+#     paths: ['**/*.tf']
+# jobs:
+#   review:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         env: [dev, prod]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: hashicorp/setup-terraform@v3
+#       - run: |
+#           curl -sSL https://github.com/leonamvasquez/terraview/releases/latest/download/terraview-linux-amd64 -o /usr/local/bin/terraview
+#           chmod +x /usr/local/bin/terraview
+#       - run: |
+#           cd environments/${{ matrix.env }}
+#           terraform init && terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+#       - run: terraview review --plan environments/${{ matrix.env }}/plan.json --profile ${{ matrix.env }}

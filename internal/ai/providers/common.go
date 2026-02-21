@@ -3,12 +3,30 @@ package providers
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
+
+// backoffWithJitter returns an exponential backoff duration with random jitter.
+// Formula: base = attempt² seconds, jitter = ±25% of base, capped at 30s.
+func backoffWithJitter(attempt int) time.Duration {
+	base := time.Duration(attempt*attempt) * time.Second
+	if base > 30*time.Second {
+		base = 30 * time.Second
+	}
+	// Add ±25% jitter
+	jitter := time.Duration(rand.Int63n(int64(base/2))) - base/4
+	result := base + jitter
+	if result < 100*time.Millisecond {
+		result = 100 * time.Millisecond
+	}
+	return result
+}
 
 // llmFinding is the expected JSON shape from any LLM provider.
 type llmFinding struct {

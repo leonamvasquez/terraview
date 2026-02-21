@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/installer"
+	"github.com/leonamvasquez/terraview/internal/output"
 )
 
 const (
 	ollamaStartTimeout = 30 * time.Second
 	ollamaStopTimeout  = 10 * time.Second
-	ollamaHealthURL    = "http://localhost:11434/api/tags"
 )
 
 // OllamaLifecycle manages the Ollama process lifecycle.
@@ -52,18 +52,18 @@ func (lc *OllamaLifecycle) Ensure(ctx context.Context) (cleanup func(), err erro
 		return noop, err
 	}
 
-	fmt.Fprintf(os.Stderr, "[terraview] System: %d MB free / %d MB total, %d CPUs, load %.2f\n",
-		res.AvailableMemoryMB, res.TotalMemoryMB, res.CPUCount, res.LoadAverage)
+	fmt.Fprintf(os.Stderr, "%s System: %d MB free / %d MB total, %d CPUs, load %.2f\n",
+		output.Prefix(), res.AvailableMemoryMB, res.TotalMemoryMB, res.CPUCount, res.LoadAverage)
 
 	// 3. Check if already running
 	if lc.isHealthy(ctx) {
-		fmt.Fprintf(os.Stderr, "[terraview] Ollama already running.\n")
+		fmt.Fprintf(os.Stderr, "%s Ollama already running.\n", output.Prefix())
 		lc.managed = false
 		return noop, nil
 	}
 
 	// 4. Start process
-	fmt.Fprintf(os.Stderr, "[terraview] Starting Ollama (temporary)...\n")
+	fmt.Fprintf(os.Stderr, "%s Starting Ollama (temporary)...\n", output.Prefix())
 	if err := lc.start(ctx); err != nil {
 		return noop, fmt.Errorf("failed to start ollama: %w", err)
 	}
@@ -97,7 +97,7 @@ func (lc *OllamaLifecycle) start(ctx context.Context) error {
 	deadline := time.Now().Add(ollamaStartTimeout)
 	for time.Now().Before(deadline) {
 		if lc.isHealthy(ctx) {
-			fmt.Fprintf(os.Stderr, "[terraview] Ollama started (PID %d).\n", lc.cmd.Process.Pid)
+			fmt.Fprintf(os.Stderr, "%s Ollama started (PID %d).\n", output.Prefix(), lc.cmd.Process.Pid)
 			return nil
 		}
 		select {
@@ -118,7 +118,7 @@ func (lc *OllamaLifecycle) stop() {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "[terraview] Stopping Ollama (PID %d)...\n", lc.cmd.Process.Pid)
+	fmt.Fprintf(os.Stderr, "%s Stopping Ollama (PID %d)...\n", output.Prefix(), lc.cmd.Process.Pid)
 
 	// Send SIGTERM to process group
 	pgid, err := syscall.Getpgid(lc.cmd.Process.Pid)
@@ -136,7 +136,7 @@ func (lc *OllamaLifecycle) stop() {
 
 	select {
 	case <-done:
-		fmt.Fprintf(os.Stderr, "[terraview] Ollama stopped.\n")
+		fmt.Fprintf(os.Stderr, "%s Ollama stopped.\n", output.Prefix())
 	case <-time.After(ollamaStopTimeout):
 		// Force kill
 		if pgid, err := syscall.Getpgid(lc.cmd.Process.Pid); err == nil {
@@ -145,7 +145,7 @@ func (lc *OllamaLifecycle) stop() {
 			_ = lc.cmd.Process.Kill()
 		}
 		<-done
-		fmt.Fprintf(os.Stderr, "[terraview] Ollama force-killed.\n")
+		fmt.Fprintf(os.Stderr, "%s Ollama force-killed.\n", output.Prefix())
 	}
 
 	lc.cmd = nil

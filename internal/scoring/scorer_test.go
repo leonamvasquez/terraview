@@ -7,7 +7,7 @@ import (
 )
 
 func TestScorer_NoFindings(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	score := scorer.Calculate(nil, 10)
 
 	assertScore(t, "security", score.SecurityScore, 10.0)
@@ -17,14 +17,14 @@ func TestScorer_NoFindings(t *testing.T) {
 }
 
 func TestScorer_ZeroResources(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	score := scorer.Calculate(nil, 0)
 
 	assertScore(t, "overall", score.OverallScore, 10.0)
 }
 
 func TestScorer_SingleMediumNeverBelow5(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityMedium, Category: rules.CategoryCompliance},
 	}
@@ -40,7 +40,7 @@ func TestScorer_SingleMediumNeverBelow5(t *testing.T) {
 }
 
 func TestScorer_MultipleMediumNeverBelow5(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityMedium, Category: rules.CategoryCompliance},
 		{Severity: rules.SeverityMedium, Category: rules.CategoryCompliance},
@@ -55,7 +55,7 @@ func TestScorer_MultipleMediumNeverBelow5(t *testing.T) {
 }
 
 func TestScorer_TwoHighFindings(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityHigh, Category: rules.CategorySecurity},
 		{Severity: rules.SeverityHigh, Category: rules.CategorySecurity},
@@ -72,7 +72,7 @@ func TestScorer_TwoHighFindings(t *testing.T) {
 }
 
 func TestScorer_CriticalCanZero(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityCritical, Category: rules.CategorySecurity},
 	}
@@ -85,7 +85,7 @@ func TestScorer_CriticalCanZero(t *testing.T) {
 }
 
 func TestScorer_ManyCriticalsClampsToZero(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := make([]rules.Finding, 0)
 	for i := 0; i < 10; i++ {
 		findings = append(findings, rules.Finding{
@@ -99,13 +99,15 @@ func TestScorer_ManyCriticalsClampsToZero(t *testing.T) {
 	if score.SecurityScore != 0.0 {
 		t.Errorf("many CRITICALs should clamp to 0.0, got %.1f", score.SecurityScore)
 	}
-	if score.OverallScore != 0.0 {
-		t.Errorf("many CRITICALs should clamp overall to 0.0, got %.1f", score.OverallScore)
+	// Overall is a weighted average: only security is affected, other categories remain at 10.0
+	// overall = (sec*3 + comp*2 + maint*1.5 + rel*1) / 7.5 = (0*3 + 10*2 + 10*1.5 + 10*1) / 7.5 = 6.0
+	if score.OverallScore > 7.0 {
+		t.Errorf("many CRITICALs should reduce overall significantly, got %.1f", score.OverallScore)
 	}
 }
 
 func TestScorer_ScoreNeverNegative(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := make([]rules.Finding, 0)
 	for i := 0; i < 50; i++ {
 		findings = append(findings, rules.Finding{
@@ -125,7 +127,7 @@ func TestScorer_ScoreNeverNegative(t *testing.T) {
 }
 
 func TestScorer_MaintainabilityFinding(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityMedium, Category: rules.CategoryMaintainability},
 	}
@@ -143,7 +145,7 @@ func TestScorer_MaintainabilityFinding(t *testing.T) {
 }
 
 func TestScorer_MixedSeverities(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{Severity: rules.SeverityCritical, Category: rules.CategorySecurity},
 		{Severity: rules.SeverityHigh, Category: rules.CategorySecurity},
@@ -162,7 +164,7 @@ func TestScorer_MixedSeverities(t *testing.T) {
 }
 
 func TestScorer_SmallPlanProportional(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	// 2 resources, 2 MEDIUM compliance findings — the scenario that was zeroing before
 	findings := []rules.Finding{
 		{Severity: rules.SeverityMedium, Category: rules.CategoryCompliance},

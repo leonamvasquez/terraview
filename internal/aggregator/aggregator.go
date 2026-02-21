@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/leonamvasquez/terraview/internal/explain"
+	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 )
@@ -12,27 +13,28 @@ import (
 // Verdict represents the safety assessment of a Terraform plan.
 type Verdict struct {
 	Safe       bool     `json:"safe"`
-	Label      string   `json:"label"`      // "SAFE" or "NOT SAFE"
+	Label      string   `json:"label"` // "SAFE" or "NOT SAFE"
 	Reasons    []string `json:"reasons"`
 	Confidence string   `json:"confidence"` // "high", "medium", "low"
 }
 
 // ReviewResult is the final aggregated result of a review.
 type ReviewResult struct {
-	PlanFile        string                `json:"plan_file"`
-	TotalResources  int                   `json:"total_resources"`
-	Verdict         Verdict               `json:"verdict"`
-	Findings        []rules.Finding       `json:"findings"`
-	Score           scoring.Score         `json:"score"`
-	Summary         string                `json:"summary,omitempty"`
-	Explanation     *explain.Explanation  `json:"explanation,omitempty"`
-	Diagram         string                `json:"diagram,omitempty"`
-	BlastRadius     interface{}           `json:"blast_radius,omitempty"`
-	Profile         string                `json:"profile,omitempty"`
-	SeverityCounts  map[string]int        `json:"severity_counts"`
-	CategoryCounts  map[string]int        `json:"category_counts"`
-	MaxSeverity     string                `json:"max_severity"`
-	ExitCode        int                   `json:"exit_code"`
+	PlanFile       string               `json:"plan_file"`
+	TotalResources int                  `json:"total_resources"`
+	Verdict        Verdict              `json:"verdict"`
+	Findings       []rules.Finding      `json:"findings"`
+	Score          scoring.Score        `json:"score"`
+	Summary        string               `json:"summary,omitempty"`
+	Explanation    *explain.Explanation `json:"explanation,omitempty"`
+	Diagram        string               `json:"diagram,omitempty"`
+	BlastRadius    interface{}          `json:"blast_radius,omitempty"`
+	Profile        string               `json:"profile,omitempty"`
+	MetaAnalysis   *meta.MetaResult     `json:"meta_analysis,omitempty"`
+	SeverityCounts map[string]int       `json:"severity_counts"`
+	CategoryCounts map[string]int       `json:"category_counts"`
+	MaxSeverity    string               `json:"max_severity"`
+	ExitCode       int                  `json:"exit_code"`
 }
 
 // Aggregator combines findings from multiple sources and computes the final result.
@@ -215,7 +217,7 @@ func computeExitCode(maxSeverity string) int {
 	}
 }
 
-func generateDefaultSummary(findings []rules.Finding, totalResources int) string {
+func generateDefaultSummary(findings []rules.Finding, _ int) string {
 	if len(findings) == 0 {
 		return "No issues found. The Terraform plan looks clean."
 	}

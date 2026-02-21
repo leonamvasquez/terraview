@@ -144,7 +144,7 @@ func (d *deepseekProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comple
 	var lastErr error
 	for attempt := 0; attempt <= d.cfg.MaxRetries; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(attempt*attempt) * time.Second
+			backoff := backoffWithJitter(attempt)
 			select {
 			case <-ctx.Done():
 				return ai.Completion{}, ai.NewProviderError(deepseekName, "analyze", ctx.Err())

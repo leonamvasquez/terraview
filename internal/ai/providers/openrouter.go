@@ -99,12 +99,12 @@ func (o *openrouterProvider) Validate(ctx context.Context) error {
 	healthClient := &http.Client{Timeout: 15 * time.Second}
 	resp, err := healthClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("openrouter API não está acessível: %w", err)
+		return fmt.Errorf("openrouter API is not reachable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("%w: chave OPENROUTER_API_KEY inválida", ai.ErrProviderValidation)
+		return fmt.Errorf("%w: invalid API key", ai.ErrProviderValidation)
 	}
 
 	return nil
@@ -121,7 +121,7 @@ func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 	var lastErr error
 	for attempt := 0; attempt <= o.cfg.MaxRetries; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(attempt*attempt) * time.Second
+			backoff := backoffWithJitter(attempt)
 			select {
 			case <-ctx.Done():
 				return ai.Completion{}, ai.NewProviderError(openrouterName, "analyze", ctx.Err())
@@ -144,7 +144,7 @@ func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 	}
 
 	return ai.Completion{}, ai.NewProviderError(openrouterName, "analyze",
-		fmt.Errorf("falhou após %d tentativas: %w", o.cfg.MaxRetries+1, lastErr))
+		fmt.Errorf("failed after %d attempts: %w", o.cfg.MaxRetries+1, lastErr))
 }
 
 func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

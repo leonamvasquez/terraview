@@ -139,7 +139,7 @@ func (g *geminiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	var lastErr error
 	for attempt := 0; attempt <= g.cfg.MaxRetries; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(attempt*attempt) * time.Second
+			backoff := backoffWithJitter(attempt)
 			select {
 			case <-ctx.Done():
 				return ai.Completion{}, ai.NewProviderError(geminiName, "analyze", ctx.Err())

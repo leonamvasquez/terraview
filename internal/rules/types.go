@@ -36,9 +36,11 @@ type RuleDefinition struct {
 	ID                string             `yaml:"id"`
 	Name              string             `yaml:"name"`
 	Description       string             `yaml:"description"`
+	DescriptionBR     string             `yaml:"description_br,omitempty"`
 	Severity          string             `yaml:"severity"`
 	Category          string             `yaml:"category"`
 	Remediation       string             `yaml:"remediation"`
+	RemediationBR     string             `yaml:"remediation_br,omitempty"`
 	Enabled           bool               `yaml:"enabled"`
 	Targets           []string           `yaml:"targets"` // resource types this rule applies to
 	Conditions        []Condition        `yaml:"conditions"`

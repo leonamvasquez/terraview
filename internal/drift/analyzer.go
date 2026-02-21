@@ -10,16 +10,16 @@ import (
 
 // DriftResult holds the analysis of infrastructure drift.
 type DriftResult struct {
-	TotalChanges    int             `json:"total_changes"`
-	Creates         int             `json:"creates"`
-	Updates         int             `json:"updates"`
-	Deletes         int             `json:"deletes"`
-	Replaces        int             `json:"replaces"`
-	Findings        []rules.Finding `json:"findings"`
-	MaxSeverity     string          `json:"max_severity"`
-	ExitCode        int             `json:"exit_code"`
-	Summary         string          `json:"summary"`
-	AffectedTypes   []string        `json:"affected_types"`
+	TotalChanges  int             `json:"total_changes"`
+	Creates       int             `json:"creates"`
+	Updates       int             `json:"updates"`
+	Deletes       int             `json:"deletes"`
+	Replaces      int             `json:"replaces"`
+	Findings      []rules.Finding `json:"findings"`
+	MaxSeverity   string          `json:"max_severity"`
+	ExitCode      int             `json:"exit_code"`
+	Summary       string          `json:"summary"`
+	AffectedTypes []string        `json:"affected_types"`
 }
 
 // Analyzer evaluates drift risk from a terraform plan.
@@ -37,6 +37,7 @@ func NewAnalyzer(criticalTypes []string) *Analyzer {
 }
 
 var defaultCriticalTypes = []string{
+	// AWS
 	"aws_db_instance",
 	"aws_rds_cluster",
 	"aws_dynamodb_table",
@@ -54,6 +55,39 @@ var defaultCriticalTypes = []string{
 	"aws_lambda_function",
 	"aws_ecs_service",
 	"aws_eks_cluster",
+	// Azure
+	"azurerm_resource_group",
+	"azurerm_virtual_network",
+	"azurerm_subnet",
+	"azurerm_network_security_group",
+	"azurerm_sql_server",
+	"azurerm_sql_database",
+	"azurerm_mssql_server",
+	"azurerm_mssql_database",
+	"azurerm_cosmosdb_account",
+	"azurerm_storage_account",
+	"azurerm_key_vault",
+	"azurerm_kubernetes_cluster",
+	"azurerm_virtual_machine",
+	"azurerm_linux_virtual_machine",
+	"azurerm_windows_virtual_machine",
+	"azurerm_function_app",
+	"azurerm_role_assignment",
+	// GCP
+	"google_project",
+	"google_compute_network",
+	"google_compute_subnetwork",
+	"google_compute_firewall",
+	"google_sql_database_instance",
+	"google_storage_bucket",
+	"google_container_cluster",
+	"google_compute_instance",
+	"google_kms_key_ring",
+	"google_kms_crypto_key",
+	"google_cloudfunctions_function",
+	"google_cloud_run_service",
+	"google_project_iam_member",
+	"google_project_iam_binding",
 }
 
 // Analyze evaluates drift risk from normalized resources.
@@ -177,6 +211,7 @@ func (a *Analyzer) isCriticalType(resourceType string) bool {
 
 func isSecurityResource(resourceType string) bool {
 	securityPrefixes := []string{
+		// AWS
 		"aws_iam_",
 		"aws_security_group",
 		"aws_kms_",
@@ -184,6 +219,19 @@ func isSecurityResource(resourceType string) bool {
 		"aws_waf",
 		"aws_shield",
 		"aws_guardduty",
+		// Azure
+		"azurerm_role_",
+		"azurerm_network_security_",
+		"azurerm_key_vault",
+		"azurerm_firewall",
+		"azurerm_application_security_group",
+		"azurerm_managed_disk_encryption",
+		// GCP
+		"google_project_iam_",
+		"google_service_account",
+		"google_compute_firewall",
+		"google_kms_",
+		"google_secret_manager",
 	}
 	for _, prefix := range securityPrefixes {
 		if strings.HasPrefix(resourceType, prefix) {
@@ -247,9 +295,10 @@ func (a *Analyzer) buildSummary(result DriftResult) string {
 
 	summary := fmt.Sprintf("Drift detected: %d changes (%s).", result.TotalChanges, strings.Join(parts, ", "))
 
-	if result.MaxSeverity == rules.SeverityCritical {
+	switch result.MaxSeverity {
+	case rules.SeverityCritical:
 		summary += " CRITICAL drift requires immediate attention."
-	} else if result.MaxSeverity == rules.SeverityHigh {
+	case rules.SeverityHigh:
 		summary += " HIGH risk drift should be investigated."
 	}
 

@@ -7,6 +7,9 @@ import (
 )
 
 func TestLoad_NoFile(t *testing.T) {
+	// Override HOME so global config (~/.terraview/.terraview.yaml) is not picked up
+	t.Setenv("HOME", t.TempDir())
+
 	dir := t.TempDir()
 	cfg, err := Load(dir)
 	if err != nil {

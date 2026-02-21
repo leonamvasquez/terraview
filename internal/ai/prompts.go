@@ -1,4 +1,4 @@
-package llm
+package ai
 
 import (
 	"fmt"
@@ -16,9 +16,9 @@ func NewPromptLoader(promptDir string) *PromptLoader {
 	return &PromptLoader{promptDir: promptDir}
 }
 
-// Load reads all prompt templates and returns a PromptSet.
-func (pl *PromptLoader) Load() (PromptSet, error) {
-	ps := PromptSet{}
+// Load reads all prompt templates and returns a Prompts struct.
+func (pl *PromptLoader) Load() (Prompts, error) {
+	ps := Prompts{}
 
 	system, err := pl.readPrompt("system.md")
 	if err != nil {
