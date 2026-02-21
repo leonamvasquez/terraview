@@ -88,6 +88,10 @@ get_install_dir() {
     fi
 }
 
+# Track whether PATH was modified (curl|bash runs in subshell, so export won't persist)
+PATH_MODIFIED=""
+PATH_PROFILE=""
+
 # Configure PATH for shell profiles
 configure_path() {
     local install_dir="$1"
@@ -132,10 +136,12 @@ configure_path() {
             echo "# Added by terraview installer" >> "${shell_profile}"
             echo "export PATH=\"${install_dir}:\$PATH\"" >> "${shell_profile}"
             info "Added ${install_dir} to PATH in ${shell_profile}"
+            PATH_MODIFIED="1"
+            PATH_PROFILE="${shell_profile}"
         fi
     fi
 
-    # Also export for current session
+    # Export for current subshell (so we can run version check below)
     export PATH="${install_dir}:${PATH}"
 }
 
@@ -247,21 +253,26 @@ main() {
     configure_path "${install_dir}" "${os}"
 
     # Verify
-    if command -v "${BINARY_NAME}${bin_ext}" &>/dev/null || command -v "${BINARY_NAME}" &>/dev/null; then
-        ok "Installed successfully!"
-        echo ""
-        "${install_dir}/${BINARY_NAME}${bin_ext}" version 2>/dev/null || true
-        echo ""
-        echo "  Get started:"
-        echo "    cd your-terraform-project"
-        echo "    terraview plan   # or: tv plan"
-        echo ""
-    else
-        ok "Binary installed to ${install_dir}/${BINARY_NAME}${bin_ext}"
+    ok "Installed successfully!"
+    echo ""
+    "${install_dir}/${BINARY_NAME}${bin_ext}" version 2>/dev/null || true
+    echo ""
+
+    if [ -n "${PATH_MODIFIED}" ]; then
+        # curl|bash runs in a subshell — PATH changes don't persist to the parent shell
+        local profile_name
+        profile_name="$(basename "${PATH_PROFILE}")"
+        warn "PATH was updated. To start using terraview, either:"
         warn ""
-        warn "Restart your terminal (or run 'source ~/.bashrc') to use 'terraview' and 'tv'."
+        warn "  1. Restart your terminal"
+        warn "  2. Run: source ~/${profile_name}"
         echo ""
     fi
+
+    echo "  Get started:"
+    echo "    cd your-terraform-project"
+    echo "    terraview plan   # or: tv plan"
+    echo ""
 }
 
 main "$@"
