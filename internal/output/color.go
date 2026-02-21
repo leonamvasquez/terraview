@@ -110,11 +110,6 @@ func Header(text string) string {
 	return colorize(bold+brightWhite, text)
 }
 
-// Accent returns cyan-colored text for labels and structure.
-func Accent(text string) string {
-	return colorize(cyan, text)
-}
-
 // Dimmed returns dimmed text for secondary info.
 func Dimmed(text string) string {
 	return colorize(dim, text)

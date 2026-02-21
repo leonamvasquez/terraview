@@ -88,31 +88,22 @@ get_install_dir() {
     fi
 }
 
-# Determine the user's shell profile file
+# Determine the user's shell profile file (Unix only — Windows is handled inline)
 get_shell_profile() {
-    local os="$1"
-    if [ "${os}" = "windows" ]; then
-        if [ -f "${HOME}/.bashrc" ]; then
-            echo "${HOME}/.bashrc"
-        else
-            echo "${HOME}/.bash_profile"
-        fi
-    else
-        local user_shell
-        user_shell="$(basename "${SHELL:-bash}")"
-        case "${user_shell}" in
-            zsh)  echo "${HOME}/.zshrc" ;;
-            bash)
-                if [ -f "${HOME}/.bashrc" ]; then
-                    echo "${HOME}/.bashrc"
-                else
-                    echo "${HOME}/.bash_profile"
-                fi
-                ;;
-            fish) echo "${HOME}/.config/fish/config.fish" ;;
-            *)    echo "${HOME}/.profile" ;;
-        esac
-    fi
+    local user_shell
+    user_shell="$(basename "${SHELL:-bash}")"
+    case "${user_shell}" in
+        zsh)  echo "${HOME}/.zshrc" ;;
+        bash)
+            if [ -f "${HOME}/.bashrc" ]; then
+                echo "${HOME}/.bashrc"
+            else
+                echo "${HOME}/.bash_profile"
+            fi
+            ;;
+        fish) echo "${HOME}/.config/fish/config.fish" ;;
+        *)    echo "${HOME}/.profile" ;;
+    esac
 }
 
 # Configure PATH for shell profiles
@@ -141,7 +132,7 @@ configure_path() {
         done
     else
         local shell_profile
-        shell_profile="$(get_shell_profile "${os}")"
+        shell_profile="$(get_shell_profile)"
         if [ -n "${shell_profile}" ]; then
             if ! grep -q "${install_dir}" "${shell_profile}" 2>/dev/null; then
                 echo "" >> "${shell_profile}"

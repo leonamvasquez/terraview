@@ -79,19 +79,6 @@ func All() map[string]Scanner {
 	return result
 }
 
-// AvailableNames returns names of all scanners that are installed on the system.
-func AvailableNames() []string {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	var names []string
-	for _, s := range registry {
-		if s.Available() {
-			names = append(names, s.Name())
-		}
-	}
-	return names
-}
-
 // Resolve parses a comma-separated scanner list. "auto" detects all installed scanners.
 func Resolve(input string) ([]Scanner, error) {
 	if input == "" {
