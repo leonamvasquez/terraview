@@ -21,6 +21,24 @@ func (s *TerrascanScanner) Name() string { return "terrascan" }
 
 func (s *TerrascanScanner) Available() bool { return commandExists("terrascan") }
 
+func (s *TerrascanScanner) Priority() int { return 3 }
+
+func (s *TerrascanScanner) EnsureInstalled() (bool, InstallHint) {
+	if s.Available() {
+		return true, InstallHint{}
+	}
+	// Try auto-install via bininstaller
+	result := AutoInstallScanner("terrascan")
+	if result.Installed {
+		return true, InstallHint{}
+	}
+	return false, InstallHint{
+		Brew:    "brew install terrascan",
+		URL:     "https://runterrascan.io/",
+		Default: "Install with: brew install terrascan",
+	}
+}
+
 func (s *TerrascanScanner) Version() string { return getCommandVersion("terrascan") }
 
 func (s *TerrascanScanner) SupportedModes() []ScanMode {

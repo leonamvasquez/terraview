@@ -19,6 +19,5 @@ RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /build/terraview /usr/local/bin/terraview
 COPY --from=builder /build/prompts /root/.terraview/prompts
-COPY --from=builder /build/rules /root/.terraview/rules
 
 ENTRYPOINT ["terraview"]

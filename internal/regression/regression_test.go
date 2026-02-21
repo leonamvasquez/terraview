@@ -8,9 +8,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/blast"
-	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/profile"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/smell"
@@ -253,138 +251,6 @@ func TestDedup_ThreeSourcesMerge(t *testing.T) {
 		if !strings.Contains(f.Source, src) {
 			t.Errorf("missing %q in source: %q", src, f.Source)
 		}
-	}
-}
-
-// ================================================================
-// PHASE 5: PROFILE
-// ================================================================
-
-func TestProfile_StrictModeTrue(t *testing.T) {
-	cfg := &config.Config{}
-	trueVal := true
-	p := &profile.Profile{Name: "test", StrictMode: &trueVal}
-	profile.Apply(cfg, p)
-	if cfg.Rules.StrictMode == nil || !*cfg.Rules.StrictMode {
-		t.Error("expected StrictMode true")
-	}
-}
-
-func TestProfile_StrictModeFalse(t *testing.T) {
-	cfg := &config.Config{}
-	falseVal := false
-	p := &profile.Profile{Name: "test", StrictMode: &falseVal}
-	profile.Apply(cfg, p)
-	if cfg.Rules.StrictMode == nil {
-		t.Fatal("expected StrictMode set (false)")
-	}
-	if *cfg.Rules.StrictMode {
-		t.Error("expected StrictMode false")
-	}
-}
-
-func TestProfile_StrictModeNil(t *testing.T) {
-	cfg := &config.Config{}
-	p := &profile.Profile{Name: "test"}
-	profile.Apply(cfg, p)
-	if cfg.Rules.StrictMode != nil {
-		t.Error("expected StrictMode nil when not set in profile")
-	}
-}
-
-func TestProfile_DisabledRules(t *testing.T) {
-	cfg := &config.Config{}
-	p := &profile.Profile{Name: "test", DisabledRules: []string{"REL001", "TAG001"}}
-	profile.Apply(cfg, p)
-	if len(cfg.Rules.DisabledRules) != 2 {
-		t.Fatalf("expected 2 disabled rules, got %d", len(cfg.Rules.DisabledRules))
-	}
-}
-
-func TestProfile_EnabledRules(t *testing.T) {
-	cfg := &config.Config{}
-	p := &profile.Profile{Name: "test", EnabledRules: []string{"SEC001", "SEC002"}}
-	profile.Apply(cfg, p)
-	if len(cfg.Rules.EnabledRules) != 2 {
-		t.Fatalf("expected 2 enabled rules, got %d", len(cfg.Rules.EnabledRules))
-	}
-}
-
-func TestProfile_WeightsOverride(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Scoring.SeverityWeights.Critical = 5.0
-	p := &profile.Profile{
-		Name: "test",
-		Scoring: profile.ScoringOverride{
-			Weights: profile.SeverityWeights{
-				Critical: 10.0, High: 5.0, Medium: 2.0, Low: 1.0,
-			},
-		},
-	}
-	profile.Apply(cfg, p)
-	if cfg.Scoring.SeverityWeights.Critical != 10.0 {
-		t.Errorf("expected critical 10.0, got %.1f", cfg.Scoring.SeverityWeights.Critical)
-	}
-}
-
-func TestProfile_LoadAll(t *testing.T) {
-	for _, name := range []string{"prod", "dev", "fintech", "startup"} {
-		t.Run(name, func(t *testing.T) {
-			p, err := profile.Load(name)
-			if err != nil {
-				t.Fatalf("load %q: %v", name, err)
-			}
-			if p.Name == "" {
-				t.Error("empty name")
-			}
-		})
-	}
-}
-
-func TestProfile_ProdStrictMode(t *testing.T) {
-	p, err := profile.Load("prod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.StrictMode == nil || !*p.StrictMode {
-		t.Error("prod should have strict_mode: true")
-	}
-}
-
-func TestProfile_DevRelaxed(t *testing.T) {
-	p, err := profile.Load("dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.StrictMode == nil {
-		t.Error("dev should explicitly set strict_mode")
-		return
-	}
-	if *p.StrictMode {
-		t.Error("dev should have strict_mode: false")
-	}
-}
-
-func TestProfile_FintechStrict(t *testing.T) {
-	p, err := profile.Load("fintech")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.StrictMode == nil || !*p.StrictMode {
-		t.Error("fintech should have strict_mode: true")
-	}
-}
-
-func TestProfile_StartupYAMLStructure(t *testing.T) {
-	p, err := profile.Load("startup")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(p.DisabledRules) == 0 {
-		t.Errorf("REGRESSION: startup disabled_rules empty — YAML uses rules.disabled_rules instead of top-level")
-	}
-	if p.Scoring.Weights.Critical == 0 && p.Scoring.Weights.High == 0 {
-		t.Errorf("REGRESSION: startup scoring weights zero — YAML uses scoring.severity_weights instead of scoring.weights")
 	}
 }
 
@@ -745,7 +611,7 @@ func TestScoring_ReliabilityBlending(t *testing.T) {
 	}
 }
 
-func TestScoring_ProfileWeightsDiffer(t *testing.T) {
+func TestScoring_CustomWeightsDiffer(t *testing.T) {
 	def := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
 	fin := scoring.NewScorerWithWeights(10, 5, 2, 1)
 	f := []rules.Finding{

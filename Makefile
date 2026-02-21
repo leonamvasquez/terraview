@@ -64,8 +64,8 @@ dist: clean
 		COPYFILE_DISABLE=1 tar -czf "$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}.tar.gz" -C $(DIST_DIR) "$(BINARY_NAME)-$${os}-$${arch}$${ext}" ; \
 	done
 	@echo "Packaging bundled assets..."
-	@xattr -cr prompts/ internal/profile/profiles/ 2>/dev/null || true
-	@COPYFILE_DISABLE=1 tar -czf $(DIST_DIR)/terraview-assets.tar.gz prompts/ internal/profile/profiles/
+	@xattr -cr prompts/ 2>/dev/null || true
+	@COPYFILE_DISABLE=1 tar -czf $(DIST_DIR)/terraview-assets.tar.gz prompts/
 	@echo "Done. Artifacts in $(DIST_DIR)/"
 
 # Create a GitHub release (requires gh CLI)
@@ -88,9 +88,8 @@ docker-run: docker-build
 install: build
 	@echo "Installing $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(HOME)/.local/bin
-	@mkdir -p $(HOME)/.terraview/prompts $(HOME)/.terraview/rules
+	@mkdir -p $(HOME)/.terraview/prompts
 	@cp prompts/* $(HOME)/.terraview/prompts/
-	@cp rules/* $(HOME)/.terraview/rules/
 	@cp $(BUILD_DIR)/$(BINARY_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
 	@chmod +x $(HOME)/.local/bin/$(BINARY_NAME)
 	@ln -sf $(HOME)/.local/bin/$(BINARY_NAME) $(HOME)/.local/bin/tv
@@ -110,9 +109,8 @@ install: build
 
 install-global: build
 	@echo "Installing $(BINARY_NAME) $(VERSION) to /usr/local/bin (requires sudo)..."
-	@mkdir -p $(HOME)/.terraview/prompts $(HOME)/.terraview/rules
+	@mkdir -p $(HOME)/.terraview/prompts
 	@cp prompts/* $(HOME)/.terraview/prompts/
-	@cp rules/* $(HOME)/.terraview/rules/
 	sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
 	sudo chmod +x /usr/local/bin/$(BINARY_NAME)
 	sudo ln -sf /usr/local/bin/$(BINARY_NAME) /usr/local/bin/tv

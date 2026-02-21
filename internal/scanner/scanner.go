@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 
@@ -25,6 +26,15 @@ type ScanContext struct {
 	WorkDir   string // working directory
 }
 
+// InstallHint describes how to install a scanner.
+type InstallHint struct {
+	Brew    string // e.g. "brew install checkov"
+	Pip     string // e.g. "pip install checkov"
+	Go      string // e.g. "go install ..."
+	URL     string // download page
+	Default string // fallback message
+}
+
 // Scanner is the interface each vendor adapter must implement.
 type Scanner interface {
 	// Name returns the scanner's display name (e.g., "checkov", "tfsec").
@@ -37,6 +47,11 @@ type Scanner interface {
 	SupportedModes() []ScanMode
 	// Scan executes the scanner and returns normalized findings.
 	Scan(ctx ScanContext) ([]rules.Finding, error)
+	// EnsureInstalled checks availability and returns an install hint if missing.
+	EnsureInstalled() (bool, InstallHint)
+	// Priority returns the scanner's precedence rank (lower = higher priority).
+	// Checkov=1, tfsec=2, Terrascan=3, KICS=4.
+	Priority() int
 }
 
 // ScanResult holds the output of one scanner run.
@@ -47,72 +62,122 @@ type ScanResult struct {
 	Error    error           `json:"error,omitempty"`
 }
 
-// Registry holds all registered scanner adapters.
-var (
-	registryMu sync.RWMutex
-	registry   = make(map[string]Scanner)
-)
+// ---------------------------------------------------------------------------
+// ScannerManager — replaces the global registry for structured lifecycle mgmt.
+// ---------------------------------------------------------------------------
 
-// Register adds a scanner adapter to the global registry.
-func Register(s Scanner) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	registry[s.Name()] = s
+// ScannerManager manages the scanner lifecycle: registration, resolution,
+// availability checks, concurrent execution, and priority ordering.
+type ScannerManager struct {
+	mu       sync.RWMutex
+	scanners map[string]Scanner
+}
+
+// NewManager creates a ScannerManager with no scanners registered.
+func NewManager() *ScannerManager {
+	return &ScannerManager{scanners: make(map[string]Scanner)}
+}
+
+// Register adds a scanner adapter to this manager.
+func (m *ScannerManager) Register(s Scanner) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.scanners[s.Name()] = s
 }
 
 // Get returns a registered scanner by name.
-func Get(name string) (Scanner, bool) {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	s, ok := registry[name]
+func (m *ScannerManager) Get(name string) (Scanner, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	s, ok := m.scanners[name]
 	return s, ok
 }
 
-// All returns all registered scanners.
-func All() map[string]Scanner {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	result := make(map[string]Scanner, len(registry))
-	for k, v := range registry {
+// All returns a copy of all registered scanners.
+func (m *ScannerManager) All() map[string]Scanner {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make(map[string]Scanner, len(m.scanners))
+	for k, v := range m.scanners {
 		result[k] = v
 	}
 	return result
 }
 
-// Resolve parses a comma-separated scanner list. "auto" detects all installed scanners.
-func Resolve(input string) ([]Scanner, error) {
+// Available returns only scanners whose binary is installed, sorted by priority.
+func (m *ScannerManager) Available() []Scanner {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var avail []Scanner
+	for _, s := range m.scanners {
+		if s.Available() {
+			avail = append(avail, s)
+		}
+	}
+	sort.Slice(avail, func(i, j int) bool {
+		return avail[i].Priority() < avail[j].Priority()
+	})
+	return avail
+}
+
+// Missing returns scanners that are NOT installed, with install hints.
+func (m *ScannerManager) Missing() []struct {
+	Name string
+	Hint InstallHint
+} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var missing []struct {
+		Name string
+		Hint InstallHint
+	}
+	for _, s := range m.scanners {
+		ok, hint := s.EnsureInstalled()
+		if !ok {
+			missing = append(missing, struct {
+				Name string
+				Hint InstallHint
+			}{Name: s.Name(), Hint: hint})
+		}
+	}
+	return missing
+}
+
+// Resolve parses a comma-separated scanner list.
+// "auto" detects all installed scanners and returns them sorted by priority.
+// "all" is an alias for "auto".
+func (m *ScannerManager) Resolve(input string) ([]Scanner, error) {
 	if input == "" {
 		return nil, nil
 	}
 
-	if input == "auto" {
-		var scanners []Scanner
-		for _, s := range All() {
-			if s.Available() {
-				scanners = append(scanners, s)
-			}
-		}
-		return scanners, nil
+	if input == "auto" || input == "all" {
+		return m.Available(), nil
 	}
 
 	names := strings.Split(input, ",")
 	var scanners []Scanner
 	for _, name := range names {
 		name = strings.TrimSpace(name)
-		s, ok := Get(name)
+		s, ok := m.Get(name)
 		if !ok {
 			return nil, fmt.Errorf("unknown scanner %q. Available: checkov, tfsec, terrascan, kics", name)
 		}
 		if !s.Available() {
-			return nil, fmt.Errorf("scanner %q is not installed. Install it first", name)
+			_, hint := s.EnsureInstalled()
+			return nil, fmt.Errorf("scanner %q is not installed. %s", name, hint.Default)
 		}
 		scanners = append(scanners, s)
 	}
+	// Sort by priority
+	sort.Slice(scanners, func(i, j int) bool {
+		return scanners[i].Priority() < scanners[j].Priority()
+	})
 	return scanners, nil
 }
 
 // RunAll executes multiple scanners concurrently and returns all results.
-func RunAll(scanners []Scanner, ctx ScanContext) []ScanResult {
+func (m *ScannerManager) RunAll(scanners []Scanner, ctx ScanContext) []ScanResult {
 	results := make([]ScanResult, len(scanners))
 	var wg sync.WaitGroup
 	for i, s := range scanners {
@@ -132,10 +197,70 @@ func RunAll(scanners []Scanner, ctx ScanContext) []ScanResult {
 	return results
 }
 
-// commandExists checks if a command is available in PATH.
+// StatusReport returns a human-readable summary of all scanner statuses.
+func (m *ScannerManager) StatusReport() string {
+	var sb strings.Builder
+	all := m.All()
+	for _, name := range sortedKeys(all) {
+		s := all[name]
+		if s.Available() {
+			sb.WriteString(fmt.Sprintf("  [✓] %s %s\n", s.Name(), s.Version()))
+		} else {
+			_, hint := s.EnsureInstalled()
+			sb.WriteString(fmt.Sprintf("  [✗] %s — %s\n", s.Name(), hint.Default))
+		}
+	}
+	return sb.String()
+}
+
+func sortedKeys(m map[string]Scanner) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ---------------------------------------------------------------------------
+// Global registry — backward compatibility wrapper around DefaultManager.
+// ---------------------------------------------------------------------------
+
+// DefaultManager is the global ScannerManager populated by init() functions.
+var DefaultManager = NewManager()
+
+// Register adds a scanner adapter to the global DefaultManager.
+func Register(s Scanner) {
+	DefaultManager.Register(s)
+}
+
+// Get returns a registered scanner by name from DefaultManager.
+func Get(name string) (Scanner, bool) {
+	return DefaultManager.Get(name)
+}
+
+// All returns all registered scanners from DefaultManager.
+func All() map[string]Scanner {
+	return DefaultManager.All()
+}
+
+// Resolve parses a comma-separated scanner list using DefaultManager.
+func Resolve(input string) ([]Scanner, error) {
+	return DefaultManager.Resolve(input)
+}
+
+// RunAll executes multiple scanners concurrently using DefaultManager.
+func RunAll(scanners []Scanner, ctx ScanContext) []ScanResult {
+	return DefaultManager.RunAll(scanners, ctx)
+}
+
+// commandExists checks if a command is available in PATH or in ~/.terraview/bin/.
 func commandExists(name string) bool {
 	_, err := exec.LookPath(name)
-	return err == nil
+	if err == nil {
+		return true
+	}
+	return binaryInBinDir(name)
 }
 
 // getCommandVersion runs "cmd --version" and returns the first line.

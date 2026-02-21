@@ -393,14 +393,14 @@ func (d *Detector) checkBackup(resources []parser.NormalizedResource) []Smell {
 
 	backupChecks := map[string][]string{
 		// AWS
-		"aws_db_instance":  {"backup_retention_period"},
-		"aws_rds_cluster":  {"backup_retention_period"},
-		"aws_dynamodb_table": {"point_in_time_recovery"},
+		"aws_db_instance":     {"backup_retention_period"},
+		"aws_rds_cluster":     {"backup_retention_period"},
+		"aws_dynamodb_table":  {"point_in_time_recovery"},
 		"aws_efs_file_system": {"lifecycle_policy"},
 		// Azure
-		"azurerm_mssql_database":    {"short_term_retention_policy"},
-		"azurerm_cosmosdb_account":  {"backup"},
-		"azurerm_storage_account":   {"blob_properties"},
+		"azurerm_mssql_database":   {"short_term_retention_policy"},
+		"azurerm_cosmosdb_account": {"backup"},
+		"azurerm_storage_account":  {"blob_properties"},
 		// GCP
 		"google_sql_database_instance": {"settings"},
 	}

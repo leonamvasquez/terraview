@@ -30,7 +30,6 @@ type ReviewResult struct {
 	Explanation    *explain.Explanation `json:"explanation,omitempty"`
 	Diagram        string               `json:"diagram,omitempty"`
 	BlastRadius    interface{}          `json:"blast_radius,omitempty"`
-	Profile        string               `json:"profile,omitempty"`
 	MetaAnalysis   *meta.MetaResult     `json:"meta_analysis,omitempty"`
 	SeverityCounts map[string]int       `json:"severity_counts"`
 	CategoryCounts map[string]int       `json:"category_counts"`

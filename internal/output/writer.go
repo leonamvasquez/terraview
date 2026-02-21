@@ -198,15 +198,6 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		fmt.Println()
 	}
 
-	// Profile
-	if result.Profile != "" {
-		if br {
-			fmt.Printf("  Perfil: %s\n\n", result.Profile)
-		} else {
-			fmt.Printf("  Profile: %s\n\n", result.Profile)
-		}
-	}
-
 	if br {
 		fmt.Printf("  Recursos analisados: %d\n", result.TotalResources)
 		fmt.Printf("  Total de achados:    %d (%d por recurso)\n",
@@ -340,15 +331,6 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 		sb.WriteString(fmt.Sprintf("\n*Confiança: %s*\n\n", result.Verdict.Confidence))
 	} else {
 		sb.WriteString(fmt.Sprintf("\n*Confidence: %s*\n\n", result.Verdict.Confidence))
-	}
-
-	// Profile
-	if result.Profile != "" {
-		if br {
-			sb.WriteString(fmt.Sprintf("**Perfil:** %s\n\n", result.Profile))
-		} else {
-			sb.WriteString(fmt.Sprintf("**Profile:** %s\n\n", result.Profile))
-		}
 	}
 
 	// Diagram
