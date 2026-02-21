@@ -51,6 +51,16 @@ irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 |
 
 O instalador baixa o binário `terraview.exe`, cria o alias `tv.exe` e adiciona tudo ao `PATH` do usuário automaticamente.
 
+**Alternativa — download manual no Windows:**
+
+```powershell
+# Baixar o binário (substitua <VERSION> pela versão, ex: v0.1.0)
+curl.exe -Lo terraview.exe https://github.com/leonamvasquez/terraview/releases/download/<VERSION>/terraview-windows-amd64.exe
+
+# Mover para um diretório no PATH
+move terraview.exe C:\Windows\
+```
+
 ### Compilar do código-fonte
 
 ```bash

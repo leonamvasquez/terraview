@@ -10,17 +10,17 @@ import (
 
 // ResourceLimits defines configurable resource constraints.
 type ResourceLimits struct {
-	MaxMemoryMB    int `yaml:"max_memory_mb"`
+	MaxMemoryMB     int `yaml:"max_memory_mb"`
 	MinFreeMemoryMB int `yaml:"min_free_memory_mb"`
-	MaxThreads     int `yaml:"max_threads"`
+	MaxThreads      int `yaml:"max_threads"`
 }
 
 // DefaultResourceLimits returns sensible defaults based on system capacity.
 func DefaultResourceLimits() ResourceLimits {
 	return ResourceLimits{
-		MaxMemoryMB:    4096,
+		MaxMemoryMB:     4096,
 		MinFreeMemoryMB: 1024,
-		MaxThreads:     runtime.NumCPU(),
+		MaxThreads:      runtime.NumCPU(),
 	}
 }
 
@@ -31,9 +31,9 @@ func SafeResourceLimits() ResourceLimits {
 		threads = 1
 	}
 	return ResourceLimits{
-		MaxMemoryMB:    2048,
+		MaxMemoryMB:     2048,
 		MinFreeMemoryMB: 1500,
-		MaxThreads:     threads,
+		MaxThreads:      threads,
 	}
 }
 
