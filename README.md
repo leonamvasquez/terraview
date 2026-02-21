@@ -129,6 +129,24 @@ terraview apply
 
 ## Comandos
 
+### Flags Globais
+
+As flags abaixo estão disponíveis em **todos** os subcomandos:
+
+| Flag | Atalho | Descrição |
+|------|--------|-----------|
+| `--dir` | `-d` | Diretório do workspace Terraform (padrão: `.`) |
+| `--verbose` | `-v` | Habilitar saída detalhada |
+| `--br` | | Saída em Português Brasileiro (pt-BR) |
+| `--no-color` | | Desabilitar saída colorida |
+
+```bash
+terraview plan --dir ./infraestrutura/prod    # analisar diretório específico
+terraview drift -d ./modules/vpc              # atalho -d
+terraview plan --no-color --format json        # saída sem cores para pipelines
+terraview plan --br                           # forçar saída em pt-BR
+```
+
 ### `terraview plan`
 
 Analisa um plano Terraform com scanners de segurança e revisão opcional de IA.
@@ -151,13 +169,18 @@ terraview plan --diagram                      # diagrama de infraestrutura
 terraview plan --blast-radius                 # raio de impacto
 terraview plan --smell                        # detectar code smells
 terraview plan --trend                        # tendências de scores
+terraview plan --explain                      # explicação em linguagem natural (implica --ai)
+terraview plan --second-opinion               # IA valida os findings dos scanners (implica --ai)
 terraview plan --format compact               # saída minimalista
 terraview plan --format json                  # apenas review.json
 terraview plan --format sarif                 # saída SARIF para CI
+terraview plan --output ./reports             # diretório de saída para review.json/.md
 terraview plan --strict                       # HIGH retorna exit code 2
 terraview plan --safe                         # modo seguro (modelo leve)
 terraview plan --profile prod                 # perfil de revisão produção
 terraview plan --findings checkov.json        # importar findings externos
+terraview plan --timeout 180                  # timeout do request de IA (segundos)
+terraview plan --temperature 0.1              # temperatura do modelo de IA (0.0–1.0)
 ```
 
 > **Alias:** `terraview review` funciona como alias para `terraview plan`.
@@ -171,9 +194,17 @@ Roda a revisão completa e aplica o plano condicionalmente.
 - Use `--non-interactive` em pipelines CI/CD
 
 ```bash
-terraview apply                           # interativo
-terraview apply --non-interactive         # modo CI
-terraview apply --ai                      # revisão com IA + apply
+terraview apply                                    # interativo
+terraview apply --non-interactive                  # modo CI (sem confirmação)
+terraview apply --ai                               # revisão com IA + apply
+terraview apply --ai --provider gemini             # usar Gemini
+terraview apply --diagram                          # diagrama de infraestrutura
+terraview apply --blast-radius                     # raio de impacto
+terraview apply --explain                          # explicação em linguagem natural
+terraview apply --profile prod                     # perfil de revisão produção
+terraview apply --findings checkov.json            # importar findings externos
+terraview apply --safe                             # modo seguro (modelo leve)
+terraview apply --format json                      # saída apenas em JSON
 ```
 
 ### `terraview validate`

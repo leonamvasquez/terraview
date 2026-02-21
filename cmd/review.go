@@ -143,6 +143,14 @@ func executeReview() (string, int, error) {
 		}
 		profile.Apply(&cfg, activeProfile)
 		logVerbose("Profile %q applied", profileFlag)
+
+		// Profile can override strict mode when CLI hasn't explicitly set it.
+		// CLI --strict defaults to false, so profile strict_mode takes precedence
+		// unless the user explicitly passed --strict.
+		if cfg.Rules.StrictMode != nil && !strict {
+			strict = *cfg.Rules.StrictMode
+			logVerbose("Strict mode set to %v by profile %q", strict, profileFlag)
+		}
 	}
 
 	resolvedPlan := planFile
@@ -362,6 +370,12 @@ func executeReview() (string, int, error) {
 	agg := aggregator.NewAggregator(scorer)
 	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, aiFindings, aiSummary, strict)
 
+	// 4a. Apply rule filtering from config/profile
+	if len(cfg.Rules.DisabledRules) > 0 {
+		result.Findings = filterDisabledRules(result.Findings, cfg.Rules.DisabledRules)
+		logVerbose("Filtered %d disabled rules from findings", len(cfg.Rules.DisabledRules))
+	}
+
 	// 4b. Set profile name if used
 	if profileFlag != "" {
 		result.Profile = profileFlag
@@ -385,7 +399,7 @@ func executeReview() (string, int, error) {
 	// 4d. Analyze blast radius if requested (deterministic, no AI)
 	if blastRadiusFlag {
 		analyzer := blast.NewAnalyzer()
-		blastResult := analyzer.Analyze(resources)
+		blastResult := analyzer.AnalyzeWithGraph(resources, topoGraph)
 		result.BlastRadius = blastResult
 		logVerbose("Blast radius analysis: %s", blastResult.Summary)
 	}
@@ -651,4 +665,42 @@ func findBundledDir(dir string) string {
 	}
 
 	return ""
+}
+
+// filterDisabledRules removes findings whose RuleID matches any disabled rule pattern.
+// Supports exact match and prefix match (e.g., "CKV_AWS" disables all Checkov AWS rules).
+func filterDisabledRules(findings []rules.Finding, disabled []string) []rules.Finding {
+	if len(disabled) == 0 {
+		return findings
+	}
+
+	disabledSet := make(map[string]bool, len(disabled))
+	var prefixes []string
+	for _, r := range disabled {
+		upper := strings.ToUpper(strings.TrimSpace(r))
+		disabledSet[upper] = true
+		// Treat entries without underscored suffixes as prefixes
+		if !strings.Contains(upper, "_") || strings.HasSuffix(upper, "_") {
+			prefixes = append(prefixes, upper)
+		}
+	}
+
+	filtered := make([]rules.Finding, 0, len(findings))
+	for _, f := range findings {
+		id := strings.ToUpper(f.RuleID)
+		if disabledSet[id] {
+			continue
+		}
+		skip := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(id, prefix) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
 }

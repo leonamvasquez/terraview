@@ -129,6 +129,24 @@ terraview apply
 
 ## Commands
 
+### Global Flags
+
+The following flags are available in **all** subcommands:
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--dir` | `-d` | Terraform workspace directory (default: `.`) |
+| `--verbose` | `-v` | Enable verbose output |
+| `--br` | | Force output in Brazilian Portuguese (pt-BR) |
+| `--no-color` | | Disable colored output |
+
+```bash
+terraview plan --dir ./infrastructure/prod     # analyze specific directory
+terraview drift -d ./modules/vpc               # short form -d
+terraview plan --no-color --format json        # colorless output for pipelines
+terraview plan --br                            # force pt-BR output
+```
+
 ### `terraview plan`
 
 Analyzes a Terraform plan with security scanners and optional AI review.
@@ -151,13 +169,18 @@ terraview plan --diagram                      # infrastructure diagram
 terraview plan --blast-radius                 # impact radius
 terraview plan --smell                        # detect code smells
 terraview plan --trend                        # score trends
+terraview plan --explain                      # natural language explanation (implies --ai)
+terraview plan --second-opinion               # AI validates scanner findings (implies --ai)
 terraview plan --format compact               # minimal output
 terraview plan --format json                  # JSON output only
 terraview plan --format sarif                 # SARIF output for CI
+terraview plan --output ./reports             # output directory for review.json/.md
 terraview plan --strict                       # HIGH returns exit code 2
 terraview plan --safe                         # safe mode (light model)
 terraview plan --profile prod                 # production review profile
 terraview plan --findings checkov.json        # import external findings
+terraview plan --timeout 180                  # AI request timeout in seconds
+terraview plan --temperature 0.1              # AI model temperature (0.0–1.0)
 ```
 
 > **Alias:** `terraview review` works as an alias for `terraview plan`.
@@ -171,9 +194,17 @@ Runs a full review then conditionally applies the plan.
 - Use `--non-interactive` in CI/CD pipelines
 
 ```bash
-terraview apply                           # interactive
-terraview apply --non-interactive         # CI mode
-terraview apply --ai                      # AI review + apply
+terraview apply                                    # interactive
+terraview apply --non-interactive                  # CI mode (no confirmation)
+terraview apply --ai                               # AI review + apply
+terraview apply --ai --provider gemini             # use Gemini
+terraview apply --diagram                          # infrastructure diagram
+terraview apply --blast-radius                     # impact radius
+terraview apply --explain                          # natural language explanation
+terraview apply --profile prod                     # production review profile
+terraview apply --findings checkov.json            # import external findings
+terraview apply --safe                             # safe mode (light model)
+terraview apply --format json                      # JSON output only
 ```
 
 ### `terraview validate`
