@@ -97,8 +97,11 @@ type SeverityWeightsConfig struct {
 
 // RulesConfig configures rule loading.
 type RulesConfig struct {
-	RequiredTags []string `yaml:"required_tags"`
-	RulePacks    []string `yaml:"rule_packs"`
+	RequiredTags  []string `yaml:"required_tags"`
+	RulePacks     []string `yaml:"rule_packs"`
+	StrictMode    *bool    `yaml:"strict_mode,omitempty"`
+	DisabledRules []string `yaml:"disabled_rules,omitempty"`
+	EnabledRules  []string `yaml:"enabled_rules,omitempty"`
 }
 
 // OutputConfig configures output defaults.

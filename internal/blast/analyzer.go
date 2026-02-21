@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
 // Impact represents the blast radius of a single resource change.
@@ -33,19 +34,18 @@ func NewAnalyzer() *Analyzer {
 	return &Analyzer{}
 }
 
-var referenceFields = []string{
-	"vpc_id", "subnet_id", "subnet_ids", "security_groups", "security_group_ids",
-	"target_group_arn", "db_subnet_group_name", "iam_role", "role_arn",
-	"kms_key_id", "kms_key_arn", "instance_id", "cluster_id",
-	"load_balancer_arn", "listener_arn", "certificate_arn",
-	"network_interface_id", "route_table_id", "internet_gateway_id",
-	"nat_gateway_id", "eip_id", "log_group_name", "bucket", "queue_url",
-	"topic_arn", "function_name", "lambda_function_arn",
-}
-
-// Analyze computes the blast radius for each changed resource.
-func (a *Analyzer) Analyze(resources []parser.NormalizedResource) *BlastResult {
-	depGraph := a.buildDependencyGraph(resources)
+// AnalyzeWithGraph computes blast radius using a pre-built topology graph.
+// This is the preferred method — avoids rebuilding dependencies.
+func (a *Analyzer) AnalyzeWithGraph(resources []parser.NormalizedResource, g *topology.Graph) *BlastResult {
+	// Build reverse dependency map: "if X changes, who depends on X?"
+	reverseDeps := make(map[string][]string)
+	for _, e := range g.Edges {
+		// Edge: From --depends-on--> To
+		// Reverse: if To changes, From is affected
+		if !containsStr(reverseDeps[e.To], e.From) {
+			reverseDeps[e.To] = append(reverseDeps[e.To], e.From)
+		}
+	}
 
 	var impacts []Impact
 	maxRadius := 0
@@ -55,11 +55,11 @@ func (a *Analyzer) Analyze(resources []parser.NormalizedResource) *BlastResult {
 			continue
 		}
 
-		directDeps := depGraph[r.Address]
-		indirectDeps := a.findIndirectDeps(r.Address, depGraph, directDeps)
+		directDeps := reverseDeps[r.Address]
+		indirectDeps := a.findIndirectDeps(r.Address, reverseDeps, directDeps)
 
 		totalAffected := len(directDeps) + len(indirectDeps)
-		riskLevel := a.computeRisk(r.Action, totalAffected)
+		riskLevel := computeRisk(r.Action, totalAffected)
 
 		if totalAffected > maxRadius {
 			maxRadius = totalAffected
@@ -88,68 +88,14 @@ func (a *Analyzer) Analyze(resources []parser.NormalizedResource) *BlastResult {
 	}
 }
 
-func (a *Analyzer) buildDependencyGraph(resources []parser.NormalizedResource) map[string][]string {
-	graph := make(map[string][]string)
-
-	addressSet := make(map[string]bool)
-	for _, r := range resources {
-		addressSet[r.Address] = true
-	}
-
-	for _, r := range resources {
-		refs := a.extractReferences(r, addressSet)
-		for _, ref := range refs {
-			if !containsStr(graph[ref], r.Address) {
-				graph[ref] = append(graph[ref], r.Address)
-			}
-		}
-	}
-
-	return graph
+// Analyze computes the blast radius by building the topology graph internally.
+// Kept for backward compatibility — prefer AnalyzeWithGraph when a graph is already available.
+func (a *Analyzer) Analyze(resources []parser.NormalizedResource) *BlastResult {
+	g := topology.BuildGraph(resources)
+	return a.AnalyzeWithGraph(resources, g)
 }
 
-func (a *Analyzer) extractReferences(r parser.NormalizedResource, addressSet map[string]bool) []string {
-	var refs []string
-	seen := make(map[string]bool)
-
-	values := r.Values
-	if values == nil {
-		return refs
-	}
-
-	for _, field := range referenceFields {
-		if val, ok := values[field]; ok {
-			foundRefs := a.resolveReference(val, addressSet)
-			for _, ref := range foundRefs {
-				if ref != r.Address && !seen[ref] {
-					seen[ref] = true
-					refs = append(refs, ref)
-				}
-			}
-		}
-	}
-
-	return refs
-}
-
-func (a *Analyzer) resolveReference(val interface{}, addressSet map[string]bool) []string {
-	var refs []string
-	switch v := val.(type) {
-	case string:
-		for addr := range addressSet {
-			if strings.Contains(v, addr) || v == addr {
-				refs = append(refs, addr)
-			}
-		}
-	case []interface{}:
-		for _, item := range v {
-			refs = append(refs, a.resolveReference(item, addressSet)...)
-		}
-	}
-	return refs
-}
-
-func (a *Analyzer) findIndirectDeps(root string, graph map[string][]string, directDeps []string) []string {
+func (a *Analyzer) findIndirectDeps(root string, reverseDeps map[string][]string, directDeps []string) []string {
 	visited := make(map[string]bool)
 	visited[root] = true
 	for _, d := range directDeps {
@@ -164,7 +110,7 @@ func (a *Analyzer) findIndirectDeps(root string, graph map[string][]string, dire
 		current := queue[0]
 		queue = queue[1:]
 
-		for _, dep := range graph[current] {
+		for _, dep := range reverseDeps[current] {
 			if !visited[dep] {
 				visited[dep] = true
 				indirect = append(indirect, dep)
@@ -176,7 +122,7 @@ func (a *Analyzer) findIndirectDeps(root string, graph map[string][]string, dire
 	return indirect
 }
 
-func (a *Analyzer) computeRisk(action string, totalAffected int) string {
+func computeRisk(action string, totalAffected int) string {
 	weight := 1
 	if action == "delete" || action == "replace" {
 		weight = 2

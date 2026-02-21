@@ -61,6 +61,9 @@ func (d *Detector) Detect(resources []parser.NormalizedResource) *DetectorResult
 	result.Smells = append(result.Smells, d.checkHA(resources)...)
 	result.Smells = append(result.Smells, d.checkNaming(resources)...)
 	result.Smells = append(result.Smells, d.checkSprawl(resources)...)
+	result.Smells = append(result.Smells, d.checkHardcodedValues(resources)...)
+	result.Smells = append(result.Smells, d.checkBackup(resources)...)
+	result.Smells = append(result.Smells, d.checkModuleUsage(resources)...)
 
 	// Sort by severity
 	sevOrder := map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -348,6 +351,128 @@ func containsStr(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// checkHardcodedValues detects secrets, IPs, and credentials hardcoded in resource values.
+func (d *Detector) checkHardcodedValues(resources []parser.NormalizedResource) []Smell {
+	var smells []Smell
+
+	sensitiveFields := []string{
+		"password", "secret", "api_key", "access_key", "secret_key",
+		"private_key", "token", "credentials", "connection_string",
+	}
+
+	for _, r := range resources {
+		if r.Values == nil {
+			continue
+		}
+		for _, field := range sensitiveFields {
+			if val, ok := r.Values[field]; ok {
+				valStr := fmt.Sprintf("%v", val)
+				// Skip empty, variable references, and placeholder values
+				if valStr == "" || valStr == "<nil>" || strings.HasPrefix(valStr, "var.") || strings.HasPrefix(valStr, "data.") {
+					continue
+				}
+				smells = append(smells, Smell{
+					Type:       SmellHardcodedValues,
+					Severity:   "CRITICAL",
+					Resource:   r.Address,
+					Message:    fmt.Sprintf("Resource %s has a hardcoded sensitive value in field %q.", r.Address, field),
+					Suggestion: "Use variables, SSM Parameter Store, Secrets Manager, or Vault for sensitive values.",
+					Category:   "security",
+				})
+			}
+		}
+	}
+	return smells
+}
+
+// checkBackup detects database and storage resources without backup configuration.
+func (d *Detector) checkBackup(resources []parser.NormalizedResource) []Smell {
+	var smells []Smell
+
+	backupChecks := map[string][]string{
+		// AWS
+		"aws_db_instance":  {"backup_retention_period"},
+		"aws_rds_cluster":  {"backup_retention_period"},
+		"aws_dynamodb_table": {"point_in_time_recovery"},
+		"aws_efs_file_system": {"lifecycle_policy"},
+		// Azure
+		"azurerm_mssql_database":    {"short_term_retention_policy"},
+		"azurerm_cosmosdb_account":  {"backup"},
+		"azurerm_storage_account":   {"blob_properties"},
+		// GCP
+		"google_sql_database_instance": {"settings"},
+	}
+
+	for _, r := range resources {
+		fields, ok := backupChecks[r.Type]
+		if !ok || r.Values == nil {
+			continue
+		}
+		hasBackup := false
+		for _, field := range fields {
+			if _, exists := r.Values[field]; exists {
+				hasBackup = true
+				break
+			}
+		}
+		if !hasBackup {
+			smells = append(smells, Smell{
+				Type:       SmellNoBackup,
+				Severity:   "HIGH",
+				Resource:   r.Address,
+				Message:    fmt.Sprintf("Resource %s has no backup configuration.", r.Address),
+				Suggestion: "Enable automated backups with appropriate retention periods for data protection.",
+				Category:   "reliability",
+			})
+		}
+	}
+	return smells
+}
+
+// checkModuleUsage detects large plans without module organization (monolith risk).
+func (d *Detector) checkModuleUsage(resources []parser.NormalizedResource) []Smell {
+	var smells []Smell
+
+	// Count non-module resources (no "module." prefix in address)
+	rootResources := 0
+	for _, r := range resources {
+		if !strings.HasPrefix(r.Address, "module.") {
+			rootResources++
+		}
+	}
+
+	totalResources := len(resources)
+
+	// Monolith risk: too many resources at root level without modules
+	if rootResources > 20 && totalResources > 0 {
+		moduleRatio := float64(totalResources-rootResources) / float64(totalResources)
+		if moduleRatio < 0.3 {
+			smells = append(smells, Smell{
+				Type:       SmellMonolith,
+				Severity:   "MEDIUM",
+				Resource:   "",
+				Message:    fmt.Sprintf("Monolith risk: %d resources at root level with only %.0f%% in modules.", rootResources, moduleRatio*100),
+				Suggestion: "Break infrastructure into reusable modules for better maintainability and testing.",
+				Category:   "best-practice",
+			})
+		}
+	}
+
+	// No modules at all with significant resource count
+	if totalResources > 10 && rootResources == totalResources {
+		smells = append(smells, Smell{
+			Type:       SmellNoModules,
+			Severity:   "LOW",
+			Resource:   "",
+			Message:    fmt.Sprintf("All %d resources are defined at root level with no module usage.", totalResources),
+			Suggestion: "Consider organizing related resources into Terraform modules for reusability.",
+			Category:   "best-practice",
+		})
+	}
+
+	return smells
 }
 
 func computeQualityScore(smells []Smell, _ int) float64 {

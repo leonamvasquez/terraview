@@ -44,7 +44,6 @@ func TestAnalyzer_SingleCreate(t *testing.T) {
 }
 
 func TestComputeRisk(t *testing.T) {
-	a := NewAnalyzer()
 	tests := []struct {
 		action   string
 		affected int
@@ -60,7 +59,7 @@ func TestComputeRisk(t *testing.T) {
 		{"delete", 5, "critical"},
 	}
 	for _, tt := range tests {
-		got := a.computeRisk(tt.action, tt.affected)
+		got := computeRisk(tt.action, tt.affected)
 		if got != tt.want {
 			t.Errorf("computeRisk(%s, %d) = %s, want %s", tt.action, tt.affected, got, tt.want)
 		}

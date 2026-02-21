@@ -125,4 +125,17 @@ func Apply(cfg *config.Config, p *Profile) {
 	if len(p.RequiredTags) > 0 {
 		cfg.Rules.RequiredTags = p.RequiredTags
 	}
+
+	// Apply strict mode override from profile
+	if p.StrictMode != nil {
+		cfg.Rules.StrictMode = p.StrictMode
+	}
+
+	// Apply rule filtering from profile
+	if len(p.DisabledRules) > 0 {
+		cfg.Rules.DisabledRules = p.DisabledRules
+	}
+	if len(p.EnabledRules) > 0 {
+		cfg.Rules.EnabledRules = p.EnabledRules
+	}
 }

@@ -3,6 +3,7 @@ package aggregator
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/meta"
@@ -143,18 +144,49 @@ func computeVerdict(findings []rules.Finding, strict bool) Verdict {
 	}
 }
 
+// deduplicateFindings removes findings that match on the same resource + rule.
+// Uses a semantic key: normalised resource + rule ID (case-insensitive).
+// When duplicates are found, keeps the highest severity and merges source/remediation.
 func deduplicateFindings(findings []rules.Finding) []rules.Finding {
-	seen := make(map[string]bool)
-	result := make([]rules.Finding, 0, len(findings))
+	type dedupKey struct {
+		resource string
+		ruleID   string
+	}
 
-	for _, f := range findings {
-		key := f.Resource + "|" + f.RuleID + "|" + f.Severity
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, f)
+	seen := make(map[dedupKey]*rules.Finding)
+	var order []dedupKey
+
+	for i := range findings {
+		f := findings[i]
+		key := dedupKey{
+			resource: strings.ToLower(strings.TrimSpace(f.Resource)),
+			ruleID:   strings.ToUpper(strings.TrimSpace(f.RuleID)),
+		}
+
+		existing, exists := seen[key]
+		if !exists {
+			seen[key] = &f
+			order = append(order, key)
+		} else {
+			// Keep highest severity
+			if severityOrder[f.Severity] < severityOrder[existing.Severity] {
+				existing.Severity = f.Severity
+			}
+			// Merge remediation if existing is empty
+			if existing.Remediation == "" && f.Remediation != "" {
+				existing.Remediation = f.Remediation
+			}
+			// Merge sources
+			if f.Source != "" && !strings.Contains(existing.Source, f.Source) {
+				existing.Source += "+" + f.Source
+			}
 		}
 	}
 
+	result := make([]rules.Finding, 0, len(order))
+	for _, key := range order {
+		result = append(result, *seen[key])
+	}
 	return result
 }
 
