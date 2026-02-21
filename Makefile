@@ -60,12 +60,12 @@ dist: clean
 		output="$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}$${ext}"; \
 		echo "  Building $${os}/$${arch}..."; \
 		GOOS=$${os} GOARCH=$${arch} CGO_ENABLED=0 go build $(LDFLAGS) -o $${output} . ; \
-		tar -czf "$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}.tar.gz" -C $(DIST_DIR) "$(BINARY_NAME)-$${os}-$${arch}$${ext}" ; \
+		COPYFILE_DISABLE=1 tar -czf "$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}.tar.gz" -C $(DIST_DIR) "$(BINARY_NAME)-$${os}-$${arch}$${ext}" ; \
 		cp prompts/* $(DIST_DIR)/ 2>/dev/null || true; \
 		cp rules/* $(DIST_DIR)/ 2>/dev/null || true; \
 	done
 	@echo "Packaging bundled assets..."
-	@tar -czf $(DIST_DIR)/terraview-assets.tar.gz prompts/ rules/
+	@COPYFILE_DISABLE=1 tar -czf $(DIST_DIR)/terraview-assets.tar.gz prompts/ internal/profile/profiles/
 	@echo "Done. Artifacts in $(DIST_DIR)/"
 
 # Create a GitHub release (requires gh CLI)
