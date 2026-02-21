@@ -4,7 +4,7 @@ BUILD_DIR := ./build
 DIST_DIR := ./dist
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
 .PHONY: all build clean test lint run dist docker-build install help
 
@@ -55,10 +55,12 @@ dist: clean
 	@for platform in $(PLATFORMS); do \
 		os=$${platform%/*}; \
 		arch=$${platform#*/}; \
-		output="$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}"; \
+		ext=""; \
+		if [ "$${os}" = "windows" ]; then ext=".exe"; fi; \
+		output="$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}$${ext}"; \
 		echo "  Building $${os}/$${arch}..."; \
 		GOOS=$${os} GOARCH=$${arch} CGO_ENABLED=0 go build $(LDFLAGS) -o $${output} . ; \
-		tar -czf $${output}.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$${os}-$${arch} ; \
+		tar -czf "$(DIST_DIR)/$(BINARY_NAME)-$${os}-$${arch}.tar.gz" -C $(DIST_DIR) "$(BINARY_NAME)-$${os}-$${arch}$${ext}" ; \
 		cp prompts/* $(DIST_DIR)/ 2>/dev/null || true; \
 		cp rules/* $(DIST_DIR)/ 2>/dev/null || true; \
 	done
@@ -140,7 +142,7 @@ help:
 	@echo "  run-with-llm Build and review example plan (with LLM)"
 	@echo ""
 	@echo "Distribution:"
-	@echo "  dist         Build for all platforms (linux/darwin, amd64/arm64)"
+	@echo "  dist         Build for all platforms (linux/darwin/windows, amd64/arm64)"
 	@echo "  release      Create a draft GitHub release"
 	@echo "  docker-build Build Docker image"
 	@echo "  docker-run   Run in Docker with example plan"

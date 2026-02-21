@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -113,8 +114,16 @@ func (inst *Installer) Install(ctx context.Context) (*Result, error) {
 	return result, nil
 }
 
-// downloadAndInstall downloads the official install script and executes it.
-func (inst *Installer) downloadAndInstall(ctx context.Context, sys SystemInfo) error {
+// downloadAndInstall downloads and installs Ollama for the current platform.
+func (inst *Installer) downloadAndInstall(ctx context.Context, _ SystemInfo) error {
+	if runtime.GOOS == "windows" {
+		return inst.installWindows(ctx)
+	}
+	return inst.installUnix(ctx)
+}
+
+// installUnix downloads the official install script and executes it.
+func (inst *Installer) installUnix(ctx context.Context) error {
 	inst.log("Downloading installer from %s ...", ollamaInstallURL)
 
 	dlCtx, cancel := context.WithTimeout(ctx, downloadTimeout)
@@ -161,6 +170,28 @@ func (inst *Installer) downloadAndInstall(ctx context.Context, sys SystemInfo) e
 	}
 
 	return nil
+}
+
+// installWindows attempts to install Ollama on Windows via winget.
+func (inst *Installer) installWindows(ctx context.Context) error {
+	// Try winget first (available on Windows 10 1709+ and Windows 11)
+	if _, err := exec.LookPath("winget"); err == nil {
+		inst.log("Installing Ollama via winget...")
+		cmd := exec.CommandContext(ctx, "winget", "install", "--id", "Ollama.Ollama", "--accept-source-agreements", "--accept-package-agreements")
+		cmd.Stdout = inst.writer
+		cmd.Stderr = inst.writer
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+		inst.log("winget installation failed, trying direct download...")
+	}
+
+	// Fallback: guide user to manual install
+	return fmt.Errorf("automatic installation on Windows requires winget.\n\n" +
+		"  Please install Ollama manually:\n" +
+		"    1. Download from https://ollama.com/download/windows\n" +
+		"    2. Run the installer\n" +
+		"    3. Re-run 'terraview install llm'")
 }
 
 // ensureRunning starts the ollama service if it's not already responding.

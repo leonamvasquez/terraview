@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/installer"
@@ -78,8 +77,8 @@ func (lc *OllamaLifecycle) start(ctx context.Context) error {
 	lc.cmd.Stdout = nil
 	lc.cmd.Stderr = nil
 
-	// Set process group so we can kill the whole tree
-	lc.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Set process group so we can kill the whole tree (Unix only; no-op on Windows)
+	setSysProcAttr(lc.cmd)
 
 	// Apply thread limits via environment
 	if lc.limits.MaxThreads > 0 {
@@ -120,13 +119,8 @@ func (lc *OllamaLifecycle) stop() {
 
 	fmt.Fprintf(os.Stderr, "%s Stopping Ollama (PID %d)...\n", output.Prefix(), lc.cmd.Process.Pid)
 
-	// Send SIGTERM to process group
-	pgid, err := syscall.Getpgid(lc.cmd.Process.Pid)
-	if err == nil {
-		_ = syscall.Kill(-pgid, syscall.SIGTERM)
-	} else {
-		_ = lc.cmd.Process.Signal(syscall.SIGTERM)
-	}
+	// Send graceful termination signal
+	_ = terminateProcess(lc.cmd)
 
 	// Wait with timeout
 	done := make(chan error, 1)
@@ -139,11 +133,7 @@ func (lc *OllamaLifecycle) stop() {
 		fmt.Fprintf(os.Stderr, "%s Ollama stopped.\n", output.Prefix())
 	case <-time.After(ollamaStopTimeout):
 		// Force kill
-		if pgid, err := syscall.Getpgid(lc.cmd.Process.Pid); err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			_ = lc.cmd.Process.Kill()
-		}
+		_ = killProcess(lc.cmd)
 		<-done
 		fmt.Fprintf(os.Stderr, "%s Ollama force-killed.\n", output.Prefix())
 	}
@@ -154,11 +144,7 @@ func (lc *OllamaLifecycle) stop() {
 // kill immediately kills the process (used during startup failures).
 func (lc *OllamaLifecycle) kill() {
 	if lc.cmd != nil && lc.cmd.Process != nil {
-		if pgid, err := syscall.Getpgid(lc.cmd.Process.Pid); err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			_ = lc.cmd.Process.Kill()
-		}
+		_ = killProcess(lc.cmd)
 		_ = lc.cmd.Wait()
 		lc.cmd = nil
 	}

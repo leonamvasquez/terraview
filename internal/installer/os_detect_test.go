@@ -27,7 +27,7 @@ func TestSystemInfo_DisplayOS(t *testing.T) {
 	}{
 		{"darwin", "macOS"},
 		{"linux", "Linux"},
-		{"windows", "windows"},
+		{"windows", "Windows"},
 	}
 
 	for _, tt := range tests {

@@ -93,6 +93,9 @@ func (u *Uninstaller) stopService() error {
 		if err := exec.Command("systemctl", "stop", "ollama").Run(); err != nil {
 			_ = exec.Command("pkill", "-f", "ollama").Run()
 		}
+	case "windows":
+		// Use taskkill on Windows
+		_ = exec.Command("taskkill", "/F", "/IM", "ollama.exe").Run()
 	}
 	return nil
 }
@@ -113,6 +116,14 @@ func (u *Uninstaller) ollamaDataDirs() []string {
 			dirs = append(dirs, filepath.Join(home, ".ollama"))
 		}
 		dirs = append(dirs, "/usr/share/ollama")
+	case "windows":
+		// Ollama stores data in %LOCALAPPDATA%\Ollama and %USERPROFILE%\.ollama
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			dirs = append(dirs, filepath.Join(localAppData, "Ollama"))
+		}
+		if home != "" {
+			dirs = append(dirs, filepath.Join(home, ".ollama"))
+		}
 	}
 
 	// Also check OLLAMA_MODELS env

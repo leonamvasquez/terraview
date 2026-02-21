@@ -145,7 +145,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("  Replacing %s ...\n", currentBinary)
 	if err := replaceBinary(extractedBinary, currentBinary); err != nil {
-		return fmt.Errorf("failed to replace binary: %w\n\n  Try: sudo terraview update", err)
+		hint := "\n\n  Try: sudo terraview update"
+		if runtime.GOOS == "windows" {
+			hint = "\n\n  Try running from an elevated (Administrator) terminal"
+		}
+		return fmt.Errorf("failed to replace binary: %w%s", err, hint)
 	}
 
 	fmt.Println()
@@ -258,7 +262,11 @@ func extractBinaryFromTar(tarPath, destDir string) (string, error) {
 		// Look for the binary (filename starts with "terraview")
 		baseName := filepath.Base(header.Name)
 		if strings.HasPrefix(baseName, binaryName) {
-			destPath := filepath.Join(destDir, binaryName)
+			destName := binaryName
+			if runtime.GOOS == "windows" {
+				destName += ".exe"
+			}
+			destPath := filepath.Join(destDir, destName)
 			out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY, 0755)
 			if err != nil {
 				return "", err
