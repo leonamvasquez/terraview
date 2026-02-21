@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
@@ -135,8 +136,13 @@ func runAIList(cmd *cobra.Command, args []string) error {
 	// Tip: show if API key is needed but not set
 	if providerInfo.RequiresKey && os.Getenv(providerInfo.EnvVarKey) == "" {
 		fmt.Printf("\n%s⚠  %s não está configurada.%s\n", ansiYellow, providerInfo.EnvVarKey, ansiReset)
-		fmt.Printf("   Adicione ao seu shell profile (~/.zshrc):\n")
-		fmt.Printf("   %sexport %s=sua_chave_aqui%s\n\n", ansiDim, providerInfo.EnvVarKey, ansiReset)
+		if runtime.GOOS == "windows" {
+			fmt.Printf("   Configure via variável de ambiente:\n")
+			fmt.Printf("   %ssetx %s sua_chave_aqui%s\n\n", ansiDim, providerInfo.EnvVarKey, ansiReset)
+		} else {
+			fmt.Printf("   Adicione ao seu shell profile (~/.zshrc ou ~/.bashrc):\n")
+			fmt.Printf("   %sexport %s=sua_chave_aqui%s\n\n", ansiDim, providerInfo.EnvVarKey, ansiReset)
+		}
 	} else {
 		fmt.Printf("\n   Pronto! Execute: %sterraview review%s\n", ansiBold, ansiReset)
 	}

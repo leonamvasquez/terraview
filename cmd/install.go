@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/installer"
@@ -55,7 +54,7 @@ func runInstallLLM(cmd *cobra.Command, args []string) error {
 
 	// Handle interrupt gracefully
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigCh, signalsToNotify...)
 	go func() {
 		<-sigCh
 		fmt.Fprintln(os.Stderr, "\nInstallation interrupted.")

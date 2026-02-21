@@ -75,6 +75,10 @@ func measureResources() (*SystemResources, error) {
 		if err := measureLinux(res); err != nil {
 			return res, err
 		}
+	case "windows":
+		if err := measureWindows(res); err != nil {
+			return res, err
+		}
 	default:
 		return res, fmt.Errorf("unsupported OS for resource measurement: %s", runtime.GOOS)
 	}
@@ -118,6 +122,35 @@ func measureLinux(res *SystemResources) error {
 	out, err = exec.Command("cat", "/proc/loadavg").Output()
 	if err == nil {
 		res.LoadAverage = parseLoadAvg(strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+func measureWindows(res *SystemResources) error {
+	// Total and available memory via PowerShell (wmic is deprecated)
+	out, err := exec.Command("powershell", "-NoProfile", "-Command",
+		`$os = Get-CimInstance Win32_OperatingSystem; Write-Output "$($os.TotalVisibleMemorySize) $($os.FreePhysicalMemory)"`).Output()
+	if err == nil {
+		fields := strings.Fields(strings.TrimSpace(string(out)))
+		if len(fields) >= 2 {
+			if totalKB, e := strconv.ParseInt(fields[0], 10, 64); e == nil {
+				res.TotalMemoryMB = int(totalKB / 1024)
+			}
+			if freeKB, e := strconv.ParseInt(fields[1], 10, 64); e == nil {
+				res.AvailableMemoryMB = int(freeKB / 1024)
+			}
+		}
+	}
+
+	// Windows doesn't have a Unix-style load average; approximate via CPU usage
+	out, err = exec.Command("powershell", "-NoProfile", "-Command",
+		`(Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average`).Output()
+	if err == nil {
+		if pct, e := strconv.ParseFloat(strings.TrimSpace(string(out)), 64); e == nil {
+			// Convert percentage to Unix-style load avg approximation
+			res.LoadAverage = pct / 100.0 * float64(res.CPUCount)
+		}
 	}
 
 	return nil

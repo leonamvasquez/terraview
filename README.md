@@ -32,11 +32,24 @@ Ideal para times de DevOps, SRE e Platform Engineering que querem garantir segur
 
 ## Instalação
 
-### Script de instalação (recomendado)
+### Linux / macOS
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 ```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 | iex
+```
+
+> Se o PowerShell reclamar de política de execução, rode antes:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+O instalador baixa o binário `terraview.exe`, cria o alias `tv.exe` e adiciona tudo ao `PATH` do usuário automaticamente.
 
 ### Compilar do código-fonte
 

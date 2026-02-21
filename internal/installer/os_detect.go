@@ -22,10 +22,10 @@ func DetectSystem() (SystemInfo, error) {
 	}
 
 	switch info.OS {
-	case "linux", "darwin":
+	case "linux", "darwin", "windows":
 		// supported
 	default:
-		return info, fmt.Errorf("unsupported operating system: %s (supported: linux, darwin)", info.OS)
+		return info, fmt.Errorf("unsupported operating system: %s (supported: linux, darwin, windows)", info.OS)
 	}
 
 	switch info.Arch {
@@ -45,6 +45,8 @@ func (s SystemInfo) DisplayOS() string {
 		return "macOS"
 	case "linux":
 		return "Linux"
+	case "windows":
+		return "Windows"
 	default:
 		return s.OS
 	}
