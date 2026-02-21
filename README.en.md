@@ -32,13 +32,16 @@ Built for DevOps, SRE and Platform Engineering teams who want to ensure security
 
 ## Installation
 
-### Linux / macOS
+A single command works on **Linux, macOS, and Windows** (Git Bash / WSL):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 ```
 
-### Windows (PowerShell)
+The script automatically detects your OS and architecture, downloads the correct binary, installs it, and creates the `tv` alias.
+
+<details>
+<summary>Windows — PowerShell alternative</summary>
 
 ```powershell
 irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 | iex
@@ -49,17 +52,20 @@ irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 |
 > Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 > ```
 
-The installer downloads `terraview.exe`, creates a `tv.exe` alias, and automatically adds both to the user `PATH`.
+</details>
 
-**Alternative — manual download on Windows:**
+<details>
+<summary>Manual download</summary>
 
-```powershell
-# Download the binary (replace <VERSION> with the version, e.g. v0.1.0)
-curl.exe -Lo terraview.exe https://github.com/leonamvasquez/terraview/releases/download/<VERSION>/terraview-windows-amd64.exe
-
-# Move to a directory in PATH
-move terraview.exe C:\Windows\
+```bash
+# Replace <VERSION>, <OS> and <ARCH> for your system
+# OS: linux, darwin, windows | ARCH: amd64, arm64
+curl -Lo terraview.tar.gz https://github.com/leonamvasquez/terraview/releases/download/<VERSION>/terraview-<OS>-<ARCH>.tar.gz
+tar -xzf terraview.tar.gz
+sudo mv terraview-<OS>-<ARCH> /usr/local/bin/terraview
 ```
+
+</details>
 
 ### Build from source
 
