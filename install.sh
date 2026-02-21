@@ -88,9 +88,32 @@ get_install_dir() {
     fi
 }
 
-# Track whether PATH was modified (curl|bash runs in subshell, so export won't persist)
-PATH_MODIFIED=""
-PATH_PROFILE=""
+# Determine the user's shell profile file
+get_shell_profile() {
+    local os="$1"
+    if [ "${os}" = "windows" ]; then
+        if [ -f "${HOME}/.bashrc" ]; then
+            echo "${HOME}/.bashrc"
+        else
+            echo "${HOME}/.bash_profile"
+        fi
+    else
+        local user_shell
+        user_shell="$(basename "${SHELL:-bash}")"
+        case "${user_shell}" in
+            zsh)  echo "${HOME}/.zshrc" ;;
+            bash)
+                if [ -f "${HOME}/.bashrc" ]; then
+                    echo "${HOME}/.bashrc"
+                else
+                    echo "${HOME}/.bash_profile"
+                fi
+                ;;
+            fish) echo "${HOME}/.config/fish/config.fish" ;;
+            *)    echo "${HOME}/.profile" ;;
+        esac
+    fi
+}
 
 # Configure PATH for shell profiles
 configure_path() {
@@ -102,42 +125,15 @@ configure_path() {
         return 0
     fi
 
-    local shell_profile=""
-
-    if [ "${os}" = "windows" ]; then
-        # Git Bash uses ~/.bashrc or ~/.bash_profile
-        if [ -f "${HOME}/.bashrc" ]; then
-            shell_profile="${HOME}/.bashrc"
-        else
-            shell_profile="${HOME}/.bash_profile"
-        fi
-    else
-        # Detect user's shell
-        local user_shell
-        user_shell="$(basename "${SHELL:-bash}")"
-        case "${user_shell}" in
-            zsh)  shell_profile="${HOME}/.zshrc" ;;
-            bash)
-                if [ -f "${HOME}/.bashrc" ]; then
-                    shell_profile="${HOME}/.bashrc"
-                else
-                    shell_profile="${HOME}/.bash_profile"
-                fi
-                ;;
-            fish) shell_profile="${HOME}/.config/fish/config.fish" ;;
-            *)    shell_profile="${HOME}/.profile" ;;
-        esac
-    fi
+    local shell_profile
+    shell_profile="$(get_shell_profile "${os}")"
 
     if [ -n "${shell_profile}" ]; then
-        # Check if already added
         if ! grep -q "${install_dir}" "${shell_profile}" 2>/dev/null; then
             echo "" >> "${shell_profile}"
             echo "# Added by terraview installer" >> "${shell_profile}"
             echo "export PATH=\"${install_dir}:\$PATH\"" >> "${shell_profile}"
             info "Added ${install_dir} to PATH in ${shell_profile}"
-            PATH_MODIFIED="1"
-            PATH_PROFILE="${shell_profile}"
         fi
     fi
 
@@ -201,15 +197,15 @@ main() {
         exit 1
     fi
 
-    # Extract binary
+    # Extract binary (--warning=no-unknown-keyword suppresses macOS xattr warnings on Windows)
     info "Extracting binary..."
-    tar -xzf "${tmp_dir}/binary.tar.gz" -C "${tmp_dir}"
+    tar -xzf "${tmp_dir}/binary.tar.gz" -C "${tmp_dir}" 2>/dev/null
 
     # Download assets (prompts + rules)
     info "Downloading assets..."
     if curl -sSL --fail -o "${tmp_dir}/assets.tar.gz" "${asset_url}" 2>/dev/null; then
         mkdir -p "${ASSETS_DIR}"
-        tar -xzf "${tmp_dir}/assets.tar.gz" -C "${ASSETS_DIR}"
+        tar -xzf "${tmp_dir}/assets.tar.gz" -C "${ASSETS_DIR}" 2>/dev/null
         ok "Assets installed to ${ASSETS_DIR}"
     else
         warn "Could not download assets. You can copy prompts/ and rules/ manually to ${ASSETS_DIR}/"
@@ -252,24 +248,29 @@ main() {
     # Configure PATH
     configure_path "${install_dir}" "${os}"
 
-    # Verify
+    # Verify installation
     ok "Installed successfully!"
     echo ""
     "${install_dir}/${BINARY_NAME}${bin_ext}" version 2>/dev/null || true
     echo ""
 
-    if [ -n "${PATH_MODIFIED}" ]; then
-        # curl|bash runs in a subshell — PATH changes don't persist to the parent shell
-        local profile_name
-        profile_name="$(basename "${PATH_PROFILE}")"
-        warn "PATH was updated. To start using terraview, either:"
-        warn ""
-        warn "  1. Restart your terminal"
-        warn "  2. Run: source ~/${profile_name}"
-        echo ""
-    fi
+    # curl|bash always runs in a subshell, so PATH export never persists.
+    # Always show restart instructions if install_dir is not in the parent shell's PATH.
+    # We check the ORIGINAL path (before our export) by looking if the command is findable
+    # outside our subshell context.
+    local shell_profile
+    shell_profile="$(get_shell_profile "${os}")"
+    local profile_name
+    profile_name="$(basename "${shell_profile}")"
 
-    echo "  Get started:"
+    warn ""
+    warn "To start using terraview, either:"
+    warn ""
+    warn "  1. Restart your terminal (close and reopen)"
+    warn "  2. Run: source ~/${profile_name}"
+    echo ""
+
+    echo "  Then get started:"
     echo "    cd your-terraform-project"
     echo "    terraview plan   # or: tv plan"
     echo ""
