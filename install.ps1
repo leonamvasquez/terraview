@@ -13,35 +13,46 @@ function Write-Ok    { param($msg) Write-Host "[ok]    $msg" -ForegroundColor Gr
 function Write-Warn  { param($msg) Write-Host "[warn]  $msg" -ForegroundColor Yellow }
 function Write-Err   { param($msg) Write-Host "[error] $msg" -ForegroundColor Red }
 
-# Detect architecture
+# Detect architecture using multiple methods for maximum compatibility
 function Get-Arch {
-    # PROCESSOR_ARCHITECTURE reflects the native OS arch.
-    # On a 32-bit PowerShell running on 64-bit Windows (WOW64),
-    # PROCESSOR_ARCHITECTURE is "x86" but PROCESSOR_ARCHITEW6432 has the real arch.
+    # Method 1: WMI/CIM — most reliable, works on all Windows versions
+    # Architecture: 0=x86, 9=x64/AMD64, 12=ARM64
+    try {
+        $cpuArch = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1).Architecture
+        switch ($cpuArch) {
+            9  { return "amd64" }
+            12 { return "arm64" }
+            0  {
+                Write-Err "32-bit (x86) is not supported. Please use a 64-bit system."
+                exit 1
+            }
+        }
+    } catch {}
+
+    # Method 2: PROCESSOR_ARCHITECTURE env var (may be empty in piped iex sessions)
     $cpu = $env:PROCESSOR_ARCHITECTURE
-    if ($cpu -eq "x86" -and $env:PROCESSOR_ARCHITEW6432) {
+    if ([string]::IsNullOrEmpty($cpu) -and $env:PROCESSOR_ARCHITEW6432) {
         $cpu = $env:PROCESSOR_ARCHITEW6432
     }
-    switch ($cpu.ToUpper()) {
-        "AMD64" { return "amd64" }
-        "ARM64" { return "arm64" }
-        "X86"   {
-            Write-Err "32-bit (x86) is not supported. Please use a 64-bit system."
-            exit 1
-        }
-        default {
-            # Fallback: try RuntimeInformation
-            try {
-                $rtArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-                switch ($rtArch) {
-                    "X64"   { return "amd64" }
-                    "Arm64" { return "arm64" }
-                }
-            } catch {}
-            Write-Err "Unsupported architecture: $cpu"
-            exit 1
+    if (-not [string]::IsNullOrEmpty($cpu)) {
+        switch ($cpu.ToUpper()) {
+            "AMD64" { return "amd64" }
+            "ARM64" { return "arm64" }
         }
     }
+
+    # Method 3: .NET IntPtr size + Is64BitOperatingSystem
+    if ([System.Environment]::Is64BitOperatingSystem) {
+        try {
+            $rtArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+            if ($rtArch -eq "Arm64") { return "arm64" }
+        } catch {}
+        return "amd64"
+    }
+
+    Write-Err "Could not determine system architecture. Please download manually from:"
+    Write-Err "  https://github.com/$Repo/releases/latest"
+    exit 1
 }
 
 # Get latest release version
