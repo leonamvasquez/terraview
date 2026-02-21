@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/leonamvasquez/terraview/internal/drift"
+	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
@@ -20,7 +20,7 @@ var driftCmd = &cobra.Command{
 	Long: `Runs terraform plan to detect drift between state and infrastructure.
 
 Classifies each change by risk level and generates a drift report.
-Does NOT require LLM — uses deterministic analysis only.
+Use --intelligence for advanced classification (intentional vs suspicious).
 
 Exit codes:
   0 — no drift or low-risk changes only
@@ -30,15 +30,19 @@ Exit codes:
 Examples:
   terraview drift
   terraview drift --plan plan.json
+  terraview drift --intelligence          # classify + risk score
   terraview drift --format compact
   terraview drift --format json`,
 	RunE: runDrift,
 }
 
+var driftIntelligenceFlag bool
+
 func init() {
 	driftCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
 	driftCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for drift report")
 	driftCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json (default pretty)")
+	driftCmd.Flags().BoolVar(&driftIntelligenceFlag, "intelligence", false, "Advanced drift classification and risk scoring")
 }
 
 func runDrift(cmd *cobra.Command, args []string) error {
@@ -79,22 +83,16 @@ func runDrift(cmd *cobra.Command, args []string) error {
 	resources := p.NormalizeResources(plan)
 	logVerbose("Found %d resources in plan", len(resources))
 
-	// Load critical resource types from rules if available
-	var criticalTypes []string
-	resolvedRules := rulesFile
-	if resolvedRules == "" {
-		resolvedRules = findBundledFile("rules", "default-rules.yaml")
-	}
-	if resolvedRules != "" {
-		engine, err := rules.NewEngine(resolvedRules)
-		if err == nil {
-			criticalTypes = engine.CriticalResourceTypes()
-		}
-	}
-
-	// Analyze drift
-	analyzer := drift.NewAnalyzer(criticalTypes)
+	// Analyze drift (uses built-in critical resource types)
+	analyzer := drift.NewAnalyzer(nil)
 	result := analyzer.Analyze(resources)
+
+	// Intelligence analysis if requested
+	var intelResult *drift.IntelligenceResult
+	if driftIntelligenceFlag {
+		intelResult = drift.ClassifyDrift(resources, nil)
+		logVerbose("Drift intelligence: %d items, risk=%s (%.1f)", len(intelResult.Items), intelResult.RiskLevel, intelResult.OverallRisk)
+	}
 
 	// Output
 	resolvedOutput := outputDir
@@ -114,6 +112,19 @@ func runDrift(cmd *cobra.Command, args []string) error {
 	}
 	logVerbose("Written: %s", jsonPath)
 
+	// Write intelligence JSON if available
+	if intelResult != nil {
+		intelJSON, err := json.MarshalIndent(intelResult, "", "  ")
+		if err == nil {
+			intelPath := filepath.Join(resolvedOutput, "drift-intelligence.json")
+			if err := os.WriteFile(intelPath, intelJSON, 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "%s WARNING: failed to write %s: %v\n", output.Prefix(), intelPath, err)
+			} else {
+				logVerbose("Written: %s", intelPath)
+			}
+		}
+	}
+
 	// Resolve format
 	driftFormat := "pretty"
 	if outputFormat != "" {
@@ -123,10 +134,14 @@ func runDrift(cmd *cobra.Command, args []string) error {
 	// Print summary
 	if driftFormat != "json" {
 		printDriftSummary(result, driftFormat)
+		if intelResult != nil && driftFormat != "compact" {
+			fmt.Println()
+			fmt.Println(drift.FormatNarrative(intelResult))
+		}
 	}
 
 	if result.ExitCode != 0 {
-		os.Exit(result.ExitCode)
+		return &ExitError{Code: result.ExitCode}
 	}
 
 	return nil

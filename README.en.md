@@ -2,30 +2,33 @@
 
 **Choose your language:** [Português](README.md) | [English](README.en.md)
 
-# terraview: Semantic Review of Terraform Plans with AI
+# terraview: Security Scanning and AI Review for Terraform Plans
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22+-blue.svg)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 
 ## Overview
 
-**terraview** is an open-source command-line tool that performs **semantic analysis of Terraform plans**, combining deterministic hard rules with intelligent AI review via multiple providers (Ollama, Gemini, Claude, DeepSeek, OpenRouter).
+**terraview** is an open-source command-line tool that performs **security analysis of Terraform plans**, combining external scanners (Checkov, tfsec, Terrascan, KICS) with intelligent AI review via multiple providers (Ollama, Gemini, Claude, DeepSeek, OpenRouter).
 
-100% local by default. Multi-provider AI. Single binary, no dependencies.
+Scanners run by default. AI is opt-in. Single binary, no dependencies.
 
-Built for DevOps, SRE and Platform Engineering teams who want to ensure quality, security and compliance before any `terraform apply`.
+Built for DevOps, SRE and Platform Engineering teams who want to ensure security and compliance before any `terraform apply`.
 
 ## Key Features
 
-- **Deterministic Analysis**: Versioned YAML rules that detect known anti-patterns (open SGs, missing encryption, permissive IAM)
+- **Security Scanners**: Automatic integration with Checkov, tfsec, Terrascan and KICS — detects what's installed and runs automatically
 - **Multi-Provider AI**: Supports Ollama (local), Gemini, Claude, DeepSeek and OpenRouter with interactive selection
-- **100% Local by Default**: No infrastructure data leaves your machine when using Ollama
 - **Zero Configuration**: Auto-detects Terraform projects and runs `init + plan + show` automatically
-- **Interactive AI Selector**: `terraview ai list` opens an arrow-key picker to choose provider and model
+- **Interactive Provider Selector**: `terraview provider list` opens an arrow-key picker to choose provider and model
 - **Detailed Scorecard**: Security, Compliance, Maintainability and Overall scores on a 0-10 scale
+- **Infrastructure Diagram**: `--diagram` generates an ASCII diagram of the planned infrastructure
+- **Blast Radius**: `--blast-radius` analyzes the impact radius of changes
+- **Code Smells**: `--smell` detects infrastructure design anti-patterns
+- **Score Trends**: `--trend` tracks and displays score trends over time
 - **Native CI/CD**: Ready-to-use integration with GitHub Actions and GitLab CI via semantic exit codes
-- **Auto-Update**: `terraview update` fetches and installs the latest release from GitHub
-- **Native `tv` alias**: `tv` symlink installed automatically — `tv review` works exactly like `terraview review`
+- **Auto-Update**: `terraview upgrade` fetches and installs the latest release from GitHub
+- **Native `tv` alias**: `tv` symlink installed automatically — `tv plan` works exactly like `terraview plan`
 
 ## Installation
 
@@ -46,7 +49,7 @@ make install
 ### Install the local AI runtime (Ollama)
 
 ```bash
-terraview install llm
+terraview provider install
 ```
 
 After installation:
@@ -62,25 +65,34 @@ terraview --help
 # Navigate to any Terraform project
 cd my-terraform-project
 
-# Review the plan (runs terraform init + plan automatically)
-terraview review
+# Analyze the plan (runs terraform init + plan + scanners automatically)
+terraview plan
 
 # Use the short alias
-tv review
+tv plan
 
-# Review an existing plan.json
-terraview review --plan plan.json
+# Analyze an existing plan.json
+terraview plan --plan plan.json
 
-# Deterministic rules only (no AI)
-terraview review --skip-llm
+# Scanners + AI review
+terraview plan --ai
 
 # Choose an AI provider
-terraview review --provider gemini
-terraview review --provider claude
-terraview review --provider openrouter
+terraview plan --ai --provider gemini
+terraview plan --ai --provider claude
+terraview plan --ai --provider openrouter
+
+# Run specific scanners
+terraview plan --scanners checkov,tfsec
+
+# Infrastructure diagram
+terraview plan --diagram
+
+# Blast radius analysis
+terraview plan --blast-radius
 
 # Strict mode (HIGH findings also return exit code 2)
-terraview review --strict
+terraview plan --strict
 
 # Review and apply
 terraview apply
@@ -88,26 +100,38 @@ terraview apply
 
 ## Commands
 
-### `terraview review`
+### `terraview plan`
 
-Analyzes a Terraform plan with deterministic rules and optional AI review.
+Analyzes a Terraform plan with security scanners and optional AI review.
 
 If `--plan` is not provided, terraview automatically:
 1. Detects `.tf` files in the current directory
 2. Runs `terraform init` (if needed)
 3. Runs `terraform plan -out=tfplan`
 4. Exports `terraform show -json tfplan > plan.json`
-5. Runs the full review pipeline
+5. Runs scanners and the review pipeline
 
 ```bash
-terraview review                          # auto-detection
-terraview review --plan plan.json         # use existing plan.json
-terraview review --skip-llm               # deterministic rules only
-terraview review --provider gemini        # use Gemini
-terraview review --model mistral:7b       # specific model
-terraview review --format compact         # minimal output
-terraview review --format json            # JSON output only
+terraview plan                                # auto-detection + scanners
+terraview plan --plan plan.json               # use existing plan.json
+terraview plan --ai                           # scanners + AI review
+terraview plan --ai --provider gemini         # use Gemini
+terraview plan --ai --model mistral:7b        # specific model
+terraview plan --scanners checkov,tfsec       # specific scanners
+terraview plan --diagram                      # infrastructure diagram
+terraview plan --blast-radius                 # impact radius
+terraview plan --smell                        # detect code smells
+terraview plan --trend                        # score trends
+terraview plan --format compact               # minimal output
+terraview plan --format json                  # JSON output only
+terraview plan --format sarif                 # SARIF output for CI
+terraview plan --strict                       # HIGH returns exit code 2
+terraview plan --safe                         # safe mode (light model)
+terraview plan --profile prod                 # production review profile
+terraview plan --findings checkov.json        # import external findings
 ```
+
+> **Alias:** `terraview review` works as an alias for `terraview plan`.
 
 ### `terraview apply`
 
@@ -120,21 +144,24 @@ Runs a full review then conditionally applies the plan.
 ```bash
 terraview apply                           # interactive
 terraview apply --non-interactive         # CI mode
+terraview apply --ai                      # AI review + apply
 ```
 
-### `terraview test`
+### `terraview validate`
 
-Runs a deterministic test suite (no AI dependency):
+Runs a deterministic validation suite (no AI dependency):
 
 1. `terraform fmt -check` — formatting check
 2. `terraform validate` — syntax validation
 3. `terraform test` — native tests (Terraform 1.6+)
-4. Hard rules — deterministic evaluation
+4. Security Scanners — external scanner evaluation
 
 ```bash
-terraview test
-terraview test --rules custom-rules.yaml
+terraview validate
+terraview validate -v                     # verbose mode
 ```
+
+> **Alias:** `terraview test` works as an alias for `terraview validate`.
 
 ### `terraview drift`
 
@@ -143,34 +170,49 @@ Detects and classifies infrastructure drift.
 ```bash
 terraview drift
 terraview drift --plan plan.json
+terraview drift --intelligence            # advanced classification + risk score
 terraview drift --format compact
+terraview drift --format json
 ```
 
-### AI Management
+### `terraview explain`
 
-#### `terraview ai list`
+Generates a comprehensive natural-language explanation of your infrastructure using AI.
+
+```bash
+terraview explain
+terraview explain --plan plan.json
+terraview explain --provider gemini
+terraview explain --format json
+```
+
+### Provider Management
+
+#### `terraview provider list`
 
 Opens an **interactive picker** with arrow keys to choose the default provider and model. The choice is saved globally to `~/.terraview/.terraview.yaml`.
 
 ```bash
-terraview ai list                            # interactive selection
-terraview ai use gemini gemini-2.0-flash     # non-interactive (scripts/CI)
-terraview ai current                         # show active config
-terraview ai test                            # validate connectivity
+terraview provider list                            # interactive selection
+terraview provider use gemini gemini-2.0-flash     # non-interactive (scripts/CI)
+terraview provider current                         # show active config
+terraview provider test                            # validate connectivity
 ```
 
-#### `terraview install llm` / `terraview uninstall llm`
+> **Alias:** `terraview ai` works as an alias for `terraview provider`.
+
+#### `terraview provider install` / `terraview provider uninstall`
 
 ```bash
-terraview install llm      # install Ollama + pull default model
-terraview uninstall llm    # remove Ollama and its data
+terraview provider install      # install Ollama + pull default model
+terraview provider uninstall    # remove Ollama and its data
 ```
 
 ### Utilities
 
 ```bash
 terraview version          # version info
-terraview update           # self-update from GitHub
+terraview upgrade          # self-update from GitHub
 ```
 
 ## Configuration (.terraview.yaml)
@@ -194,61 +236,27 @@ scoring:
     medium: 1
     low: 0.5
 
-rules:
-  required_tags:
-    - environment
-    - owner
-
 output:
-  format: pretty                # pretty, compact, json
+  format: pretty                # pretty, compact, json, sarif
 ```
 
-## Available Rules
+## Security Scanners
 
-Rules are defined in YAML and support the following operators:
+terraview automatically integrates with the following external scanners. Just have them installed — terraview detects and runs them automatically (`--scanners auto`).
 
-`equals` · `not_equals` · `contains` · `not_contains` · `exists` · `not_exists` · `is_true` · `is_false` · `is_action` · `contains_in_list`
+| Scanner | Description | Install |
+|---------|-------------|---------|
+| [Checkov](https://www.checkov.io/) | Security and compliance scanner for IaC | `pip install checkov` |
+| [tfsec](https://aquasecurity.github.io/tfsec/) | Static security analysis for Terraform | `brew install tfsec` |
+| [Terrascan](https://runterrascan.io/) | Compliance violation detector | `brew install terrascan` |
+| [KICS](https://kics.io/) | Keeping Infrastructure as Code Secure | `brew install kics` |
 
-### Default Rules
+Findings from all scanners are normalized, aggregated, and presented in a unified scorecard.
 
-| ID | Name | Severity |
-|----|------|----------|
-| SEC001 | SSH Open to Internet | HIGH |
-| SEC002 | S3 Bucket Without Encryption | HIGH |
-| SEC003 | IAM Policy with Wildcard Actions | CRITICAL |
-| SEC004 | IAM Policy with Wildcard Resources | HIGH |
-| SEC005 | RDS Publicly Accessible | HIGH |
-| SEC006 | S3 Bucket Public ACL | HIGH |
-| SEC007 | Security Group Allows All Traffic | CRITICAL |
-| REL001 | RDS Without Multi-AZ | MEDIUM |
-| REL002 | RDS Without Backup | HIGH |
-| BP001 | S3 Bucket Without Versioning | MEDIUM |
-| BP002 | EBS Volume Without Encryption | MEDIUM |
-| COMP001 | CloudWatch Logs Without Retention | LOW |
-| TAG001 | Missing Required Tags | MEDIUM |
-| DEL001 | Critical Resource Deletion | HIGH |
-
-### Custom Rules
-
-```yaml
-version: "1.0"
-required_tags:
-  - Environment
-  - CostCenter
-rules:
-  - id: CUSTOM001
-    name: My Custom Rule
-    description: "Describes what this rule checks"
-    severity: HIGH
-    category: security
-    remediation: "How to fix"
-    enabled: true
-    targets:
-      - aws_s3_bucket
-    conditions:
-      - field: some_field
-        operator: equals
-        value: "bad_value"
+```bash
+terraview plan                              # runs all available scanners
+terraview plan --scanners checkov,tfsec     # run only specific scanners
+terraview plan --findings checkov.json      # import findings from external run
 ```
 
 ## Scores and Exit Codes
@@ -285,11 +293,14 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Install Checkov
+        run: pip install checkov
+
       - name: Install terraview
         run: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 
       - name: Review plan
-        run: terraview review --skip-llm
+        run: terraview plan
 
       - name: Comment on PR
         if: always()
@@ -304,8 +315,9 @@ jobs:
 terraform-review:
   stage: validate
   script:
+    - pip install checkov
     - curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-    - terraview review --skip-llm
+    - terraview plan
   artifacts:
     paths: [review.json, review.md]
     when: always
@@ -314,26 +326,26 @@ terraform-review:
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                      terraview CLI                      │
-│   review │ apply │ test │ drift │ ai │ update │ install  │
-└─────────────────────┬──────────────────────────────────┘
-                      │
-          ┌───────────┴────────────┐
-          ▼                        ▼
-┌─────────────────────┐   ┌──────────────────────┐
-│  Rules Engine       │   │    AI Providers      │
-│  (YAML rules)       │   │  Ollama │ Gemini      │
-│  Deterministic      │   │  Claude │ DeepSeek    │
-└─────────┬───────────┘   │  OpenRouter           │
-          │               └──────────┬────────────┘
-          │                          │
-          └─────────────┬────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                       terraview CLI                       │
+│  plan │ apply │ validate │ drift │ explain │ provider     │
+└──────────────────────┬───────────────────────────────────┘
+                       │
+          ┌────────────┴─────────────┐
+          ▼                          ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│  Security Scanners   │   │    AI Providers       │
+│  Checkov │ tfsec     │   │  Ollama │ Gemini      │
+│  Terrascan │ KICS    │   │  Claude │ DeepSeek    │
+└──────────┬───────────┘   │  OpenRouter           │
+           │               └──────────┬────────────┘
+           │                          │
+           └────────────┬─────────────┘
                         ▼
-          ┌─────────────────────────┐
-          │  Aggregator + Scorer    │
-          │  review.json / .md      │
-          └─────────────────────────┘
+           ┌───────────────────────┐
+           │  Aggregator + Scorer  │
+           │  review.json / .md    │
+           └───────────────────────┘
 ```
 
 ## Development
@@ -350,12 +362,15 @@ make help         # list all targets
 
 ## Roadmap
 
+- [x] SARIF output format
+- [x] Score history and trend tracking
+- [x] Customizable scoring profiles
+- [x] External scanner integration (Checkov, tfsec, Terrascan, KICS)
+- [x] ASCII infrastructure diagram
+- [x] Blast radius analysis
+- [x] Code smell detection
 - [ ] Azure and GCP support
-- [ ] Customizable scoring profiles
-- [ ] SARIF output format
 - [ ] Terraform module-aware analysis
-- [ ] Plugin system for rules
-- [ ] Score history and trend tracking
 - [ ] OPA/Rego policy integration
 
 ## Support and Contact
@@ -372,19 +387,25 @@ This project is distributed under the MIT License. See the [LICENSE](LICENSE) fi
 ## FAQ
 
 **Q: Does terraview work offline?**
-A: Yes. When using Ollama as the provider, all analysis is done locally. No infrastructure data leaves your machine.
+A: Yes. Scanners run locally, and when using Ollama as the AI provider, all analysis is done without sending data externally.
 
 **Q: Do I need Terraform installed?**
-A: Yes, if you want automatic plan generation (`terraview review` without `--plan`). If you already have a `plan.json`, Terraform is not required.
+A: Yes, if you want automatic plan generation (`terraview plan` without `--plan`). If you already have a `plan.json`, Terraform is not required.
+
+**Q: Do I need any scanner installed?**
+A: Recommended but not required. terraview automatically detects which scanners are available (`--scanners auto`). Without any scanner, only the AI pipeline can be used with `--ai`.
 
 **Q: How do I configure a cloud provider (Gemini, Claude, etc.)?**
-A: Run `terraview ai list`, select the provider with arrow keys and confirm. terraview will show which environment variable to set (e.g., `GEMINI_API_KEY`).
+A: Run `terraview provider list`, select the provider with arrow keys and confirm. terraview will show which environment variable to set (e.g., `GEMINI_API_KEY`).
 
 **Q: Can I use terraview in monorepos with multiple workspaces?**
 A: Yes. Use `--dir` to specify the workspace or `--plan` with a previously generated `plan.json`.
 
 **Q: How do I update to the latest version?**
-A: Run `terraview update`. It checks, downloads and installs automatically.
+A: Run `terraview upgrade`. It checks, downloads and installs automatically.
 
 **Q: What is the `tv` alias?**
-A: During installation, a `tv -> terraview` symlink is created. You can use `tv review`, `tv ai list`, etc. as a shorthand.
+A: During installation, a `tv -> terraview` symlink is created. You can use `tv plan`, `tv provider list`, etc. as a shorthand.
+
+**Q: What's the difference between `terraview plan` and `terraview validate`?**
+A: `plan` runs scanners and optionally AI for a full analysis. `validate` runs quick deterministic checks (fmt, validate, test, scanners) without AI support — ideal for pre-commit or fast CI.

@@ -2,11 +2,11 @@ package parser
 
 // TerraformPlan represents the top-level structure of terraform show -json output.
 type TerraformPlan struct {
-	FormatVersion    string           `json:"format_version"`
-	TerraformVersion string           `json:"terraform_version"`
-	PlannedValues    PlannedValues    `json:"planned_values"`
-	ResourceChanges  []ResourceChange `json:"resource_changes"`
-	Configuration    Configuration    `json:"configuration"`
+	FormatVersion    string              `json:"format_version"`
+	TerraformVersion string              `json:"terraform_version"`
+	PlannedValues    PlannedValues       `json:"planned_values"`
+	ResourceChanges  []ResourceChange    `json:"resource_changes"`
+	Configuration    Configuration       `json:"configuration"`
 	Variables        map[string]Variable `json:"variables,omitempty"`
 }
 
@@ -31,13 +31,13 @@ type PlannedResource struct {
 }
 
 type ResourceChange struct {
-	Address       string                 `json:"address"`
-	ModuleAddress string                 `json:"module_address,omitempty"`
-	Mode          string                 `json:"mode"`
-	Type          string                 `json:"type"`
-	Name          string                 `json:"name"`
-	ProviderName  string                 `json:"provider_name"`
-	Change        Change                 `json:"change"`
+	Address       string `json:"address"`
+	ModuleAddress string `json:"module_address,omitempty"`
+	Mode          string `json:"mode"`
+	Type          string `json:"type"`
+	Name          string `json:"name"`
+	ProviderName  string `json:"provider_name"`
+	Change        Change `json:"change"`
 }
 
 type Change struct {
@@ -58,8 +58,16 @@ type ProviderConfig struct {
 }
 
 type ConfigModule struct {
-	Resources []ConfigResource `json:"resources,omitempty"`
-	Variables map[string]Variable `json:"variables,omitempty"`
+	Resources   []ConfigResource      `json:"resources,omitempty"`
+	Variables   map[string]Variable   `json:"variables,omitempty"`
+	ModuleCalls map[string]ModuleCall `json:"module_calls,omitempty"`
+}
+
+type ModuleCall struct {
+	Source            string                 `json:"source,omitempty"`
+	VersionConstraint string                 `json:"version_constraint,omitempty"`
+	Expressions       map[string]interface{} `json:"expressions,omitempty"`
+	Module            *ConfigModule          `json:"module,omitempty"`
 }
 
 type ConfigResource struct {

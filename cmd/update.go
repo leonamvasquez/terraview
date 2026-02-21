@@ -24,22 +24,23 @@ const (
 
 var forceUpdate bool
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update terraview to the latest version",
+var upgradeCmd = &cobra.Command{
+	Use:     "upgrade",
+	Aliases: []string{"update"},
+	Short:   "Upgrade terraview to the latest version",
 	Long: `Downloads and installs the latest version of terraview from GitHub Releases.
 
 Detects your OS and architecture automatically.
 Also updates bundled assets (prompts and rules).
 
 Examples:
-  terraview update              # update if newer version available
-  terraview update --force      # force reinstall even if up to date`,
+  terraview upgrade              # upgrade if newer version available
+  terraview upgrade --force      # force reinstall even if up to date`,
 	RunE: runUpdate,
 }
 
 func init() {
-	updateCmd.Flags().BoolVar(&forceUpdate, "force", false, "Force update even if already on latest version")
+	upgradeCmd.Flags().BoolVar(&forceUpdate, "force", false, "Force update even if already on latest version")
 }
 
 // githubRelease represents the GitHub API response for a release.

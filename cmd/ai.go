@@ -12,16 +12,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var aiCmd = &cobra.Command{
-	Use:   "ai",
-	Short: "Gerenciar providers de IA para revisão de planos Terraform",
-	Long: `Gerenciar os providers de IA usados pelo terraview para análise inteligente de planos.
+var providerCmd = &cobra.Command{
+	Use:     "provider",
+	Aliases: []string{"ai"},
+	Short:   "Manage AI providers and LLM runtimes",
+	Long: `Manage the AI providers and runtimes used by terraview.
 
-Subcomandos:
-  list      Listar providers disponíveis e escolher o padrão interativamente
-  use       Definir provider padrão sem interação (para scripts)
-  current   Exibir o provider atual configurado
-  test      Testar conectividade com o provider configurado`,
+Subcommands:
+  list        List available providers and choose the default interactively
+  use         Set default provider non-interactively (for scripts)
+  current     Show the currently configured provider
+  test        Test connectivity with the configured provider
+  install     Install LLM runtime (Ollama)
+  uninstall   Remove LLM runtime`,
 }
 
 var aiListCmd = &cobra.Command{
@@ -56,10 +59,12 @@ var aiTestCmd = &cobra.Command{
 }
 
 func init() {
-	aiCmd.AddCommand(aiListCmd)
-	aiCmd.AddCommand(aiUseCmd)
-	aiCmd.AddCommand(aiCurrentCmd)
-	aiCmd.AddCommand(aiTestCmd)
+	providerCmd.AddCommand(aiListCmd)
+	providerCmd.AddCommand(aiUseCmd)
+	providerCmd.AddCommand(aiCurrentCmd)
+	providerCmd.AddCommand(aiTestCmd)
+	providerCmd.AddCommand(installCmd)
+	providerCmd.AddCommand(uninstallCmd)
 }
 
 // runAIList shows an interactive provider picker, then a model picker, and saves the choice.

@@ -2,36 +2,17 @@ package rules
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"gopkg.in/yaml.v3"
 )
 
 // Engine loads rule definitions and evaluates resources against them.
 type Engine struct {
-	config    RulesConfig
+	config     RulesConfig
 	evaluators []Rule
-}
-
-// NewEngine creates a new rules engine from a YAML rules file.
-func NewEngine(rulesPath string) (*Engine, error) {
-	data, err := os.ReadFile(rulesPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read rules file %s: %w", rulesPath, err)
-	}
-
-	var config RulesConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse rules YAML: %w", err)
-	}
-
-	engine := &Engine{config: config}
-	engine.evaluators = engine.buildEvaluators()
-
-	return engine, nil
+	Lang       string // "pt-BR" for Brazilian Portuguese
 }
 
 // NewEngineFromConfig creates an engine directly from a RulesConfig.
@@ -41,105 +22,15 @@ func NewEngineFromConfig(config RulesConfig) *Engine {
 	return engine
 }
 
-// NewEngineFromPaths creates an engine by merging multiple rule files.
-// Returns an error if two files define a rule with the same ID.
-func NewEngineFromPaths(paths []string) (*Engine, error) {
-	merged := RulesConfig{Version: "1.0"}
-	seenIDs := make(map[string]string) // ruleID -> source file
-
-	for _, p := range paths {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read rules file %s: %w", p, err)
-		}
-
-		var cfg RulesConfig
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return nil, fmt.Errorf("failed to parse rules YAML %s: %w", p, err)
-		}
-
-		// Check for duplicate rule IDs
-		for _, rd := range cfg.Rules {
-			if existing, ok := seenIDs[rd.ID]; ok {
-				return nil, fmt.Errorf("duplicate rule ID %q: defined in both %s and %s", rd.ID, existing, p)
-			}
-			seenIDs[rd.ID] = p
-		}
-
-		merged.Rules = append(merged.Rules, cfg.Rules...)
-
-		// Merge required tags (deduplicate)
-		merged.RequiredTags = mergeStringSlices(merged.RequiredTags, cfg.RequiredTags)
-
-		// Merge critical resource types (deduplicate)
-		merged.CriticalResourceTypes = mergeStringSlices(merged.CriticalResourceTypes, cfg.CriticalResourceTypes)
-
-		// Merge taggable resource types (deduplicate)
-		merged.TaggableResourceTypes = mergeStringSlices(merged.TaggableResourceTypes, cfg.TaggableResourceTypes)
-	}
-
-	engine := &Engine{config: merged}
-	engine.evaluators = engine.buildEvaluators()
-	return engine, nil
-}
-
-// ResolveRulePacks expands pack names into file paths.
-// It looks in the given packsDir for files named <pack>.yaml.
-// If a pack name is a direct file path that exists, it is used as-is.
-func ResolveRulePacks(packs []string, packsDir string) ([]string, error) {
-	var paths []string
-
-	for _, pack := range packs {
-		// If it's a direct path that exists, use it
-		if _, err := os.Stat(pack); err == nil {
-			paths = append(paths, pack)
-			continue
-		}
-
-		// Look in packs directory
-		candidate := filepath.Join(packsDir, pack+".yaml")
-		if _, err := os.Stat(candidate); err == nil {
-			paths = append(paths, candidate)
-			continue
-		}
-
-		// Look in packs subdirectory
-		candidate = filepath.Join(packsDir, "packs", pack+".yaml")
-		if _, err := os.Stat(candidate); err == nil {
-			paths = append(paths, candidate)
-			continue
-		}
-
-		return nil, fmt.Errorf("rule pack %q not found (searched %s)", pack, packsDir)
-	}
-
-	return paths, nil
-}
-
-func mergeStringSlices(a, b []string) []string {
-	seen := make(map[string]bool, len(a))
-	for _, s := range a {
-		seen[s] = true
-	}
-	result := make([]string, len(a))
-	copy(result, a)
-	for _, s := range b {
-		if !seen[s] {
-			result = append(result, s)
-			seen[s] = true
-		}
-	}
-	return result
-}
-
-// CriticalResourceTypes returns the list of critical resource types from the loaded config.
-func (e *Engine) CriticalResourceTypes() []string {
-	return e.config.CriticalResourceTypes
-}
-
 // SetRequiredTags overrides the required tags and rebuilds evaluators.
 func (e *Engine) SetRequiredTags(tags []string) {
 	e.config.RequiredTags = tags
+	e.evaluators = e.buildEvaluators()
+}
+
+// SetLang sets the language for rule findings and rebuilds evaluators.
+func (e *Engine) SetLang(lang string) {
+	e.Lang = lang
 	e.evaluators = e.buildEvaluators()
 }
 
@@ -151,7 +42,7 @@ func (e *Engine) buildEvaluators() []Rule {
 		if !rd.Enabled {
 			continue
 		}
-		evaluators = append(evaluators, &GenericRule{definition: rd})
+		evaluators = append(evaluators, &GenericRule{definition: rd, lang: e.Lang})
 	}
 
 	if len(e.config.RequiredTags) > 0 {
@@ -162,12 +53,14 @@ func (e *Engine) buildEvaluators() []Rule {
 		evaluators = append(evaluators, &TagRule{
 			requiredTags:  e.config.RequiredTags,
 			taggableTypes: taggableMap,
+			lang:          e.Lang,
 		})
 	}
 
 	if len(e.config.CriticalResourceTypes) > 0 {
 		evaluators = append(evaluators, &CriticalDeletionRule{
 			criticalTypes: e.config.CriticalResourceTypes,
+			lang:          e.Lang,
 		})
 	}
 
@@ -191,6 +84,7 @@ func (e *Engine) Evaluate(resources []parser.NormalizedResource) []Finding {
 // GenericRule evaluates a resource against a YAML-defined rule with conditions.
 type GenericRule struct {
 	definition RuleDefinition
+	lang       string
 }
 
 func (r *GenericRule) ID() string {
@@ -208,13 +102,22 @@ func (r *GenericRule) Evaluate(resource parser.NormalizedResource, allResources 
 			return nil
 		}
 
+		msg := r.definition.Description
+		if r.lang == "pt-BR" && r.definition.DescriptionBR != "" {
+			msg = r.definition.DescriptionBR
+		}
+		remediation := r.definition.Remediation
+		if r.lang == "pt-BR" && r.definition.RemediationBR != "" {
+			remediation = r.definition.RemediationBR
+		}
+
 		return []Finding{{
 			RuleID:      r.definition.ID,
 			Severity:    r.definition.Severity,
 			Category:    r.definition.Category,
 			Resource:    resource.Address,
-			Message:     r.definition.Description,
-			Remediation: r.definition.Remediation,
+			Message:     msg,
+			Remediation: remediation,
 			Source:      "hard-rule",
 		}}
 	}
@@ -323,6 +226,16 @@ func evaluateCondition(cond Condition, resource parser.NormalizedResource) bool 
 		return isTruthy(val)
 	case "is_false":
 		return !isTruthy(val)
+	case "less_than":
+		return compareNumeric(val, cond.Value) < 0
+	case "greater_than":
+		return compareNumeric(val, cond.Value) > 0
+	case "less_than_or_equals":
+		c := compareNumeric(val, cond.Value)
+		return c <= 0 && c != -999
+	case "greater_than_or_equals":
+		c := compareNumeric(val, cond.Value)
+		return c >= 0 && c != 999
 	default:
 		return false
 	}
@@ -433,10 +346,56 @@ func isTruthy(val interface{}) bool {
 	return false
 }
 
+// compareNumeric compares two values numerically.
+// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+// Returns -999 or 999 on conversion error to signal failure.
+func compareNumeric(a, b interface{}) int {
+	af := toFloat64(a)
+	bf := toFloat64(b)
+	if af == nil || bf == nil {
+		return -999
+	}
+	if *af < *bf {
+		return -1
+	}
+	if *af > *bf {
+		return 1
+	}
+	return 0
+}
+
+// toFloat64 converts a value to float64 pointer. Returns nil if conversion fails.
+func toFloat64(v interface{}) *float64 {
+	switch val := v.(type) {
+	case float64:
+		return &val
+	case int:
+		f := float64(val)
+		return &f
+	case int64:
+		f := float64(val)
+		return &f
+	case string:
+		f, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil
+		}
+		return &f
+	default:
+		s := fmt.Sprintf("%v", v)
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return nil
+		}
+		return &f
+	}
+}
+
 // TagRule checks that all resources have required tags.
 type TagRule struct {
 	requiredTags  []string
 	taggableTypes map[string]bool
+	lang          string
 }
 
 func (r *TagRule) ID() string {
@@ -450,6 +409,13 @@ func (r *TagRule) Evaluate(resource parser.NormalizedResource, allResources []pa
 
 	tags := extractTags(resource.Values)
 
+	msgFmt := "Resource is missing required tag: %s"
+	remFmt := "Add the tag '%s' to the resource to comply with tagging policy."
+	if r.lang == "pt-BR" {
+		msgFmt = "Recurso não possui a tag obrigatória: %s"
+		remFmt = "Adicione a tag '%s' ao recurso para conformidade com a política de tags."
+	}
+
 	// If tags is nil, check whether this resource type is known to be taggable
 	if tags == nil {
 		if r.isTaggable(resource.Type) {
@@ -461,8 +427,8 @@ func (r *TagRule) Evaluate(resource parser.NormalizedResource, allResources []pa
 					Severity:    SeverityMedium,
 					Category:    CategoryCompliance,
 					Resource:    resource.Address,
-					Message:     fmt.Sprintf("Resource is missing required tag: %s", required),
-					Remediation: fmt.Sprintf("Add the tag '%s' to the resource to comply with tagging policy.", required),
+					Message:     fmt.Sprintf(msgFmt, required),
+					Remediation: fmt.Sprintf(remFmt, required),
 					Source:      "hard-rule",
 				})
 			}
@@ -479,8 +445,8 @@ func (r *TagRule) Evaluate(resource parser.NormalizedResource, allResources []pa
 				Severity:    SeverityMedium,
 				Category:    CategoryCompliance,
 				Resource:    resource.Address,
-				Message:     fmt.Sprintf("Resource is missing required tag: %s", required),
-				Remediation: fmt.Sprintf("Add the tag '%s' to the resource to comply with tagging policy.", required),
+				Message:     fmt.Sprintf(msgFmt, required),
+				Remediation: fmt.Sprintf(remFmt, required),
 				Source:      "hard-rule",
 			})
 		}
@@ -517,6 +483,7 @@ func extractTags(values map[string]interface{}) map[string]interface{} {
 // CriticalDeletionRule detects deletion of critical resource types.
 type CriticalDeletionRule struct {
 	criticalTypes []string
+	lang          string
 }
 
 func (r *CriticalDeletionRule) ID() string {
@@ -530,13 +497,19 @@ func (r *CriticalDeletionRule) Evaluate(resource parser.NormalizedResource, allR
 
 	for _, ct := range r.criticalTypes {
 		if resource.Type == ct {
+			msg := fmt.Sprintf("Critical resource %s is being %sd. This may cause data loss or service disruption.", resource.Address, resource.Action)
+			remediation := "Review this change carefully. Ensure backups exist and the deletion is intentional. Consider using lifecycle prevent_destroy."
+			if r.lang == "pt-BR" {
+				msg = fmt.Sprintf("Recurso crítico %s está sendo %sd. Isso pode causar perda de dados ou interrupção do serviço.", resource.Address, resource.Action)
+				remediation = "Revise esta mudança com cuidado. Certifique-se de que backups existem e a exclusão é intencional. Considere usar lifecycle prevent_destroy."
+			}
 			return []Finding{{
 				RuleID:      "DEL001",
 				Severity:    SeverityHigh,
 				Category:    CategoryReliability,
 				Resource:    resource.Address,
-				Message:     fmt.Sprintf("Critical resource %s is being %sd. This may cause data loss or service disruption.", resource.Address, resource.Action),
-				Remediation: "Review this change carefully. Ensure backups exist and the deletion is intentional. Consider using lifecycle prevent_destroy.",
+				Message:     msg,
+				Remediation: remediation,
 				Source:      "hard-rule",
 			}}
 		}

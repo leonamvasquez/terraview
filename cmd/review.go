@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
@@ -15,44 +16,52 @@ import (
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/importer"
-	"github.com/leonamvasquez/terraview/internal/llm"
+	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/profile"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
+	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
+	"github.com/leonamvasquez/terraview/internal/secondopinion"
+	"github.com/leonamvasquez/terraview/internal/smell"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
+	"github.com/leonamvasquez/terraview/internal/topology"
+	"github.com/leonamvasquez/terraview/internal/trend"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var (
-	planFile        string
-	rulesFile       string
-	promptDir       string
-	outputDir       string
-	ollamaURL       string
-	ollamaModel     string
-	aiProvider      string
-	timeout         int
-	temperature     float64
-	aiEnabled       bool
-	skipLLM         bool
-	outputFormat    string
-	strict          bool
-	safeMode        bool
-	explainFlag     bool
-	diagramFlag     bool
-	blastRadiusFlag bool
-	profileFlag     string
-	findingsFile    string
+	planFile          string
+	promptDir         string
+	outputDir         string
+	ollamaURL         string
+	ollamaModel       string
+	aiProvider        string
+	timeout           int
+	temperature       float64
+	aiEnabled         bool
+	outputFormat      string
+	strict            bool
+	safeMode          bool
+	explainFlag       bool
+	diagramFlag       bool
+	blastRadiusFlag   bool
+	profileFlag       string
+	findingsFile      string
+	secondOpinionFlag bool
+	trendFlag         bool
+	smellFlag         bool
+	scannersFlag      string
 )
 
-var reviewCmd = &cobra.Command{
-	Use:   "review",
-	Short: "Review a Terraform plan for security, architecture, and best practices",
-	Long: `Analyzes a Terraform plan using deterministic rules and optional AI review.
+var planCmd = &cobra.Command{
+	Use:     "plan",
+	Aliases: []string{"review"},
+	Short:   "Analyze a Terraform plan for security, architecture, and best practices",
+	Long: `Analyzes a Terraform plan using external security scanners and optional AI review.
 
 If --plan is not specified, terraview will automatically run:
   terraform init   (if needed)
@@ -60,53 +69,57 @@ If --plan is not specified, terraview will automatically run:
   terraform show   (exports JSON)
 
 Examples:
-  terraview review                              # deterministic rules only
-  terraview review --plan plan.json             # use existing plan
-  terraview review --ai                         # enable AI-powered review
-  terraview review --ai --provider gemini       # use Gemini AI
-  terraview review --ai --explain               # AI + natural language explanation
-  terraview review --diagram                    # show ASCII infrastructure diagram
-  terraview review --blast-radius               # analyze dependency blast radius
-  terraview review --format compact             # minimal output
-  terraview review --format json                # only write review.json
-  terraview review --format sarif               # SARIF output for CI integration
-  terraview review --strict                     # HIGH returns exit code 2
-  terraview review --safe                       # safe mode (light model, fewer resources)
-  terraview review --profile prod               # production review profile
-  terraview review --findings checkov.json      # import external findings`,
-	RunE: runReview,
+  terraview plan                              # run all available scanners (default)
+  terraview plan --scanners checkov,tfsec     # run specific scanners
+  terraview plan --ai                         # scanners + AI analysis
+  terraview plan --plan plan.json             # use existing plan
+  terraview plan --ai --provider gemini       # use Gemini AI
+  terraview plan --ai --provider gemini       # use Gemini AI
+  terraview plan --ai --explain               # AI + natural language explanation
+  terraview plan --diagram                    # show ASCII infrastructure diagram
+  terraview plan --blast-radius               # analyze dependency blast radius
+  terraview plan --format compact             # minimal output
+  terraview plan --format json                # only write review.json
+  terraview plan --format sarif               # SARIF output for CI integration
+  terraview plan --strict                     # HIGH returns exit code 2
+  terraview plan --safe                       # safe mode (light model, fewer resources)
+  terraview plan --profile prod               # production review profile
+  terraview plan --findings checkov.json      # import external findings`,
+	RunE: runPlan,
 }
 
 func init() {
-	reviewCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	reviewCmd.Flags().StringVarP(&rulesFile, "rules", "r", "", "Path to rules YAML file")
-	reviewCmd.Flags().StringVar(&promptDir, "prompts", "", "Path to prompts directory")
-	reviewCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for review files")
-	reviewCmd.Flags().StringVar(&ollamaURL, "ollama-url", "", "Ollama server URL (legacy, prefer --provider)")
-	reviewCmd.Flags().StringVar(&ollamaModel, "model", "", "AI model to use")
-	reviewCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
-	reviewCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
-	reviewCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
-	reviewCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
-	reviewCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "[DEPRECATED] AI is now opt-in. Use --ai to enable.")
-	reviewCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
-	reviewCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
-	reviewCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced threads, stricter resource limits")
-	reviewCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
-	reviewCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
-	reviewCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
-	reviewCmd.Flags().StringVar(&profileFlag, "profile", "", "Review profile (prod, dev, fintech, startup)")
-	reviewCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
+	planCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
+	planCmd.Flags().StringVar(&promptDir, "prompts", "", "Path to prompts directory")
+	planCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for review files")
+	planCmd.Flags().StringVar(&ollamaURL, "ollama-url", "", "Ollama server URL (legacy, prefer --provider)")
+	planCmd.Flags().StringVar(&ollamaModel, "model", "", "AI model to use")
+	planCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
+	planCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
+	planCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
+	planCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	planCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
+	planCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
+	planCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced threads, stricter resource limits")
+	planCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	planCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
+	planCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
+	planCmd.Flags().StringVar(&profileFlag, "profile", "", "Review profile (prod, dev, fintech, startup)")
+	planCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
+	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates deterministic findings (implies --ai)")
+	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
+	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
+	planCmd.Flags().StringVar(&scannersFlag, "scanners", "auto", "Run external scanners: auto, checkov, tfsec, terrascan, kics (comma-separated)")
 }
 
-func runReview(cmd *cobra.Command, args []string) error {
+func runPlan(cmd *cobra.Command, args []string) error {
 	_, exitCode, err := executeReview()
 	if err != nil {
 		return err
 	}
 
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		return &ExitError{Code: exitCode}
 	}
 
 	return nil
@@ -184,20 +197,13 @@ func executeReview() (string, int, error) {
 	if temperature >= 0 {
 		effectiveTemperature = temperature
 	}
-	// --skip-llm deprecation warning
-	if skipLLM {
-		fmt.Fprintf(os.Stderr, "[terraview] WARNING: --skip-llm is deprecated. AI is now opt-in. Use --ai to enable AI review.\n")
-	}
-
 	// --provider or --model implies --ai
-	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag
+	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag || secondOpinionFlag
 
 	// If AI is configured but not active, show info
-	if cfg.LLM.Enabled && !effectiveAI && !skipLLM {
+	if cfg.LLM.Enabled && !effectiveAI {
 		logVerbose("AI is configured but not active. Use --ai to enable.")
 	}
-
-	effectiveSkipLLM := !effectiveAI
 
 	// Resolve output format: CLI flag > config > default
 	effectiveFormat := output.FormatPretty
@@ -217,24 +223,6 @@ func executeReview() (string, int, error) {
 		if timeout == 0 {
 			effectiveTimeout = 60
 		}
-	}
-
-	// Resolve rules: CLI flag > config rule_packs > default bundled file
-	var resolvedRulesPaths []string
-	if rulesFile != "" {
-		resolvedRulesPaths = []string{rulesFile}
-	} else if len(cfg.Rules.RulePacks) > 0 {
-		rulesDir := findBundledDir("rules")
-		if rulesDir == "" {
-			rulesDir = "rules"
-		}
-		paths, err := rules.ResolveRulePacks(cfg.Rules.RulePacks, rulesDir)
-		if err != nil {
-			return "", 0, fmt.Errorf("rule packs error: %w", err)
-		}
-		resolvedRulesPaths = paths
-	} else {
-		resolvedRulesPaths = []string{findBundledFile("rules", "default-rules.yaml")}
 	}
 
 	// Resolve prompts directory
@@ -263,26 +251,49 @@ func executeReview() (string, int, error) {
 	summary := p.ExtractResourceSummary(resources)
 	logVerbose("Found %d resource changes", len(resources))
 
-	// 2. Hard rules (supports multiple rule files / packs)
-	logVerbose("Loading rules from %d source(s)", len(resolvedRulesPaths))
-	engine, err := rules.NewEngineFromPaths(resolvedRulesPaths)
+	// 2. Scanner-based analysis (primary detection engine)
+	var hardFindings []rules.Finding
+	var scannerResult *scanner.AggregatedResult
+
+	// Run external scanners
+	scanners, err := scanner.Resolve(scannersFlag)
 	if err != nil {
-		return resolvedPlan, 0, fmt.Errorf("rules error: %w", err)
+		return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
 	}
 
-	// Override required tags from config if set
-	if len(cfg.Rules.RequiredTags) > 0 {
-		engine.SetRequiredTags(cfg.Rules.RequiredTags)
+	if len(scanners) == 0 {
+		if brFlag {
+			fmt.Fprintf(os.Stderr, "%s AVISO: Nenhum scanner disponível. Instale checkov, tfsec, terrascan ou kics.\n", output.Prefix())
+		} else {
+			fmt.Fprintf(os.Stderr, "%s WARNING: No scanners available. Install checkov, tfsec, terrascan, or kics.\n", output.Prefix())
+		}
+	} else {
+		names := make([]string, len(scanners))
+		for i, s := range scanners {
+			names[i] = s.Name()
+		}
+		logVerbose("Running scanners: %s", strings.Join(names, ", "))
+
+		scanCtx := scanner.ScanContext{
+			PlanPath:  resolvedPlan,
+			SourceDir: workDir,
+			WorkDir:   workDir,
+		}
+
+		rawResults := scanner.RunAll(scanners, scanCtx)
+		aggResult := scanner.Aggregate(rawResults)
+		scannerResult = &aggResult
+
+		hardFindings = append(hardFindings, aggResult.Findings...)
+		logVerbose("Scanners: %d findings (%d raw, %d after dedup)",
+			len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
 	}
 
-	hardFindings := engine.Evaluate(resources)
-	logVerbose("Hard rules: %d findings", len(hardFindings))
-
-	// 2b. Import external findings if specified
+	// 2b. Import external findings if specified (backward compat)
 	if findingsFile != "" {
 		externalFindings, err := importer.Import(findingsFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[terraview] WARNING: Failed to import findings from %s: %v\n", findingsFile, err)
+			fmt.Fprintf(os.Stderr, "%s WARNING: Failed to import findings from %s: %v\n", output.Prefix(), findingsFile, err)
 		} else {
 			hardFindings = append(hardFindings, externalFindings...)
 			logVerbose("Imported %d external findings from %s", len(externalFindings), findingsFile)
@@ -293,15 +304,56 @@ func executeReview() (string, int, error) {
 	var aiFindings []rules.Finding
 	var aiSummary string
 
-	if !effectiveSkipLLM {
+	// Build topology graph (used for AI context and other features)
+	topoGraph := topology.BuildGraph(resources)
+
+	if effectiveAI {
 		// Build resource limits from config + safe mode
 		limits := buildResourceLimits(cfg, safeMode)
 
-		aiFindings, aiSummary = runAIReview(resources, summary, resolvedPrompts,
+		// Inject topology context into summary for AI
+		topoSummary := make(map[string]interface{})
+		for k, v := range summary {
+			topoSummary[k] = v
+		}
+		topoSummary["topology_context"] = topoGraph.FormatContext()
+		topoSummary["topology_layers"] = topoGraph.Layers()
+
+		aiFindings, aiSummary = runAIReview(resources, topoSummary, resolvedPrompts,
 			effectiveProvider, effectiveURL, effectiveModel,
 			effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, limits)
 	} else {
 		logVerbose("AI analysis skipped")
+	}
+
+	// 3b. Second opinion: AI validates deterministic findings
+	if secondOpinionFlag && effectiveAI && len(hardFindings) > 0 {
+		soCtx, soCancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
+		defer soCancel()
+
+		providerCfg := ai.ProviderConfig{
+			Model:       effectiveModel,
+			APIKey:      cfg.LLM.APIKey,
+			BaseURL:     effectiveURL,
+			Temperature: effectiveTemperature,
+			TimeoutSecs: effectiveTimeout,
+			MaxTokens:   4096,
+			MaxRetries:  2,
+		}
+
+		soProvider, err := ai.NewProvider(soCtx, effectiveProvider, providerCfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s WARNING: AI provider for --second-opinion not available: %v\n", output.Prefix(), err)
+		} else {
+			reviewer := secondopinion.NewReviewer(soProvider)
+			soResult, err := reviewer.Review(soCtx, hardFindings, resources, topoGraph.FormatContext())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s WARNING: Second opinion failed: %v\n", output.Prefix(), err)
+			} else {
+				hardFindings = secondopinion.EnrichFindings(hardFindings, soResult)
+				logVerbose("Second opinion: %d agree, %d disputed", soResult.AgreeCount, soResult.DisputeCount)
+			}
+		}
 	}
 
 	// 4. Aggregate (with configurable scoring weights)
@@ -313,6 +365,14 @@ func executeReview() (string, int, error) {
 	// 4b. Set profile name if used
 	if profileFlag != "" {
 		result.Profile = profileFlag
+	}
+
+	// 4b2. Meta-analysis: unified cross-tool scoring
+	if len(result.Findings) > 0 {
+		metaAnalyzer := meta.NewAnalyzer()
+		metaResult := metaAnalyzer.Analyze(result.Findings)
+		result.MetaAnalysis = metaResult
+		logVerbose("Meta-analysis: %s", metaResult.Summary)
 	}
 
 	// 4c. Generate diagram if requested (deterministic, no AI)
@@ -330,22 +390,71 @@ func executeReview() (string, int, error) {
 		logVerbose("Blast radius analysis: %s", blastResult.Summary)
 	}
 
+	// 4d2. Detect design smells if requested
+	if smellFlag {
+		detector := smell.NewDetector()
+		smellResult := detector.Detect(resources)
+		logVerbose("Design smells: %d detected, quality %.1f/10", len(smellResult.Smells), smellResult.QualityScore)
+		fmt.Println()
+		fmt.Println(smell.FormatSmells(smellResult))
+	}
+
 	// 4e. Generate AI explanation if requested
-	if explainFlag && !effectiveSkipLLM {
-		explainer := explain.NewExplainer(nil) // Will use the same AI provider
-		explainCtx := context.Background()
-		explanation, err := explainer.Explain(explainCtx, resources, result.Findings)
+	if explainFlag && effectiveAI {
+		explainCtx, explainCancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
+		defer explainCancel()
+
+		providerCfg := ai.ProviderConfig{
+			Model:       effectiveModel,
+			APIKey:      cfg.LLM.APIKey,
+			BaseURL:     effectiveURL,
+			Temperature: effectiveTemperature,
+			TimeoutSecs: effectiveTimeout,
+			MaxTokens:   4096,
+			MaxRetries:  2,
+		}
+
+		explainProvider, err := ai.NewProvider(explainCtx, effectiveProvider, providerCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[terraview] WARNING: AI explanation failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s WARNING: AI provider for --explain not available: %v\n", output.Prefix(), err)
 		} else {
-			result.Explanation = explanation
-			logVerbose("AI explanation generated")
+			var explainer *explain.Explainer
+			if brFlag {
+				explainer = explain.NewExplainerWithLang(explainProvider, "pt-BR")
+			} else {
+				explainer = explain.NewExplainer(explainProvider)
+			}
+			explanation, err := explainer.Explain(explainCtx, resources, result.Findings)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s WARNING: AI explanation failed: %v\n", output.Prefix(), err)
+			} else {
+				result.Explanation = explanation
+				logVerbose("AI explanation generated")
+			}
+		}
+	}
+
+	// 4f. Record score trend if requested
+	if trendFlag {
+		tracker := trend.NewTracker(workDir)
+		trendResult, err := tracker.Record(result.Score, len(result.Findings), result.TotalResources, result.SeverityCounts, profileFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s WARNING: trend tracking failed: %v\n", output.Prefix(), err)
+		} else {
+			logVerbose("Trend recorded: %s", trendResult.Narrative)
+			fmt.Println()
+			fmt.Println(trend.FormatTrend(trendResult))
 		}
 	}
 
 	// 5. Output
+	langCode := ""
+	if brFlag {
+		langCode = "pt-BR"
+	}
 	writer := output.NewWriterWithConfig(output.WriterConfig{
 		Format: effectiveFormat,
+		Lang:   langCode,
 	})
 
 	jsonPath := filepath.Join(resolvedOutput, "review.json")
@@ -373,18 +482,21 @@ func executeReview() (string, int, error) {
 	// 6. Print summary
 	writer.PrintSummary(result)
 
+	// 6a. Print scanner stats if scanners were used
+	if scannerResult != nil && effectiveFormat != output.FormatJSON {
+		if brFlag {
+			fmt.Print(scanner.FormatScannerHeaderBR(*scannerResult))
+		} else {
+			fmt.Print(scanner.FormatScannerHeader(*scannerResult))
+		}
+	}
+
 	// 6b. Print blast radius if generated
 	if blastRadiusFlag && result.BlastRadius != nil {
 		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
 			fmt.Println()
 			fmt.Print(br.FormatPretty())
 		}
-	}
-
-	// 6c. Print diagram if generated
-	if diagramFlag && result.Diagram != "" {
-		fmt.Println()
-		fmt.Println(result.Diagram)
 	}
 
 	// 7. Apply strict mode: HIGH becomes exit code 2
@@ -426,14 +538,14 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 
 	// Load prompts
 	if promptsDir == "" {
-		fmt.Fprintf(os.Stderr, "[terraview] WARNING: Prompts directory not found. Skipping AI analysis.\n")
+		fmt.Fprintf(os.Stderr, "%s WARNING: Prompts directory not found. Skipping AI analysis.\n", output.Prefix())
 		return nil, ""
 	}
 
-	loader := llm.NewPromptLoader(promptsDir)
+	loader := ai.NewPromptLoader(promptsDir)
 	promptSet, err := loader.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[terraview] WARNING: Failed to load prompts (%v). Skipping AI analysis.\n", err)
+		fmt.Fprintf(os.Stderr, "%s WARNING: Failed to load prompts (%v). Skipping AI analysis.\n", output.Prefix(), err)
 		return nil, ""
 	}
 
@@ -444,7 +556,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		bgCtx := context.Background()
 		cleanup, err := lc.Ensure(bgCtx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[terraview] WARNING: Ollama not available (%v). Skipping AI analysis.\n", err)
+			fmt.Fprintf(os.Stderr, "%s WARNING: Ollama not available (%v). Skipping AI analysis.\n", output.Prefix(), err)
 			return nil, ""
 		}
 		ollamaCleanup = cleanup
@@ -480,7 +592,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		if ollamaCleanup != nil {
 			ollamaCleanup()
 		}
-		fmt.Fprintf(os.Stderr, "[terraview] WARNING: AI provider %q not available (%v). Skipping AI analysis.\n", providerName, err)
+		fmt.Fprintf(os.Stderr, "%s WARNING: AI provider %q not available (%v). Skipping AI analysis.\n", output.Prefix(), providerName, err)
 		return nil, ""
 	}
 
@@ -488,12 +600,12 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 	req := ai.Request{
 		Resources: resources,
 		Summary:   summary,
-		Prompts: ai.Prompts{
-			System:       promptSet.System,
-			Security:     promptSet.Security,
-			Architecture: promptSet.Architecture,
-			Standards:    promptSet.Standards,
-		},
+		Prompts:   promptSet,
+	}
+
+	// Inject pt-BR language instruction when --br flag is set
+	if brFlag {
+		req.Prompts.System += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All findings, descriptions, summaries, and remediation steps must be written in Portuguese.\n"
 	}
 
 	logVerbose("Sending plan to AI (%s) for analysis...", providerName)
@@ -508,37 +620,12 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[terraview] WARNING: AI review failed (%v). Continuing with hard rules only.\n", err)
+		fmt.Fprintf(os.Stderr, "%s WARNING: AI review failed (%v). Continuing with hard rules only.\n", output.Prefix(), err)
 		return nil, ""
 	}
 
 	logVerbose("AI (%s/%s): %d additional findings", completion.Provider, completion.Model, len(completion.Findings))
 	return completion.Findings, completion.Summary
-}
-
-// findBundledFile looks for a file relative to the executable, then relative to cwd.
-func findBundledFile(dir, filename string) string {
-	if exe, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exe), dir, filename)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-
-	homeDir, _ := os.UserHomeDir()
-	if homeDir != "" {
-		candidate := filepath.Join(homeDir, ".terraview", dir, filename)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-
-	candidate := filepath.Join(dir, filename)
-	if _, err := os.Stat(candidate); err == nil {
-		return candidate
-	}
-
-	return candidate
 }
 
 // findBundledDir looks for a directory relative to the executable, then relative to cwd.

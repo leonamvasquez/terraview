@@ -8,7 +8,7 @@ import (
 )
 
 func TestAggregate_ExitCodes(t *testing.T) {
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
 	agg := NewAggregator(scorer)
 
 	tests := []struct {
@@ -63,7 +63,7 @@ func TestAggregate_ExitCodes(t *testing.T) {
 }
 
 func TestAggregate_Deduplication(t *testing.T) {
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
 	agg := NewAggregator(scorer)
 
 	hardFindings := []rules.Finding{
@@ -81,7 +81,7 @@ func TestAggregate_Deduplication(t *testing.T) {
 }
 
 func TestAggregate_SortBySeverity(t *testing.T) {
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
 	agg := NewAggregator(scorer)
 
 	findings := []rules.Finding{
@@ -101,7 +101,7 @@ func TestAggregate_SortBySeverity(t *testing.T) {
 }
 
 func TestAggregate_Verdict(t *testing.T) {
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
 	agg := NewAggregator(scorer)
 
 	tests := []struct {

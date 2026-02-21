@@ -3,43 +3,42 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
-var testCmd = &cobra.Command{
-	Use:   "test",
-	Short: "Validate Terraform config and run hard rules (no AI)",
-	Long: `Runs a deterministic test suite — no LLM dependency:
+var validateCmd = &cobra.Command{
+	Use:     "validate",
+	Aliases: []string{"test"},
+	Short:   "Validate Terraform config and run security scanners (no AI)",
+	Long: `Runs a deterministic validation suite — no LLM dependency:
 
   1. terraform fmt -check  — formatting verification
   2. terraform validate    — syntax and configuration checks
   3. terraform test        — native tests (Terraform 1.6+, if available)
-  4. Hard rules            — deterministic rule evaluation against the plan
+  4. Security scanners     — external scanner evaluation (checkov, tfsec, etc.)
 
 Exit codes:
   0 — all checks passed
   1 — execution error (fmt, validate, plan generation)
-  2 — rule violations (CRITICAL or HIGH findings)
+  2 — scanner violations (CRITICAL or HIGH findings)
 
 Examples:
-  terraview test
-  terraview test --rules custom-rules.yaml
-  terraview test -v`,
-	RunE: runTest,
+  terraview validate
+  terraview validate -v`,
+	RunE: runValidate,
 }
 
 func init() {
-	testCmd.Flags().StringVarP(&rulesFile, "rules", "r", "", "Path to rules YAML file")
 }
 
-func runTest(cmd *cobra.Command, args []string) error {
+func runValidate(cmd *cobra.Command, args []string) error {
 	if err := workspace.Validate(workDir); err != nil {
 		return err
 	}
@@ -108,12 +107,12 @@ func runTest(cmd *cobra.Command, args []string) error {
 		fmt.Print("\n  Result: PASSED\n\n")
 	}
 
-	// --- Step 4: Hard rules ---
+	// --- Step 4: Security Scanners ---
 	fmt.Println("═══════════════════════════════════════════════")
-	fmt.Println("  Step 4: Hard Rules")
+	fmt.Println("  Step 4: Security Scanners")
 	fmt.Println("═══════════════════════════════════════════════")
 
-	ruleViolations = !runHardRulesTest(executor)
+	ruleViolations = !runScannerTest(executor)
 
 	// --- Summary ---
 	fmt.Println("═══════════════════════════════════════════════")
@@ -124,56 +123,64 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 
 	if ruleViolations {
-		fmt.Println("  FAILED — rule violations detected")
+		fmt.Println("  FAILED — scanner violations detected")
 		fmt.Println("═══════════════════════════════════════════════")
-		os.Exit(2)
+		return &ExitError{Code: 2}
 	}
 
 	fmt.Println("  FAILED — execution errors")
 	fmt.Println("═══════════════════════════════════════════════")
-	os.Exit(1)
-
-	return nil
+	return &ExitError{Code: 1}
 }
 
-func runHardRulesTest(executor *terraformexec.Executor) bool {
-	resolvedRules := rulesFile
-	if resolvedRules == "" {
-		resolvedRules = findBundledFile("rules", "default-rules.yaml")
+func runScannerTest(executor *terraformexec.Executor) bool {
+	// Resolve available scanners
+	scanners, err := scanner.Resolve("auto")
+	if err != nil {
+		fmt.Printf("\n  Failed to resolve scanners: %v\n\n", err)
+		return false
 	}
 
-	// Check if plan.json already exists
-	planPath := filepath.Join(executor.WorkDir(), "plan.json")
-	if _, err := os.Stat(planPath); err != nil {
-		// Generate plan
+	if len(scanners) == 0 {
+		fmt.Printf("\n  %s No scanners available. Install checkov, tfsec, terrascan, or kics.\n", output.Prefix())
+		fmt.Print("\n  Result: SKIPPED\n\n")
+		return true
+	}
+
+	names := make([]string, len(scanners))
+	for i, s := range scanners {
+		names[i] = s.Name()
+	}
+	fmt.Printf("\n  Scanners: %s\n", strings.Join(names, ", "))
+
+	// Ensure plan.json exists
+	planPath := executor.WorkDir()
+	planJSON := planPath
+	if fi, err := os.Stat(planPath); err == nil && fi.IsDir() {
+		planJSON = planPath + "/plan.json"
+	}
+
+	if _, err := os.Stat(planJSON); err != nil {
 		generated, err := executor.Plan()
 		if err != nil {
 			fmt.Printf("\n  Failed to generate plan: %v\n\n", err)
 			return false
 		}
-		planPath = generated
+		planJSON = generated
 	}
 
-	p := parser.NewParser()
-	plan, err := p.ParseFile(planPath)
-	if err != nil {
-		fmt.Printf("\n  Failed to parse plan: %v\n\n", err)
-		return false
+	scanCtx := scanner.ScanContext{
+		PlanPath:  planJSON,
+		SourceDir: executor.WorkDir(),
+		WorkDir:   executor.WorkDir(),
 	}
 
-	resources := p.NormalizeResources(plan)
-
-	engine, err := rules.NewEngine(resolvedRules)
-	if err != nil {
-		fmt.Printf("\n  Failed to load rules: %v\n\n", err)
-		return false
-	}
-
-	findings := engine.Evaluate(resources)
+	rawResults := scanner.RunAll(scanners, scanCtx)
+	aggResult := scanner.Aggregate(rawResults)
 
 	criticalCount := 0
 	highCount := 0
-	for _, f := range findings {
+	for _, f := range aggResult.Findings {
 		switch f.Severity {
 		case rules.SeverityCritical:
 			criticalCount++
@@ -182,11 +189,11 @@ func runHardRulesTest(executor *terraformexec.Executor) bool {
 		}
 	}
 
-	fmt.Printf("\n  Resources: %d | Findings: %d (CRITICAL: %d, HIGH: %d)\n\n",
-		len(resources), len(findings), criticalCount, highCount)
+	fmt.Printf("  Findings: %d (CRITICAL: %d, HIGH: %d)\n\n",
+		len(aggResult.Findings), criticalCount, highCount)
 
 	if criticalCount > 0 {
-		for _, f := range findings {
+		for _, f := range aggResult.Findings {
 			if f.Severity == rules.SeverityCritical {
 				fmt.Printf("  [CRITICAL] %s: %s\n", f.Resource, f.Message)
 			}

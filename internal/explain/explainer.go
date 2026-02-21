@@ -23,6 +23,7 @@ type Explanation struct {
 // Explainer generates natural-language explanations of Terraform plans via AI.
 type Explainer struct {
 	provider ai.Provider
+	lang     string // "pt-BR" for Portuguese output
 }
 
 // NewExplainer creates a new Explainer with the given AI provider.
@@ -30,9 +31,17 @@ func NewExplainer(provider ai.Provider) *Explainer {
 	return &Explainer{provider: provider}
 }
 
+// NewExplainerWithLang creates a new Explainer with a specific output language.
+func NewExplainerWithLang(provider ai.Provider, lang string) *Explainer {
+	return &Explainer{provider: provider, lang: lang}
+}
+
 // Explain generates a natural-language explanation of the plan.
 func (e *Explainer) Explain(ctx context.Context, resources []parser.NormalizedResource, findings []rules.Finding) (*Explanation, error) {
 	prompt := buildExplainPrompt(resources, findings)
+	if e.lang == "pt-BR" {
+		prompt += "\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text must be in Portuguese.\n"
+	}
 
 	req := ai.Request{
 		Resources: resources,
@@ -64,7 +73,7 @@ func buildSummaryMap(resources []parser.NormalizedResource) map[string]interface
 	}
 }
 
-func buildExplainPrompt(resources []parser.NormalizedResource, findings []rules.Finding) string {
+func buildExplainPrompt(_ []parser.NormalizedResource, findings []rules.Finding) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a senior infrastructure engineer reviewing a Terraform plan.\n\n")

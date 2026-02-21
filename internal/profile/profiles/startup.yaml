@@ -1,0 +1,23 @@
+name: startup
+display_name: "Startup"
+description: "Cost-aware review for startups and small teams"
+scoring:
+  severity_weights:
+    critical: 5
+    high: 3
+    medium: 0.5
+    low: 0
+rules:
+  enabled_categories:
+    - security
+  disabled_rules:
+    - REL001
+    - REL002
+    - COMP001
+    - TAG001
+ai_prompt_addon: |
+  This plan is for a STARTUP with limited budget. Focus on:
+  - Critical security only (no over-engineering)
+  - Cost efficiency: flag expensive resources and suggest alternatives
+  - Simplicity over enterprise patterns
+  - Acceptable trade-offs: single-AZ, smaller instances, fewer tags

@@ -35,7 +35,6 @@ Examples:
 func init() {
 	applyCmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip confirmation prompt (for CI)")
 	applyCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	applyCmd.Flags().StringVarP(&rulesFile, "rules", "r", "", "Path to rules YAML file")
 	applyCmd.Flags().StringVar(&promptDir, "prompts", "", "Path to prompts directory")
 	applyCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for review files")
 	applyCmd.Flags().StringVar(&ollamaURL, "ollama-url", "", "Ollama server URL (legacy, prefer --provider)")
@@ -43,7 +42,6 @@ func init() {
 	applyCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
 	applyCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
 	applyCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
-	applyCmd.Flags().BoolVar(&skipLLM, "skip-llm", false, "[DEPRECATED] AI is now opt-in. Use --ai to enable.")
 	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
 	applyCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
 	applyCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced resources")
@@ -66,7 +64,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		fmt.Println("BLOCKED: CRITICAL findings detected. Fix them before applying.")
 		fmt.Println("Review the findings in review.md for details.")
-		os.Exit(2)
+		return &ExitError{Code: 2}
 	}
 
 	// 3. Warn on HIGH

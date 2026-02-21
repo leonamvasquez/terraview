@@ -19,13 +19,3 @@ func NewProvider(ctx context.Context, name string, cfg ProviderConfig) (Provider
 
 	return provider, nil
 }
-
-// DefaultProviderConfig returns sensible defaults for provider configuration.
-func DefaultProviderConfig() ProviderConfig {
-	return ProviderConfig{
-		Temperature: 0.2,
-		TimeoutSecs: 120,
-		MaxTokens:   4096,
-		MaxRetries:  2,
-	}
-}

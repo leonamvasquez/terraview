@@ -1,0 +1,12 @@
+name: dev
+description: "Development environment — relaxed checks for rapid iteration"
+strict_mode: false
+scoring:
+  weights:
+    critical: 5.0
+    high: 2.0
+    medium: 0.5
+    low: 0.0
+required_tags:
+  - Environment
+  - Team

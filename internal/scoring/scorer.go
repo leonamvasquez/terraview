@@ -30,19 +30,6 @@ type Scorer struct {
 	severityWeights map[string]float64
 }
 
-// NewScorer creates a new Scorer with default weights.
-func NewScorer() *Scorer {
-	return &Scorer{
-		severityWeights: map[string]float64{
-			rules.SeverityCritical: 5.0,
-			rules.SeverityHigh:     3.0,
-			rules.SeverityMedium:   1.0,
-			rules.SeverityLow:      0.5,
-			rules.SeverityInfo:     0.0,
-		},
-	}
-}
-
 // NewScorerWithWeights creates a Scorer with custom severity weights.
 func NewScorerWithWeights(critical, high, medium, low float64) *Scorer {
 	return &Scorer{

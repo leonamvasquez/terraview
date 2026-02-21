@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/leonamvasquez/terraview/internal/output"
 )
 
 const monitorInterval = 3 * time.Second
@@ -52,8 +54,8 @@ func (m *Monitor) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := m.check(); err != nil {
-				fmt.Fprintf(os.Stderr, "[terraview] Resource limit exceeded: %v\n", err)
-				fmt.Fprintf(os.Stderr, "[terraview] Cancelling LLM execution to protect system stability.\n")
+				fmt.Fprintf(os.Stderr, "%s Resource limit exceeded: %v\n", output.Prefix(), err)
+				fmt.Fprintf(os.Stderr, "%s Cancelling LLM execution to protect system stability.\n", output.Prefix())
 				m.cancelFn()
 				return
 			}
