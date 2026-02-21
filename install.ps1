@@ -15,12 +15,30 @@ function Write-Err   { param($msg) Write-Host "[error] $msg" -ForegroundColor Re
 
 # Detect architecture
 function Get-Arch {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    switch ($arch) {
-        "X64"   { return "amd64" }
-        "Arm64" { return "arm64" }
+    # PROCESSOR_ARCHITECTURE reflects the native OS arch.
+    # On a 32-bit PowerShell running on 64-bit Windows (WOW64),
+    # PROCESSOR_ARCHITECTURE is "x86" but PROCESSOR_ARCHITEW6432 has the real arch.
+    $cpu = $env:PROCESSOR_ARCHITECTURE
+    if ($cpu -eq "x86" -and $env:PROCESSOR_ARCHITEW6432) {
+        $cpu = $env:PROCESSOR_ARCHITEW6432
+    }
+    switch ($cpu.ToUpper()) {
+        "AMD64" { return "amd64" }
+        "ARM64" { return "arm64" }
+        "X86"   {
+            Write-Err "32-bit (x86) is not supported. Please use a 64-bit system."
+            exit 1
+        }
         default {
-            Write-Err "Unsupported architecture: $arch"
+            # Fallback: try RuntimeInformation
+            try {
+                $rtArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+                switch ($rtArch) {
+                    "X64"   { return "amd64" }
+                    "Arm64" { return "arm64" }
+                }
+            } catch {}
+            Write-Err "Unsupported architecture: $cpu"
             exit 1
         }
     }
