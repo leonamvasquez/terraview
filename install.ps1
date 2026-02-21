@@ -132,12 +132,14 @@ try {
 
     # Add to PATH if not already present
     $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $needsRestart = $false
     if ($userPath -notlike "*$InstallDir*") {
         Write-Info "Adding $InstallDir to user PATH..."
         [Environment]::SetEnvironmentVariable("PATH", "$InstallDir;$userPath", "User")
-        $env:PATH = "$InstallDir;$env:PATH"
-        Write-Ok "Added to PATH. You may need to restart your terminal."
+        $needsRestart = $true
     }
+    # Always refresh current session PATH
+    $env:PATH = "$InstallDir;" + [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
 
     # Verify
     $installed = Join-Path $InstallDir "$BinaryName.exe"
@@ -146,6 +148,14 @@ try {
         Write-Host ""
         & $installed version
         Write-Host ""
+        if ($needsRestart) {
+            Write-Host ""
+            Write-Warn "IMPORTANTE: Feche e reabra o terminal para usar 'terraview' e 'tv'."
+            Write-Host ""
+            Write-Host "  Ou rode agora nesta sessao:"
+            Write-Host "    `$env:PATH = [Environment]::GetEnvironmentVariable('PATH','User') + ';' + [Environment]::GetEnvironmentVariable('PATH','Machine')" -ForegroundColor DarkGray
+            Write-Host ""
+        }
         Write-Host "  Get started:"
         Write-Host "    cd your-terraform-project"
         Write-Host "    terraview review   # or: tv review"
