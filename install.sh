@@ -125,15 +125,30 @@ configure_path() {
         return 0
     fi
 
-    local shell_profile
-    shell_profile="$(get_shell_profile "${os}")"
+    local path_line="export PATH=\"${install_dir}:\$PATH\""
+    local path_comment="# Added by terraview installer"
 
-    if [ -n "${shell_profile}" ]; then
-        if ! grep -q "${install_dir}" "${shell_profile}" 2>/dev/null; then
-            echo "" >> "${shell_profile}"
-            echo "# Added by terraview installer" >> "${shell_profile}"
-            echo "export PATH=\"${install_dir}:\$PATH\"" >> "${shell_profile}"
-            info "Added ${install_dir} to PATH in ${shell_profile}"
+    if [ "${os}" = "windows" ]; then
+        # Git Bash: some configs only source .bashrc, others only .bash_profile.
+        # Add to BOTH to cover all cases.
+        for profile in "${HOME}/.bashrc" "${HOME}/.bash_profile"; do
+            if ! grep -q "${install_dir}" "${profile}" 2>/dev/null; then
+                echo "" >> "${profile}"
+                echo "${path_comment}" >> "${profile}"
+                echo "${path_line}" >> "${profile}"
+                info "Added ${install_dir} to PATH in ${profile}"
+            fi
+        done
+    else
+        local shell_profile
+        shell_profile="$(get_shell_profile "${os}")"
+        if [ -n "${shell_profile}" ]; then
+            if ! grep -q "${install_dir}" "${shell_profile}" 2>/dev/null; then
+                echo "" >> "${shell_profile}"
+                echo "${path_comment}" >> "${shell_profile}"
+                echo "${path_line}" >> "${shell_profile}"
+                info "Added ${install_dir} to PATH in ${shell_profile}"
+            fi
         fi
     fi
 
@@ -255,19 +270,13 @@ main() {
     echo ""
 
     # curl|bash always runs in a subshell, so PATH export never persists.
-    # Always show restart instructions if install_dir is not in the parent shell's PATH.
-    # We check the ORIGINAL path (before our export) by looking if the command is findable
-    # outside our subshell context.
-    local shell_profile
-    shell_profile="$(get_shell_profile "${os}")"
-    local profile_name
-    profile_name="$(basename "${shell_profile}")"
-
+    # Show the direct export command so the user can activate immediately.
     warn ""
-    warn "To start using terraview, either:"
+    warn "To start using terraview NOW, run this command:"
     warn ""
-    warn "  1. Restart your terminal (close and reopen)"
-    warn "  2. Run: source ~/${profile_name}"
+    warn "  export PATH=\"${install_dir}:\$PATH\""
+    warn ""
+    warn "Or restart your terminal (close and reopen)."
     echo ""
 
     echo "  Then get started:"
