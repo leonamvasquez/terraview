@@ -11,7 +11,7 @@ import (
 )
 
 func TestWriteSARIF_CreatesValidJSON(t *testing.T) {
-	w := NewWriter()
+	w := NewWriterWithConfig(WriterConfig{})
 	result := aggregator.ReviewResult{
 		PlanFile:       "plan.json",
 		TotalResources: 3,
@@ -60,7 +60,7 @@ func TestWriteSARIF_CreatesValidJSON(t *testing.T) {
 }
 
 func TestWriteSARIF_EmptyFindings(t *testing.T) {
-	w := NewWriter()
+	w := NewWriterWithConfig(WriterConfig{})
 	result := aggregator.ReviewResult{
 		PlanFile:       "plan.json",
 		TotalResources: 0,

@@ -38,11 +38,6 @@ type Writer struct {
 	config WriterConfig
 }
 
-// NewWriter creates a new Writer with default config.
-func NewWriter() *Writer {
-	return &Writer{config: WriterConfig{}}
-}
-
 // NewWriterWithConfig creates a Writer with the given config.
 func NewWriterWithConfig(config WriterConfig) *Writer {
 	return &Writer{config: config}

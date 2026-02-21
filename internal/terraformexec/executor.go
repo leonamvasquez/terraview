@@ -46,19 +46,6 @@ func (e *Executor) WorkDir() string {
 	return e.workDir
 }
 
-// Version returns the installed terraform version string.
-func (e *Executor) Version() (string, error) {
-	out, err := e.run("version", "-json")
-	if err != nil {
-		// Fallback without -json for older versions
-		out, err = e.run("version")
-		if err != nil {
-			return "", fmt.Errorf("failed to get terraform version: %w", err)
-		}
-	}
-	return strings.TrimSpace(out), nil
-}
-
 // Init runs terraform init if the .terraform directory does not exist.
 func (e *Executor) Init() error {
 	tfDir := filepath.Join(e.workDir, ".terraform")
@@ -183,11 +170,6 @@ func (e *Executor) Apply() error {
 		return fmt.Errorf("terraform apply failed: %w", err)
 	}
 	return nil
-}
-
-// Cleanup removes temporary plan files.
-func (e *Executor) Cleanup() {
-	os.Remove(filepath.Join(e.workDir, "tfplan"))
 }
 
 // run executes a terraform command and captures stdout.

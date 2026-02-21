@@ -88,19 +88,6 @@ func (t *Tracker) Record(score scoring.Score, totalFindings, totalResources int,
 	return t.computeTrend(baseline, snapshot), nil
 }
 
-// GetTrend returns the current trend without recording.
-func (t *Tracker) GetTrend() (*TrendResult, error) {
-	baseline, err := t.loadBaseline()
-	if err != nil {
-		return nil, fmt.Errorf("no baseline found: %w", err)
-	}
-	if len(baseline.Snapshots) == 0 {
-		return nil, fmt.Errorf("no snapshots recorded")
-	}
-	current := baseline.Snapshots[len(baseline.Snapshots)-1]
-	return t.computeTrend(baseline, current), nil
-}
-
 func (t *Tracker) computeTrend(baseline *Baseline, current Snapshot) *TrendResult {
 	result := &TrendResult{
 		Current: current,
