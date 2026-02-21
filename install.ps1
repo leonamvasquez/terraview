@@ -13,46 +13,37 @@ function Write-Ok    { param($msg) Write-Host "[ok]    $msg" -ForegroundColor Gr
 function Write-Warn  { param($msg) Write-Host "[warn]  $msg" -ForegroundColor Yellow }
 function Write-Err   { param($msg) Write-Host "[error] $msg" -ForegroundColor Red }
 
-# Detect architecture using multiple methods for maximum compatibility
+# Detect architecture — multiple fallbacks for maximum compatibility
 function Get-Arch {
-    # Method 1: WMI/CIM — most reliable, works on all Windows versions
-    # Architecture: 0=x86, 9=x64/AMD64, 12=ARM64
+    # Try every possible method and return the first that works
+
+    # Method 1: env var
+    $cpu = $env:PROCESSOR_ARCHITECTURE
+    if ($cpu -eq "AMD64") { return "amd64" }
+    if ($cpu -eq "ARM64") { return "arm64" }
+
+    # Method 2: WOW64 override
+    $cpu = $env:PROCESSOR_ARCHITEW6432
+    if ($cpu -eq "AMD64") { return "amd64" }
+    if ($cpu -eq "ARM64") { return "arm64" }
+
+    # Method 3: wmic (available on all Windows versions)
     try {
-        $cpuArch = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1).Architecture
-        switch ($cpuArch) {
-            9  { return "amd64" }
-            12 { return "arm64" }
-            0  {
-                Write-Err "32-bit (x86) is not supported. Please use a 64-bit system."
-                exit 1
-            }
-        }
+        $wmic = (wmic os get osarchitecture 2>$null | Select-String "64")
+        if ($wmic) { return "amd64" }
     } catch {}
 
-    # Method 2: PROCESSOR_ARCHITECTURE env var (may be empty in piped iex sessions)
-    $cpu = $env:PROCESSOR_ARCHITECTURE
-    if ([string]::IsNullOrEmpty($cpu) -and $env:PROCESSOR_ARCHITEW6432) {
-        $cpu = $env:PROCESSOR_ARCHITEW6432
-    }
-    if (-not [string]::IsNullOrEmpty($cpu)) {
-        switch ($cpu.ToUpper()) {
-            "AMD64" { return "amd64" }
-            "ARM64" { return "arm64" }
-        }
-    }
+    # Method 4: .NET pointer size (8 bytes = 64-bit)
+    if ([System.IntPtr]::Size -eq 8) { return "amd64" }
 
-    # Method 3: .NET IntPtr size + Is64BitOperatingSystem
-    if ([System.Environment]::Is64BitOperatingSystem) {
-        try {
-            $rtArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-            if ($rtArch -eq "Arm64") { return "arm64" }
-        } catch {}
-        return "amd64"
-    }
+    # Method 5: Is64BitOperatingSystem
+    try {
+        if ([System.Environment]::Is64BitOperatingSystem) { return "amd64" }
+    } catch {}
 
-    Write-Err "Could not determine system architecture. Please download manually from:"
-    Write-Err "  https://github.com/$Repo/releases/latest"
-    exit 1
+    # Default: amd64 (99%+ of Windows machines)
+    Write-Warn "Could not detect architecture, defaulting to amd64"
+    return "amd64"
 }
 
 # Get latest release version
