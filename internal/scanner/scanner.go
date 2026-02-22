@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -263,15 +264,35 @@ func commandExists(name string) bool {
 	return binaryInBinDir(name)
 }
 
-// getCommandVersion runs "cmd --version" and returns the first line.
+// semverRe matches semantic version strings like v1.28.11 or 1.28.11.
+var semverRe = regexp.MustCompile(`v?\d+\.\d+[.\w-]*`)
+
+// getCommandVersion runs "cmd --version" and returns the version string.
+// It scans all output lines for a semver-like pattern so that tools that
+// print banners or warnings before the actual version (e.g., tfsec) are
+// handled correctly.
 func getCommandVersion(name string) string {
-	out, err := exec.Command(name, "--version").CombinedOutput()
-	if err != nil {
-		return ""
-	}
+	return getCommandVersionArgs(name, "--version")
+}
+
+// getCommandVersionArgs runs cmd with the given args and extracts a semver string.
+// It intentionally ignores the exit code because some tools (e.g., older tfsec)
+// print a version string even when they exit non-zero.
+func getCommandVersionArgs(name string, args ...string) string {
+	cmd := exec.Command(name, args...)
+	out, _ := cmd.CombinedOutput() // ignore error — parse whatever was printed
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) > 0 {
-		return strings.TrimSpace(lines[0])
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if m := semverRe.FindString(line); m != "" {
+			return m
+		}
+	}
+	// Fallback: return the last non-empty line
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			return l
+		}
 	}
 	return ""
 }

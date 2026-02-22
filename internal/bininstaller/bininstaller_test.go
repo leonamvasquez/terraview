@@ -270,10 +270,10 @@ type mockInstaller struct {
 	version string
 }
 
-func (m *mockInstaller) Name() string { return m.name }
-func (m *mockInstaller) LatestVersion() string { return m.version }
-func (m *mockInstaller) IsArchive() bool { return false }
-func (m *mockInstaller) SupportsDirectBinary() bool { return true }
-func (m *mockInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
-func (m *mockInstaller) FallbackCommand(_ platform.PlatformInfo) string { return "" }
+func (m *mockInstaller) Name() string                                         { return m.name }
+func (m *mockInstaller) LatestVersion() string                                { return m.version }
+func (m *mockInstaller) IsArchive() bool                                      { return false }
+func (m *mockInstaller) SupportsDirectBinary() bool                           { return true }
+func (m *mockInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string     { return "" }
+func (m *mockInstaller) FallbackCommand(_ platform.PlatformInfo) string       { return "" }
 func (m *mockInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string { return m.url }
