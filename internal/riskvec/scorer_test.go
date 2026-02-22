@@ -30,15 +30,15 @@ func TestScore_ZeroRisk(t *testing.T) {
 func TestScore_HighRisk(t *testing.T) {
 	features := []feature.ResourceFeatures{
 		{
-			ResourceID:      "aws_security_group.open",
-			Provider:        "aws",
-			ResourceType:    "aws_security_group",
-			NetworkExposure: 3,
-			EncryptionRisk:  0,
-			IdentityRisk:    0,
-			GovernanceRisk:  1,
+			ResourceID:        "aws_security_group.open",
+			Provider:          "aws",
+			ResourceType:      "aws_security_group",
+			NetworkExposure:   3,
+			EncryptionRisk:    0,
+			IdentityRisk:      0,
+			GovernanceRisk:    1,
 			ObservabilityRisk: 0,
-			Flags:           []string{"no-tags", "wildcard-cidr"},
+			Flags:             []string{"no-tags", "wildcard-cidr"},
 		},
 	}
 
@@ -63,7 +63,7 @@ func TestScore_Clamping(t *testing.T) {
 			ResourceID:        "test.resource",
 			Provider:          "aws",
 			ResourceType:      "aws_instance",
-			NetworkExposure:   5, // exceeds max
+			NetworkExposure:   5,  // exceeds max
 			EncryptionRisk:    -1, // below min
 			IdentityRisk:      3,
 			GovernanceRisk:    3,

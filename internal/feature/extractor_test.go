@@ -177,11 +177,11 @@ func TestExtract_DBInstanceMultipleRisks(t *testing.T) {
 			Name:     "insecure",
 			Provider: "registry.terraform.io/hashicorp/aws",
 			Values: map[string]interface{}{
-				"publicly_accessible":  true,
-				"storage_encrypted":    false,
-				"skip_final_snapshot":  true,
-				"deletion_protection":  false,
-				"multi_az":             false,
+				"publicly_accessible": true,
+				"storage_encrypted":   false,
+				"skip_final_snapshot": true,
+				"deletion_protection": false,
+				"multi_az":            false,
 			},
 		},
 	}

@@ -16,11 +16,11 @@ import (
 
 // Response is the cached AI response for a resource.
 type Response struct {
-	RiskCategories   []string `json:"risk_categories"`
-	Severity         string   `json:"severity"`
-	ArchitecturalRisk string  `json:"architectural_risk"`
-	Remediation      string   `json:"remediation"`
-	Confidence       float64  `json:"confidence"`
+	RiskCategories    []string `json:"risk_categories"`
+	Severity          string   `json:"severity"`
+	ArchitecturalRisk string   `json:"architectural_risk"`
+	Remediation       string   `json:"remediation"`
+	Confidence        float64  `json:"confidence"`
 }
 
 // Cache is a thread-safe in-memory cache keyed by risk vector hashes.

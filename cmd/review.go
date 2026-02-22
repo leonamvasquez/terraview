@@ -11,21 +11,18 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
-	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/cluster"
-	"github.com/leonamvasquez/terraview/internal/compress"
+	"github.com/leonamvasquez/terraview/internal/clusterai"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/explain"
-	"github.com/leonamvasquez/terraview/internal/feature"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/normalizer"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/riskvec"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
@@ -287,9 +284,20 @@ func executeReview() (string, int, error) {
 	// 3. AI review (optional) with lifecycle management
 	var aiFindings []rules.Finding
 	var aiSummary string
+	var clusterCache *clusterai.ClusterCache
 
 	// Build topology graph (used for AI context and other features)
 	topoGraph := topology.BuildGraph(resources)
+
+	// 3a. Risk clustering: group scanner findings BEFORE AI to enable cluster-level invocation
+	var clusterResult *cluster.ClusterResult
+	if len(hardFindings) > 0 {
+		builder := cluster.NewBuilder()
+		clusterResult = builder.Build(hardFindings)
+		if clusterResult.HighRiskClusters > 0 {
+			logVerbose("Risk clusters: %d total, %d high-risk", len(clusterResult.Clusters), clusterResult.HighRiskClusters)
+		}
+	}
 
 	if effectiveAI {
 		// Build resource limits from config + safe mode
@@ -303,9 +311,15 @@ func executeReview() (string, int, error) {
 		topoSummary["topology_context"] = topoGraph.FormatContext()
 		topoSummary["topology_layers"] = topoGraph.Layers()
 
-		aiFindings, aiSummary = runAIReview(resources, topoSummary, resolvedPrompts,
-			effectiveProvider, effectiveURL, effectiveModel,
-			effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, limits, hardFindings)
+		// Cluster-level adaptive AI invocation (v0.4.1)
+		if clusterResult != nil && len(clusterResult.Clusters) > 0 {
+			aiFindings, aiSummary, clusterCache = runClusterAIReview(
+				clusterResult.Clusters, effectiveProvider, effectiveURL,
+				effectiveModel, effectiveTimeout, effectiveTemperature,
+				cfg.LLM.APIKey, limits)
+		} else {
+			logVerbose("No clusters for AI analysis — skipping cluster-level AI")
+		}
 	} else {
 		logVerbose("%s", i18n.T().AISkipped)
 	}
@@ -347,16 +361,6 @@ func executeReview() (string, int, error) {
 		aiFindings = nil // absorbed into hardFindings via dedup
 		aiSummary = ""
 		logVerbose("Dedup: %s", dr.Summary)
-	}
-
-	// 3e. Risk clustering: group findings by resource for risk analysis
-	var clusterResult *cluster.ClusterResult
-	if len(hardFindings) > 0 {
-		builder := cluster.NewBuilder()
-		clusterResult = builder.Build(hardFindings)
-		if clusterResult.HighRiskClusters > 0 {
-			logVerbose("Risk clusters: %d total, %d high-risk", len(clusterResult.Clusters), clusterResult.HighRiskClusters)
-		}
 	}
 
 	// 4. Aggregate (with configurable scoring weights)
@@ -403,38 +407,19 @@ func executeReview() (string, int, error) {
 		fmt.Println(smell.FormatSmells(smellResult))
 	}
 
-	// 4e. Generate AI explanation if requested
+	// 4e. Generate AI explanation if requested (reuses cluster cache — NO additional AI invocation)
 	if explainFlag && effectiveAI {
-		explainCtx, explainCancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
-		defer explainCancel()
-
-		providerCfg := ai.ProviderConfig{
-			Model:       effectiveModel,
-			APIKey:      cfg.LLM.APIKey,
-			BaseURL:     effectiveURL,
-			Temperature: effectiveTemperature,
-			TimeoutSecs: effectiveTimeout,
-			MaxTokens:   4096,
-			MaxRetries:  2,
-		}
-
-		explainProvider, err := ai.NewProvider(explainCtx, effectiveProvider, providerCfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnExplainUnavail+"\n", output.Prefix(), err)
+		if clusterCache != nil {
+			explainSummary := clusterai.GenerateExplainSummary(clusterCache)
+			if explainSummary != "" {
+				result.Explanation = &explain.Explanation{
+					Summary:   explainSummary,
+					RiskLevel: "INFO",
+				}
+				logVerbose("Explanation generated from cluster cache (no additional AI calls)")
+			}
 		} else {
-			var explainer *explain.Explainer
-			if brFlag {
-				explainer = explain.NewExplainerWithLang(explainProvider, "pt-BR")
-			} else {
-				explainer = explain.NewExplainer(explainProvider)
-			}
-			explanation, err := explainer.Explain(explainCtx, resources, result.Findings)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnExplainFailed+"\n", output.Prefix(), err)
-			} else {
-				result.Explanation = explanation
-				logVerbose("AI explanation generated")
-			}
+			logVerbose("No cluster cache available for --explain")
 		}
 	}
 
@@ -541,13 +526,15 @@ func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
 	return limits
 }
 
-// runAIReview uses the multi-provider AI system with lifecycle management.
-// Uses the Deterministic Semantic Compression pipeline to reduce token usage by 70%+.
-func runAIReview(resources []parser.NormalizedResource, _ map[string]interface{},
-	_ /* promptsDir */, providerName, url, model string, timeoutSecs int, temp float64,
-	apiKey string, limits runtime.ResourceLimits, scannerFindings []rules.Finding) ([]rules.Finding, string) {
+// runClusterAIReview runs cluster-level adaptive AI invocation (v0.4.1).
+// Instead of running AI per-resource, groups findings into clusters and runs
+// AI per-cluster with adaptive depth (enrichment_only, full_analysis, or skip).
+// Returns findings, summary, and the cluster cache for --explain reuse.
+func runClusterAIReview(clusters []cluster.RiskCluster,
+	providerName, url, model string, timeoutSecs int, temp float64,
+	apiKey string, limits runtime.ResourceLimits) ([]rules.Finding, string, *clusterai.ClusterCache) {
 
-	logVerbose("AI provider: %s (model: %s)", providerName, model)
+	logVerbose("AI provider: %s (model: %s) — cluster-level invocation", providerName, model)
 
 	// Ollama lifecycle management: auto-start and auto-stop
 	var ollamaCleanup func()
@@ -557,7 +544,7 @@ func runAIReview(resources []parser.NormalizedResource, _ map[string]interface{}
 		cleanup, err := lc.Ensure(bgCtx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnOllamaUnavail+"\n", output.Prefix(), err)
-			return nil, ""
+			return nil, "", nil
 		}
 		ollamaCleanup = cleanup
 	}
@@ -593,28 +580,26 @@ func runAIReview(resources []parser.NormalizedResource, _ map[string]interface{}
 			ollamaCleanup()
 		}
 		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIProviderFailed+"\n", output.Prefix(), providerName, err)
-		return nil, ""
+		return nil, "", nil
 	}
 
-	// Deterministic Semantic Compression pipeline
-	// 1. Extract provider-agnostic features from resources
-	extractor := feature.NewExtractor()
-	features := extractor.Extract(resources)
+	// Cluster-level adaptive AI controller
+	cache := clusterai.NewClusterCache()
+	workers := 4
+	if len(clusters) < 4 {
+		workers = len(clusters)
+	}
+	ctrl := clusterai.NewController(provider, cache, workers)
 
-	// 2. Compute risk vectors
-	scorer := riskvec.NewScorer()
-	scored := scorer.Score(features)
+	// Set language if pt-BR
+	if brFlag {
+		ctrl.SetLang("pt-BR")
+	}
 
-	// 3. Build compression pipeline with cache and invocation policy
-	adapter := compress.NewProviderAdapter(provider)
-	cache := aicache.NewCache()
-	policy := compress.DefaultPolicy()
-	pipeline := compress.NewPipeline(adapter, cache, policy, 4)
+	logVerbose("Cluster AI: %d clusters → adaptive invocation (workers=%d)", len(clusters), workers)
 
-	logVerbose("Compression pipeline: %d resources → %d features scored", len(resources), len(scored))
-
-	// 4. Run compressed AI analysis (skips zero-risk and scanner-critical)
-	results, pstats := pipeline.Run(ctx, scored, scannerFindings)
+	// Run cluster-level AI analysis
+	results, stats := ctrl.Run(ctx, clusters)
 
 	// Stop monitor and cleanup Ollama process
 	if monitor != nil {
@@ -624,18 +609,18 @@ func runAIReview(resources []parser.NormalizedResource, _ map[string]interface{}
 		ollamaCleanup()
 	}
 
-	logVerbose("Compression stats: total=%d processed=%d skipped=%d cached=%d errors=%d",
-		pstats.Total, pstats.Processed, pstats.Skipped, pstats.CacheHits, pstats.Errors)
+	logVerbose("Cluster AI stats: total=%d skipped=%d enriched=%d full=%d cached=%d errors=%d",
+		stats.TotalClusters, stats.Skipped, stats.Enriched, stats.FullAnalysis, stats.CacheHits, stats.Errors)
 
-	// 5. Convert results to standard findings
-	findings := compress.ToFindings(results, scored, providerName)
+	// Convert cluster results to standard findings
+	findings := clusterai.ToFindings(results, clusters, providerName)
 
-	// Build summary from pipeline stats
-	aiSummary := fmt.Sprintf("Compressed AI analysis: %d/%d resources analyzed (%d skipped, %d cached)",
-		pstats.Processed, pstats.Total, pstats.Skipped, pstats.CacheHits)
+	// Build summary from cluster stats
+	aiSummary := fmt.Sprintf("Cluster-level AI: %d clusters (%d enriched, %d full, %d skipped, %d cached)",
+		stats.TotalClusters, stats.Enriched, stats.FullAnalysis, stats.Skipped, stats.CacheHits)
 
-	logVerbose("AI (%s/%s): %d compressed findings", providerName, model, len(findings))
-	return findings, aiSummary
+	logVerbose("AI (%s/%s): %d cluster findings", providerName, model, len(findings))
+	return findings, aiSummary, cache
 }
 
 // findBundledDir looks for a directory relative to the executable, then relative to cwd.
