@@ -38,6 +38,7 @@ type InstallResult struct {
 	Version   string `json:"version"`
 	Path      string `json:"path"`
 	Installed bool   `json:"installed"`
+	Method    string `json:"method,omitempty"`  // "binary", "brew", "pip3", etc.
 	Fallback  string `json:"fallback,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
@@ -77,7 +78,10 @@ func Install(installer BinaryInstaller, p platform.PlatformInfo, installDir stri
 		}
 	}
 
-	if installer.IsArchive() {
+	// Auto-detect archive from URL when installer.IsArchive() is false but URL ends in .tar.gz
+	isArchive := installer.IsArchive() || strings.HasSuffix(url, ".tar.gz")
+
+	if isArchive {
 		return installFromArchive(installer, p, url, installDir, destPath, name, version)
 	}
 	return installDirect(url, destPath, name, version, p)
@@ -103,6 +107,7 @@ func installDirect(url, destPath, name, version string, p platform.PlatformInfo)
 		Version:   version,
 		Path:      destPath,
 		Installed: true,
+		Method:    "binary",
 	}
 }
 
@@ -150,6 +155,7 @@ func installFromArchive(installer BinaryInstaller, p platform.PlatformInfo, url,
 		Version:   version,
 		Path:      destPath,
 		Installed: true,
+		Method:    "binary",
 	}
 }
 
@@ -198,43 +204,71 @@ func extractFromTarGz(archivePath, targetName, destPath string) error {
 // Scanner-specific installers
 // ---------------------------------------------------------------------------
 
-// TfsecInstaller installs tfsec/trivy binary.
+// TfsecInstaller installs tfsec binary.
+// Ref: https://github.com/aquasecurity/tfsec
+// Archives available for all platforms: tfsec_{version}_{os}_{arch}.tar.gz
+// Direct binaries: tfsec-{os}-{arch} (linux/darwin only)
 type TfsecInstaller struct{}
 
-func (t *TfsecInstaller) Name() string { return "tfsec" }
-func (t *TfsecInstaller) LatestVersion() string { return "1.28.11" }
-func (t *TfsecInstaller) IsArchive() bool { return false }
+func (t *TfsecInstaller) Name() string         { return "tfsec" }
+func (t *TfsecInstaller) LatestVersion() string { return "1.28.14" }
+func (t *TfsecInstaller) IsArchive() bool       { return false } // auto-detected from URL below
 func (t *TfsecInstaller) SupportsDirectBinary() bool { return true }
-func (t *TfsecInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
+func (t *TfsecInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
+	return p.BinaryName("tfsec")
+}
 func (t *TfsecInstaller) FallbackCommand(p platform.PlatformInfo) string {
-	if p.OS == "darwin" {
+	switch p.OS {
+	case "darwin", "linux":
 		return "brew install tfsec"
+	case "windows":
+		return "choco install tfsec  (or: scoop install tfsec)"
 	}
-	return "Download from https://github.com/aquasecurity/tfsec/releases"
+	return "https://github.com/aquasecurity/tfsec/releases"
 }
 
 func (t *TfsecInstaller) DownloadURL(p platform.PlatformInfo, version string) string {
-	// tfsec naming: tfsec-linux-amd64, tfsec-darwin-arm64, tfsec-windows-amd64.exe
-	ext := ""
-	if p.OS == "windows" {
-		ext = ".exe"
+	// Linux/Darwin: direct binary (no extraction needed)
+	//   https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64
+	// Windows: tarball (no .exe standalone binary on releases page)
+	//   https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec_1.28.14_windows_amd64.tar.gz
+	switch p.OS {
+	case "linux", "darwin":
+		return fmt.Sprintf("https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec-%s-%s",
+			version, p.OS, p.Arch)
+	case "windows":
+		// Windows archives exist for amd64 and arm64
+		return fmt.Sprintf("https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec_%s_%s_%s.tar.gz",
+			version, version, p.OS, p.Arch)
 	}
-	return fmt.Sprintf("https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec-%s-%s%s",
-		version, p.OS, p.Arch, ext)
+	return ""
 }
 
 // TerrascanInstaller installs Terrascan binary.
+// Ref: https://github.com/tenable/terrascan (archived Nov 2025, last release v1.19.9)
+// Archives: terrascan_{version}_{OS}_{arch}.tar.gz
+//   OS: Darwin, Linux  (Title-cased)
+//   arch: arm64, x86_64 (amd64 mapped to x86_64)
+// NOT available: Windows/arm64
 type TerrascanInstaller struct{}
 
-func (t *TerrascanInstaller) Name() string { return "terrascan" }
+func (t *TerrascanInstaller) Name() string         { return "terrascan" }
 func (t *TerrascanInstaller) LatestVersion() string { return "1.19.9" }
-func (t *TerrascanInstaller) IsArchive() bool { return true }
+func (t *TerrascanInstaller) IsArchive() bool       { return true }
 func (t *TerrascanInstaller) SupportsDirectBinary() bool { return true }
 func (t *TerrascanInstaller) FallbackCommand(p platform.PlatformInfo) string {
-	if p.OS == "darwin" {
+	switch p.OS {
+	case "darwin":
 		return "brew install terrascan"
+	case "linux":
+		return "curl -L https://github.com/tenable/terrascan/releases/download/v1.19.9/terrascan_1.19.9_Linux_x86_64.tar.gz | tar xz && sudo mv terrascan /usr/local/bin/"
+	case "windows":
+		if p.Arch == "arm64" {
+			return "terrascan has no Windows/arm64 release — see https://github.com/tenable/terrascan/releases"
+		}
+		return "Download from https://github.com/tenable/terrascan/releases"
 	}
-	return "Download from https://github.com/tenable/terrascan/releases"
+	return "https://github.com/tenable/terrascan/releases"
 }
 
 func (t *TerrascanInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
@@ -242,10 +276,20 @@ func (t *TerrascanInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
 }
 
 func (t *TerrascanInstaller) DownloadURL(p platform.PlatformInfo, version string) string {
-	// terrascan naming: terrascan_1.19.9_Linux_x86_64.tar.gz
-	osName := strings.Title(p.OS)
-	if p.OS == "darwin" {
-		osName = "Darwin"
+	// terrascan naming: terrascan_1.19.9_Darwin_arm64.tar.gz
+	//                   terrascan_1.19.9_Linux_x86_64.tar.gz
+	//                   terrascan_1.19.9_Windows_x86_64.tar.gz
+	// NO Windows/arm64 release.
+	if p.OS == "windows" && p.Arch == "arm64" {
+		return "" // not available
+	}
+	osName := map[string]string{
+		"darwin":  "Darwin",
+		"linux":   "Linux",
+		"windows": "Windows",
+	}[p.OS]
+	if osName == "" {
+		return ""
 	}
 	archName := p.Arch
 	if archName == "amd64" {
@@ -255,37 +299,41 @@ func (t *TerrascanInstaller) DownloadURL(p platform.PlatformInfo, version string
 		version, version, osName, archName)
 }
 
-// KICSInstaller installs KICS binary.
+// KICSInstaller handles KICS.
+// Ref: https://docs.kics.io/latest/getting-started/
+// KICS no longer ships pre-built binaries since v2.x.
+// Install via: brew (macOS/Linux), Docker (all platforms).
 type KICSInstaller struct{}
 
-func (k *KICSInstaller) Name() string { return "kics" }
-func (k *KICSInstaller) LatestVersion() string { return "2.1.3" }
-func (k *KICSInstaller) IsArchive() bool { return true }
-func (k *KICSInstaller) SupportsDirectBinary() bool { return true }
+func (k *KICSInstaller) Name() string         { return "kics" }
+func (k *KICSInstaller) LatestVersion() string { return "2.1.19" }
+func (k *KICSInstaller) IsArchive() bool       { return false }
+func (k *KICSInstaller) SupportsDirectBinary() bool { return false }
+func (k *KICSInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
+
+func (k *KICSInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string {
+	// KICS no longer ships pre-built binaries in GitHub Releases.
+	return ""
+}
+
 func (k *KICSInstaller) FallbackCommand(p platform.PlatformInfo) string {
-	if p.OS == "darwin" {
-		return "brew install kics"
+	switch p.OS {
+	case "darwin", "linux":
+		return "brew install kics  (or: docker run checkmarx/kics)"
+	case "windows":
+		return "docker run checkmarx/kics  (see: https://docs.kics.io/latest/getting-started/)"
 	}
-	return "Download from https://github.com/Checkmarx/kics/releases"
-}
-
-func (k *KICSInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
-	return p.BinaryName("kics")
-}
-
-func (k *KICSInstaller) DownloadURL(p platform.PlatformInfo, version string) string {
-	// KICS naming: kics_2.1.3_linux_amd64.tar.gz
-	// Windows: kics_2.1.3_windows_amd64.tar.gz (no .exe, it's inside archive)
-	return fmt.Sprintf("https://github.com/Checkmarx/kics/releases/download/v%s/kics_%s_%s_%s.tar.gz",
-		version, version, p.OS, p.Arch)
+	return "docker run checkmarx/kics"
 }
 
 // CheckovInstaller handles Checkov — Python-only, no direct binary download.
+// Ref: https://www.checkov.io/2.Basics/Installing%20Checkov.html
+// Install via: pip3/pip, brew (macOS/Linux), choco (Windows).
 type CheckovInstaller struct{}
 
-func (c *CheckovInstaller) Name() string { return "checkov" }
+func (c *CheckovInstaller) Name() string         { return "checkov" }
 func (c *CheckovInstaller) LatestVersion() string { return "" }
-func (c *CheckovInstaller) IsArchive() bool { return false }
+func (c *CheckovInstaller) IsArchive() bool       { return false }
 func (c *CheckovInstaller) SupportsDirectBinary() bool { return false }
 func (c *CheckovInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
 
@@ -295,10 +343,15 @@ func (c *CheckovInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string
 }
 
 func (c *CheckovInstaller) FallbackCommand(p platform.PlatformInfo) string {
-	if p.OS == "darwin" {
-		return "brew install checkov (or: pip install checkov)"
+	switch p.OS {
+	case "darwin":
+		return "pip3 install checkov  (or: brew install checkov)"
+	case "linux":
+		return "pip3 install checkov"
+	case "windows":
+		return "pip install checkov  (or: choco install checkov)"
 	}
-	return "pip install checkov"
+	return "pip3 install checkov"
 }
 
 // AllInstallers returns all scanner installers.
@@ -321,3 +374,4 @@ func InstallerFor(name string) BinaryInstaller {
 	}
 	return nil
 }
+

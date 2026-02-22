@@ -35,11 +35,15 @@ func TestCrossPlatform_TfsecURLsAllPlatforms(t *testing.T) {
 		if !strings.HasPrefix(url, "https://github.com/aquasecurity/tfsec/releases/download/") {
 			t.Errorf("tfsec URL for %s has wrong prefix: %s", p.String(), url)
 		}
-		if p.OS == "windows" && !strings.HasSuffix(url, ".exe") {
-			t.Errorf("tfsec URL for windows should end in .exe: %s", url)
+		// Windows uses a tarball; linux/darwin use direct binaries
+		if p.OS == "windows" && !strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("tfsec URL for windows should end in .tar.gz: %s", url)
 		}
-		if p.OS != "windows" && strings.HasSuffix(url, ".exe") {
-			t.Errorf("tfsec URL for %s should NOT end in .exe: %s", p.String(), url)
+		if p.OS != "windows" && strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("tfsec URL for %s should NOT end in .tar.gz: %s", p.String(), url)
+		}
+		if strings.HasSuffix(url, ".exe") {
+			t.Errorf("tfsec URL should never end in .exe (windows uses tarball): %s", url)
 		}
 	}
 }
@@ -61,19 +65,17 @@ func TestCrossPlatform_TerrascanURLsAllPlatforms(t *testing.T) {
 	}
 }
 
-func TestCrossPlatform_KICSURLsAllPlatforms(t *testing.T) {
+func TestCrossPlatform_KICSNoURLAnyPlatform(t *testing.T) {
+	// KICS no longer ships pre-built binaries — should behave like checkov.
 	inst := &KICSInstaller{}
 	for _, p := range allPlatforms() {
 		url := inst.DownloadURL(p, inst.LatestVersion())
-		if url == "" {
-			t.Errorf("kics: no URL for %s", p.String())
-			continue
+		if url != "" {
+			t.Errorf("kics should have no URL for %s, got %s", p.String(), url)
 		}
-		if !strings.HasPrefix(url, "https://github.com/Checkmarx/kics/releases/download/") {
-			t.Errorf("kics URL for %s has wrong prefix: %s", p.String(), url)
-		}
-		if !strings.HasSuffix(url, ".tar.gz") {
-			t.Errorf("kics URL for %s should end in .tar.gz: %s", p.String(), url)
+		fb := inst.FallbackCommand(p)
+		if fb == "" {
+			t.Errorf("kics should have a fallback for %s", p.String())
 		}
 	}
 }
@@ -95,10 +97,10 @@ func TestCrossPlatform_CheckovNoURLAnyPlatform(t *testing.T) {
 // --- No unmapped platforms ---
 
 func TestCrossPlatform_NoUnmappedPlatforms(t *testing.T) {
+	// Only installers that actually ship binaries should be tested here.
 	binaryInstallers := []BinaryInstaller{
 		&TfsecInstaller{},
 		&TerrascanInstaller{},
-		&KICSInstaller{},
 	}
 
 	for _, inst := range binaryInstallers {
@@ -272,7 +274,7 @@ func TestCrossPlatform_ArchiveFlags(t *testing.T) {
 	}{
 		{"tfsec", false, true},
 		{"terrascan", true, true},
-		{"kics", true, true},
+		{"kics", false, false},
 		{"checkov", false, false},
 	}
 	for _, tc := range tests {

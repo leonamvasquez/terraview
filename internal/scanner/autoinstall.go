@@ -43,11 +43,11 @@ func binaryInBinDir(name string) bool {
 	return statErr == nil
 }
 
-// AutoInstallScanner attempts to download and install a scanner binary
-// for the current platform. Returns the install result.
+// AutoInstallScanner attempts to install a scanner using the best available method
+// for the current platform (binary download, package manager, or fallback message).
 func AutoInstallScanner(name string) bininstaller.InstallResult {
-	inst := bininstaller.InstallerFor(name)
-	if inst == nil {
+	spec := bininstaller.SpecFor(name)
+	if spec == nil {
 		return bininstaller.InstallResult{
 			Scanner: name,
 			Error:   "no installer available for " + name,
@@ -60,7 +60,7 @@ func AutoInstallScanner(name string) bininstaller.InstallResult {
 			Error:   "platform detection failed: " + err.Error(),
 		}
 	}
-	result := bininstaller.Install(inst, p, "")
+	result := bininstaller.SmartInstall(spec, p, "")
 	if result.Installed {
 		// Update cache
 		cache := bininstaller.LoadCache()
@@ -72,16 +72,17 @@ func AutoInstallScanner(name string) bininstaller.InstallResult {
 	return result
 }
 
-// InstallMissing installs all missing scanner binaries.
+// InstallMissing installs all missing scanners using SmartInstall (binary + pkg manager).
 // If force is true, reinstalls even if already cached.
 // Returns results for each scanner.
 func (m *ScannerManager) InstallMissing(force bool) []bininstaller.InstallResult {
 	EnsureBinDirInPath()
 	cache := bininstaller.LoadCache()
+	p, _ := platform.Detect()
 	var results []bininstaller.InstallResult
 
-	for _, inst := range bininstaller.AllInstallers() {
-		name := inst.Name()
+	for _, spec := range bininstaller.AllSpecs() {
+		name := spec.Name
 
 		// Skip if already installed and not forcing
 		if !force {
@@ -94,17 +95,7 @@ func (m *ScannerManager) InstallMissing(force bool) []bininstaller.InstallResult
 			}
 		}
 
-		if !inst.SupportsDirectBinary() {
-			p, _ := platform.Detect()
-			results = append(results, bininstaller.InstallResult{
-				Scanner:  name,
-				Fallback: inst.FallbackCommand(p),
-			})
-			continue
-		}
-
-		p, _ := platform.Detect()
-		result := bininstaller.Install(inst, p, "")
+		result := bininstaller.SmartInstall(spec, p, "")
 		if result.Installed {
 			cache.Set(result)
 		}

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/bininstaller"
 	"github.com/leonamvasquez/terraview/internal/platform"
@@ -15,112 +16,182 @@ var scannersCmd = &cobra.Command{
 	Long:  "List, install, and manage security scanner binaries.",
 }
 
+// ─────────────────────────────────────────────────────────────
+// scanners list
+// ─────────────────────────────────────────────────────────────
+
 var scannersListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all scanners with status",
+	Short: "List all scanners with installation status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cache := bininstaller.LoadCache()
 		p, _ := platform.Detect()
+		cache := bininstaller.LoadCache()
 
 		if brFlag {
-			fmt.Printf("Plataforma: %s\n", p.String())
-			fmt.Printf("Diretório de instalação: %s\n\n", p.InstallDir())
+			fmt.Printf("  Plataforma: %s\n\n", p.String())
 		} else {
-			fmt.Printf("Platform: %s\n", p.String())
-			fmt.Printf("Install directory: %s\n\n", p.InstallDir())
+			fmt.Printf("  Platform: %s\n\n", p.String())
 		}
 
 		all := scanner.DefaultManager.All()
 		for _, name := range sortedScannerNames(all) {
 			s := all[name]
-			status := "✗ not installed"
-			version := ""
+			spec := bininstaller.SpecFor(name)
+
+			var statusIcon, version, details string
 
 			if s.Available() {
-				status = "✓ available"
+				statusIcon = ansiGreen + "[✓]" + ansiReset
 				version = s.Version()
+				// Where is it installed?
+				if entry, ok := cache.Get(name); ok {
+					details = fmt.Sprintf("binary (%s)", entry.Path)
+				} else {
+					details = "system PATH"
+				}
+			} else {
+				statusIcon = ansiRed + "[✗]" + ansiReset
+				version = ansiDim + "not installed" + ansiReset
+				if spec != nil {
+					fb := bininstaller.FallbackFor(spec, p)
+					if fb != "" {
+						details = ansiDim + fb + ansiReset
+					}
+				}
 			}
 
-			entry, cached := cache.Get(name)
-			cacheInfo := ""
-			if cached {
-				cacheInfo = fmt.Sprintf(" (cached v%s)", entry.Version)
+			// Deprecation warning inline
+			deprNote := ""
+			if spec != nil && spec.Deprecated != "" {
+				deprNote = "  " + ansiYellow + spec.Deprecated + ansiReset
 			}
 
-			inst := bininstaller.InstallerFor(name)
-			autoInstall := "no"
-			if inst != nil && inst.SupportsDirectBinary() {
-				autoInstall = "yes"
-			}
-
-			fmt.Printf("  [%s] %-12s %-16s auto-install: %s%s\n",
-				status, name, version, autoInstall, cacheInfo)
+			fmt.Printf("  %s %-12s %-20s %s%s\n",
+				statusIcon, name, version, ansiDim+details+ansiReset, deprNote)
 		}
+
+		// Summary
+		available := scanner.DefaultManager.Available()
+		missing := scanner.DefaultManager.Missing()
+		fmt.Printf("\n  %d/%d scanners installed", len(available), len(all))
+		if len(missing) > 0 {
+			names := make([]string, 0, len(missing))
+			for _, m := range missing {
+				names = append(names, m.Name)
+			}
+			if brFlag {
+				fmt.Printf(" — execute 'tv scanners install' para instalar: %s", strings.Join(names, ", "))
+			} else {
+				fmt.Printf(" — run 'tv scanners install' to install: %s", strings.Join(names, ", "))
+			}
+		}
+		fmt.Println()
 		return nil
 	},
 }
 
+// ─────────────────────────────────────────────────────────────
+// scanners install
+// ─────────────────────────────────────────────────────────────
+
 var scannersInstallCmd = &cobra.Command{
 	Use:   "install [scanner...]",
-	Short: "Install scanner binaries",
-	Long:  "Download and install scanner binaries for the current platform.",
+	Short: "Install one or more scanner binaries",
+	Long: `Install security scanners using the best available method:
+  1. OS package manager (brew, pip3, choco, scoop, ...)
+  2. Direct binary download from official releases
+  3. Manual instructions when automatic install is not possible
+
+Examples:
+  tv scanners install              # install all missing scanners
+  tv scanners install tfsec        # install tfsec only
+  tv scanners install checkov kics # install specific scanners`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, _ := platform.Detect()
 		forceReinstall, _ := cmd.Flags().GetBool("force")
 		cache := bininstaller.LoadCache()
 
 		if brFlag {
-			fmt.Printf("Plataforma detectada: %s\n", p.String())
+			fmt.Printf("  Plataforma detectada: %s\n\n", p.String())
 		} else {
-			fmt.Printf("Detected platform: %s\n", p.String())
+			fmt.Printf("  Detected platform: %s\n\n", p.String())
 		}
 
-		var installers []bininstaller.BinaryInstaller
+		// Determine which specs to process
+		var specs []*bininstaller.ScannerSpec
 		if len(args) == 0 || (len(args) == 1 && args[0] == "all") {
-			installers = bininstaller.AllInstallers()
+			specs = bininstaller.AllSpecs()
 		} else {
 			for _, name := range args {
-				inst := bininstaller.InstallerFor(name)
-				if inst == nil {
-					fmt.Printf("  [!] Unknown scanner: %s\n", name)
+				spec := bininstaller.SpecFor(name)
+				if spec == nil {
+					fmt.Printf("  [!] Unrecognized scanner: %s\n", name)
 					continue
 				}
-				installers = append(installers, inst)
+				specs = append(specs, spec)
 			}
 		}
 
-		for _, inst := range installers {
-			name := inst.Name()
+		for _, spec := range specs {
+			name := spec.Name
+			s, exists := scanner.DefaultManager.All()[name]
 
-			// Skip if already installed and not forcing
-			if !forceReinstall && cache.IsInstalled(name) {
-				entry, _ := cache.Get(name)
-				fmt.Printf("  [skip] %s v%s already installed at %s\n",
-					name, entry.Version, entry.Path)
-				continue
+			// Show archived/deprecated notice before attempting install
+			if spec.Deprecated != "" {
+				fmt.Printf("  %s%s%s\n", ansiYellow, spec.Deprecated, ansiReset)
 			}
 
-			if !inst.SupportsDirectBinary() {
-				fb := inst.FallbackCommand(p)
-				fmt.Printf("  [info] %s: no binary download available. %s\n", name, fb)
-				continue
+			// Skip if already available and not forced
+			if !forceReinstall {
+				if exists && s.Available() {
+					ver := s.Version()
+					fmt.Printf("  [skip] %-12s already installed %s\n", name, ansiDim+ver+ansiReset)
+					continue
+				}
+				if entry, ok := cache.Get(name); ok {
+					fmt.Printf("  [skip] %-12s already in cache v%s → %s\n",
+						name, entry.Version, ansiDim+entry.Path+ansiReset)
+					continue
+				}
 			}
 
 			if brFlag {
-				fmt.Printf("  [↓] Instalando %s...\n", name)
+				fmt.Printf("  [↓]   %-12s instalando...\n", name)
 			} else {
-				fmt.Printf("  [↓] Installing %s...\n", name)
+				fmt.Printf("  [↓]   %-12s installing...\n", name)
 			}
 
-			result := bininstaller.Install(inst, p, "")
-			if result.Installed {
+			result := bininstaller.SmartInstall(spec, p, "")
+
+			switch {
+			case result.Installed:
 				cache.Set(result)
-				fmt.Printf("  [✓] %s v%s → %s\n", name, result.Version, result.Path)
-			} else {
-				fmt.Printf("  [✗] %s: %s\n", name, result.Error)
-				if result.Fallback != "" {
-					fmt.Printf("      Fallback: %s\n", result.Fallback)
+				loc := result.Path
+				if loc == "" {
+					loc = "system"
 				}
+				what := result.Method
+				if what == "" {
+					what = "package manager"
+				}
+				fmt.Printf("  [✓]   %-12s installed via %s → %s\n",
+					name, ansiGreen+what+ansiReset, ansiDim+loc+ansiReset)
+
+			case result.Fallback != "":
+				// Auto-install not possible — show manual command
+				if brFlag {
+					fmt.Printf("  [info] %-12s instalação manual necessária:\n", name)
+				} else {
+					fmt.Printf("  [info] %-12s manual installation required:\n", name)
+				}
+				fmt.Printf("           $ %s%s%s\n", ansiBold, result.Fallback, ansiReset)
+				if name == "kics" && p.OS == "windows" {
+					fmt.Printf("           (Windows: Docker is the only supported method for kics)\n")
+				}
+
+			default:
+				// Failed with error
+				fmt.Printf("  [✗]   %-12s %s\n", name, ansiRed+result.Error+ansiReset)
 			}
 		}
 
@@ -133,7 +204,7 @@ var scannersInstallCmd = &cobra.Command{
 }
 
 func init() {
-	scannersInstallCmd.Flags().BoolP("force", "f", false, "Force reinstall even if already cached")
+	scannersInstallCmd.Flags().BoolP("force", "f", false, "Force reinstall even if already installed")
 	scannersCmd.AddCommand(scannersListCmd)
 	scannersCmd.AddCommand(scannersInstallCmd)
 }
@@ -143,7 +214,6 @@ func sortedScannerNames(m map[string]scanner.Scanner) []string {
 	for k := range m {
 		names = append(names, k)
 	}
-	// Simple sort
 	for i := 0; i < len(names); i++ {
 		for j := i + 1; j < len(names); j++ {
 			if names[i] > names[j] {
