@@ -40,7 +40,8 @@ func (s *KICSScanner) EnsureInstalled() (bool, InstallHint) {
 	}
 }
 
-func (s *KICSScanner) Version() string { return getCommandVersion("kics") }
+// KICS uses a subcommand 'version' rather than a --version flag.
+func (s *KICSScanner) Version() string { return getCommandVersionArgs("kics", "version") }
 
 func (s *KICSScanner) SupportedModes() []ScanMode {
 	return []ScanMode{ScanModeSource}

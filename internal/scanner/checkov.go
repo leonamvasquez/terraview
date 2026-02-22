@@ -42,11 +42,7 @@ func (s *CheckovScanner) EnsureInstalled() (bool, InstallHint) {
 }
 
 func (s *CheckovScanner) Version() string {
-	out, err := exec.Command("checkov", "--version").CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return getCommandVersion("checkov")
 }
 
 func (s *CheckovScanner) SupportedModes() []ScanMode {

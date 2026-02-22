@@ -38,7 +38,7 @@ type InstallResult struct {
 	Version   string `json:"version"`
 	Path      string `json:"path"`
 	Installed bool   `json:"installed"`
-	Method    string `json:"method,omitempty"`  // "binary", "brew", "pip3", etc.
+	Method    string `json:"method,omitempty"` // "binary", "brew", "pip3", etc.
 	Fallback  string `json:"fallback,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
@@ -210,9 +210,9 @@ func extractFromTarGz(archivePath, targetName, destPath string) error {
 // Direct binaries: tfsec-{os}-{arch} (linux/darwin only)
 type TfsecInstaller struct{}
 
-func (t *TfsecInstaller) Name() string         { return "tfsec" }
-func (t *TfsecInstaller) LatestVersion() string { return "1.28.14" }
-func (t *TfsecInstaller) IsArchive() bool       { return false } // auto-detected from URL below
+func (t *TfsecInstaller) Name() string               { return "tfsec" }
+func (t *TfsecInstaller) LatestVersion() string      { return "1.28.14" }
+func (t *TfsecInstaller) IsArchive() bool            { return false } // auto-detected from URL below
 func (t *TfsecInstaller) SupportsDirectBinary() bool { return true }
 func (t *TfsecInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
 	return p.BinaryName("tfsec")
@@ -247,14 +247,16 @@ func (t *TfsecInstaller) DownloadURL(p platform.PlatformInfo, version string) st
 // TerrascanInstaller installs Terrascan binary.
 // Ref: https://github.com/tenable/terrascan (archived Nov 2025, last release v1.19.9)
 // Archives: terrascan_{version}_{OS}_{arch}.tar.gz
-//   OS: Darwin, Linux  (Title-cased)
-//   arch: arm64, x86_64 (amd64 mapped to x86_64)
+//
+//	OS: Darwin, Linux  (Title-cased)
+//	arch: arm64, x86_64 (amd64 mapped to x86_64)
+//
 // NOT available: Windows/arm64
 type TerrascanInstaller struct{}
 
-func (t *TerrascanInstaller) Name() string         { return "terrascan" }
-func (t *TerrascanInstaller) LatestVersion() string { return "1.19.9" }
-func (t *TerrascanInstaller) IsArchive() bool       { return true }
+func (t *TerrascanInstaller) Name() string               { return "terrascan" }
+func (t *TerrascanInstaller) LatestVersion() string      { return "1.19.9" }
+func (t *TerrascanInstaller) IsArchive() bool            { return true }
 func (t *TerrascanInstaller) SupportsDirectBinary() bool { return true }
 func (t *TerrascanInstaller) FallbackCommand(p platform.PlatformInfo) string {
 	switch p.OS {
@@ -305,10 +307,10 @@ func (t *TerrascanInstaller) DownloadURL(p platform.PlatformInfo, version string
 // Install via: brew (macOS/Linux), Docker (all platforms).
 type KICSInstaller struct{}
 
-func (k *KICSInstaller) Name() string         { return "kics" }
-func (k *KICSInstaller) LatestVersion() string { return "2.1.19" }
-func (k *KICSInstaller) IsArchive() bool       { return false }
-func (k *KICSInstaller) SupportsDirectBinary() bool { return false }
+func (k *KICSInstaller) Name() string                                     { return "kics" }
+func (k *KICSInstaller) LatestVersion() string                            { return "2.1.19" }
+func (k *KICSInstaller) IsArchive() bool                                  { return false }
+func (k *KICSInstaller) SupportsDirectBinary() bool                       { return false }
 func (k *KICSInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
 
 func (k *KICSInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string {
@@ -331,10 +333,10 @@ func (k *KICSInstaller) FallbackCommand(p platform.PlatformInfo) string {
 // Install via: pip3/pip, brew (macOS/Linux), choco (Windows).
 type CheckovInstaller struct{}
 
-func (c *CheckovInstaller) Name() string         { return "checkov" }
-func (c *CheckovInstaller) LatestVersion() string { return "" }
-func (c *CheckovInstaller) IsArchive() bool       { return false }
-func (c *CheckovInstaller) SupportsDirectBinary() bool { return false }
+func (c *CheckovInstaller) Name() string                                     { return "checkov" }
+func (c *CheckovInstaller) LatestVersion() string                            { return "" }
+func (c *CheckovInstaller) IsArchive() bool                                  { return false }
+func (c *CheckovInstaller) SupportsDirectBinary() bool                       { return false }
 func (c *CheckovInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
 
 func (c *CheckovInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string {
@@ -374,4 +376,3 @@ func InstallerFor(name string) BinaryInstaller {
 	}
 	return nil
 }
-

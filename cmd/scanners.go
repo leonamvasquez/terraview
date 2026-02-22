@@ -63,7 +63,7 @@ var scannersListCmd = &cobra.Command{
 			// Deprecation warning inline
 			deprNote := ""
 			if spec != nil && spec.Deprecated != "" {
-				deprNote = "  " + ansiYellow + spec.Deprecated + ansiReset
+				deprNote = "\n    " + ansiYellow + spec.Deprecated + ansiReset
 			}
 
 			fmt.Printf("  %s %-12s %-20s %s%s\n",

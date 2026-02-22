@@ -39,7 +39,8 @@ func (s *TerrascanScanner) EnsureInstalled() (bool, InstallHint) {
 	}
 }
 
-func (s *TerrascanScanner) Version() string { return getCommandVersion("terrascan") }
+// Terrascan uses a subcommand 'version' rather than a --version flag.
+func (s *TerrascanScanner) Version() string { return getCommandVersionArgs("terrascan", "version") }
 
 func (s *TerrascanScanner) SupportedModes() []ScanMode {
 	return []ScanMode{ScanModeSource}
