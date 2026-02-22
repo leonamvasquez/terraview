@@ -308,9 +308,14 @@ func kicsSpec() *ScannerSpec {
 			case "linux":
 				// brew first (Linuxbrew), then Go install as fallback for
 				// containers/servers where brew isn't available.
+				// If Go is also missing, try installing it via the system
+				// package manager first, then build kics from source.
 				return [][]string{
 					{"brew", "install", "kics"},
 					{"go", "install", "github.com/Checkmarx/kics/v2@latest"},
+					{"sh", "-c", "apt-get update -qq && apt-get install -y -qq golang-go && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
+					{"sh", "-c", "dnf install -y golang && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
+					{"sh", "-c", "apk add --no-cache go && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
 				}
 			}
 			// Windows: no brew, no binary — Docker only (not auto-installed)
