@@ -296,7 +296,11 @@ func terrascanSpec() *ScannerSpec {
 
 // kicsSpec — https://docs.kics.io/latest/getting-started/
 // KICS no longer ships pre-built binaries since v2.x.
-// Install via: brew (macOS/Linux), Docker (all platforms — not automated).
+// The main package lives at cmd/console — go install produces a binary named
+// "console" which must be renamed to "kics".
+// KICS requires Go 1.24+; most distro packages (Ubuntu, Debian) ship Go 1.18
+// which is too old, so we download Go from golang.org when needed.
+// Install via: brew (macOS/Linux), build from source (Go 1.24+), Docker.
 func kicsSpec() *ScannerSpec {
 	return &ScannerSpec{
 		Name:    "kics",
@@ -306,16 +310,14 @@ func kicsSpec() *ScannerSpec {
 			case "darwin":
 				return [][]string{{"brew", "install", "kics"}}
 			case "linux":
-				// brew first (Linuxbrew), then Go install as fallback for
-				// containers/servers where brew isn't available.
-				// If Go is also missing, try installing it via the system
-				// package manager first, then build kics from source.
 				return [][]string{
+					// 1) Homebrew (Linuxbrew)
 					{"brew", "install", "kics"},
-					{"go", "install", "github.com/Checkmarx/kics/v2@latest"},
-					{"sh", "-c", "apt-get update -qq && apt-get install -y -qq golang-go && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
-					{"sh", "-c", "dnf install -y golang && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
-					{"sh", "-c", "apk add --no-cache go && GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2@latest"},
+					// 2) go install (requires Go 1.24+ already in PATH).
+					//    cmd/console produces a binary named "console" → rename.
+					{"sh", "-c", "GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2/cmd/console@latest && mv /usr/local/bin/console /usr/local/bin/kics"},
+					// 3) No modern Go: download Go 1.24 from golang.org, build kics.
+					{"sh", "-c", `apt-get update -qq && apt-get install -y -qq curl && rm -rf /usr/local/go && curl -fsSL "https://go.dev/dl/go1.24.6.linux-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/').tar.gz" | tar -C /usr/local -xzf - && GOBIN=/usr/local/bin /usr/local/go/bin/go install github.com/Checkmarx/kics/v2/cmd/console@latest && mv /usr/local/bin/console /usr/local/bin/kics`},
 				}
 			}
 			// Windows: no brew, no binary — Docker only (not auto-installed)
@@ -326,7 +328,7 @@ func kicsSpec() *ScannerSpec {
 			case "darwin":
 				return "brew install kics  (or: docker run checkmarx/kics)"
 			case "linux":
-				return "brew install kics  (or: go install github.com/Checkmarx/kics/v2@latest, or: docker run checkmarx/kics)"
+				return "brew install kics  (or: docker run checkmarx/kics)"
 			case "windows":
 				return "docker run checkmarx/kics  (docs: https://docs.kics.io/latest/getting-started/)"
 			}
