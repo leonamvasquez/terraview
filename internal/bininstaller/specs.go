@@ -104,8 +104,22 @@ func SmartInstall(spec *ScannerSpec, p platform.PlatformInfo, installDir string)
 				continue
 			}
 
-			// Show which manager is being used
-			fmt.Printf("    → %s %s\n", manager, strings.Join(cmdAndArgs[1:], " "))
+			// Show which manager is being used.
+			// For composite commands (sh -c "..."), display the script content
+			// and extract the real tool name for the result label.
+			displayCmd := strings.Join(cmdAndArgs, " ")
+			if manager == "sh" && len(cmdAndArgs) >= 3 && cmdAndArgs[1] == "-c" {
+				displayCmd = cmdAndArgs[2]
+				// Use first meaningful token as manager label (e.g. "apt-get" from
+				// "apt-get update && apt-get install -y python3-pip && pip3 install checkov")
+				for _, tok := range strings.Fields(cmdAndArgs[2]) {
+					if tok != "sudo" && tok != "&&" {
+						manager = tok
+						break
+					}
+				}
+			}
+			fmt.Printf("    → %s\n", displayCmd)
 
 			// Run with live output so the user sees progress
 			cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...)
@@ -216,6 +230,11 @@ func checkovSpec() *ScannerSpec {
 				return [][]string{
 					{"pip3", "install", "checkov"},
 					{"pip", "install", "checkov"},
+					// If neither pip3 nor pip are available, try installing them
+					// via the system package manager first, then install checkov.
+					{"sh", "-c", "apt-get update -qq && apt-get install -y -qq python3-pip && pip3 install --break-system-packages checkov"},
+					{"sh", "-c", "dnf install -y python3-pip && pip3 install checkov"},
+					{"sh", "-c", "apk add --no-cache py3-pip && pip3 install checkov"},
 					{"brew", "install", "checkov"},
 				}
 			case "windows":
@@ -232,7 +251,7 @@ func checkovSpec() *ScannerSpec {
 			case "darwin":
 				return "pip3 install checkov  (or: brew install checkov)"
 			case "linux":
-				return "pip3 install checkov"
+				return "pip3 install checkov  (or: apt-get install -y python3-pip && pip3 install checkov)"
 			case "windows":
 				return "pip install checkov  (or: choco install checkov)"
 			}
@@ -284,16 +303,25 @@ func kicsSpec() *ScannerSpec {
 		Version: "2.1.19",
 		pkgCmdsFn: func(p platform.PlatformInfo) [][]string {
 			switch p.OS {
-			case "darwin", "linux":
+			case "darwin":
 				return [][]string{{"brew", "install", "kics"}}
+			case "linux":
+				// brew first (Linuxbrew), then Go install as fallback for
+				// containers/servers where brew isn't available.
+				return [][]string{
+					{"brew", "install", "kics"},
+					{"go", "install", "github.com/Checkmarx/kics/v2@latest"},
+				}
 			}
 			// Windows: no brew, no binary — Docker only (not auto-installed)
 			return nil
 		},
 		fallbackFn: func(p platform.PlatformInfo) string {
 			switch p.OS {
-			case "darwin", "linux":
+			case "darwin":
 				return "brew install kics  (or: docker run checkmarx/kics)"
+			case "linux":
+				return "brew install kics  (or: go install github.com/Checkmarx/kics/v2@latest, or: docker run checkmarx/kics)"
 			case "windows":
 				return "docker run checkmarx/kics  (docs: https://docs.kics.io/latest/getting-started/)"
 			}
