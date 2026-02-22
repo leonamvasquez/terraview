@@ -77,7 +77,8 @@ Examples:
   terraview plan --scanner checkov --plan p.json  # use existing plan
   terraview plan --scanner checkov --ai --provider gemini  # Gemini AI
   terraview plan --scanner checkov --ai --explain  # AI + explanation
-  terraview plan --scanner checkov --diagram  # infrastructure diagram
+  terraview plan --scanner checkov --diagram  # scanner + diagram
+  terraview plan --diagram                    # diagram only (no scanner)
   terraview plan --scanner checkov --blast-radius  # blast radius
   terraview plan --scanner checkov --format compact  # minimal output
   terraview plan --scanner checkov --format sarif    # SARIF for CI
@@ -107,8 +108,7 @@ func init() {
 	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates scanner findings (implies --ai)")
 	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
 	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannerFlag, "scanner", "", "Scanner to use: checkov, tfsec, or terrascan (required)")
-	_ = planCmd.MarkFlagRequired("scanner")
+	planCmd.Flags().StringVar(&scannerFlag, "scanner", "", "Scanner to use: checkov, tfsec, or terrascan")
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
@@ -243,27 +243,31 @@ func executeReview() (string, int, error) {
 	var hardFindings []rules.Finding
 	var scannerResult *scanner.AggregatedResult
 
-	// Run the specified scanner
-	resolvedScanner, err := scanner.Resolve(scannerFlag)
-	if err != nil {
-		return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
+	if scannerFlag != "" {
+		// Run the specified scanner
+		resolvedScanner, err := scanner.Resolve(scannerFlag)
+		if err != nil {
+			return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
+		}
+
+		logVerbose("Running scanner: %s", resolvedScanner.Name())
+
+		scanCtx := scanner.ScanContext{
+			PlanPath:  resolvedPlan,
+			SourceDir: workDir,
+			WorkDir:   workDir,
+		}
+
+		rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
+		aggResult := scanner.Aggregate(rawResults)
+		scannerResult = &aggResult
+
+		hardFindings = append(hardFindings, aggResult.Findings...)
+		logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
+			resolvedScanner.Name(), len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
+	} else {
+		logVerbose("No scanner specified, skipping security scan")
 	}
-
-	logVerbose("Running scanner: %s", resolvedScanner.Name())
-
-	scanCtx := scanner.ScanContext{
-		PlanPath:  resolvedPlan,
-		SourceDir: workDir,
-		WorkDir:   workDir,
-	}
-
-	rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
-	aggResult := scanner.Aggregate(rawResults)
-	scannerResult = &aggResult
-
-	hardFindings = append(hardFindings, aggResult.Findings...)
-	logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
-		resolvedScanner.Name(), len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
 
 	// 2b. Import external findings if specified (backward compat)
 	if findingsFile != "" {
