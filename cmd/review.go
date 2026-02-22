@@ -54,35 +54,34 @@ var (
 	secondOpinionFlag bool
 	trendFlag         bool
 	smellFlag         bool
-	scannersFlag      string
+	scannerFlag       string
 )
 
 var planCmd = &cobra.Command{
 	Use:     "plan",
 	Aliases: []string{"review"},
 	Short:   "Analyze a Terraform plan for security, architecture, and best practices",
-	Long: `Analyzes a Terraform plan using external security scanners and optional AI review.
+	Long: `Analyzes a Terraform plan using a security scanner and optional AI review.
 
+A scanner must be explicitly specified via --scanner.
 If --plan is not specified, terraview will automatically run:
   terraform init   (if needed)
   terraform plan   (generates plan)
   terraform show   (exports JSON)
 
 Examples:
-  terraview plan                              # auto-select best available scanner
-  terraview plan --scanners checkov           # use a specific scanner
-  terraview plan --ai                         # scanner + AI analysis
-  terraview plan --plan plan.json             # use existing plan
-  terraview plan --ai --provider gemini       # use Gemini AI
-  terraview plan --ai --provider gemini       # use Gemini AI
-  terraview plan --ai --explain               # AI + natural language explanation
-  terraview plan --diagram                    # show ASCII infrastructure diagram
-  terraview plan --blast-radius               # analyze dependency blast radius
-  terraview plan --format compact             # minimal output
-  terraview plan --format json                # only write review.json
-  terraview plan --format sarif               # SARIF output for CI integration
-  terraview plan --strict                     # HIGH returns exit code 2
-  terraview plan --safe                       # safe mode (light model, fewer resources)
+  terraview plan --scanner checkov            # use checkov
+  terraview plan --scanner tfsec              # use tfsec
+  terraview plan --scanner checkov --ai       # scanner + AI analysis
+  terraview plan --scanner checkov --plan p.json  # use existing plan
+  terraview plan --scanner checkov --ai --provider gemini  # Gemini AI
+  terraview plan --scanner checkov --ai --explain  # AI + explanation
+  terraview plan --scanner checkov --diagram  # infrastructure diagram
+  terraview plan --scanner checkov --blast-radius  # blast radius
+  terraview plan --scanner checkov --format compact  # minimal output
+  terraview plan --scanner checkov --format sarif    # SARIF for CI
+  terraview plan --scanner checkov --strict   # HIGH returns exit code 2
+  terraview plan --scanner checkov --safe     # safe mode
   terraview plan --findings checkov.json      # import external findings`,
 	RunE: runPlan,
 }
@@ -107,7 +106,8 @@ func init() {
 	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates scanner findings (implies --ai)")
 	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
 	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Scanner to use: all (auto-select best), checkov, tfsec, or terrascan")
+	planCmd.Flags().StringVar(&scannerFlag, "scanner", "", "Scanner to use: checkov, tfsec, or terrascan (required)")
+	_ = planCmd.MarkFlagRequired("scanner")
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
@@ -242,39 +242,27 @@ func executeReview() (string, int, error) {
 	var hardFindings []rules.Finding
 	var scannerResult *scanner.AggregatedResult
 
-	// Run external scanners
-	scanners, err := scanner.Resolve(scannersFlag)
+	// Run the specified scanner
+	resolvedScanner, err := scanner.Resolve(scannerFlag)
 	if err != nil {
 		return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
 	}
 
-	if len(scanners) == 0 {
-		if brFlag {
-			fmt.Fprintf(os.Stderr, "%s AVISO: Nenhum scanner disponível. Instale checkov, tfsec ou terrascan.\n", output.Prefix())
-		} else {
-			fmt.Fprintf(os.Stderr, "%s WARNING: No scanners available. Install checkov, tfsec, or terrascan.\n", output.Prefix())
-		}
-	} else {
-		names := make([]string, len(scanners))
-		for i, s := range scanners {
-			names[i] = s.Name()
-		}
-		logVerbose("Running scanners: %s", strings.Join(names, ", "))
+	logVerbose("Running scanner: %s", resolvedScanner.Name())
 
-		scanCtx := scanner.ScanContext{
-			PlanPath:  resolvedPlan,
-			SourceDir: workDir,
-			WorkDir:   workDir,
-		}
-
-		rawResults := scanner.RunAll(scanners, scanCtx)
-		aggResult := scanner.Aggregate(rawResults)
-		scannerResult = &aggResult
-
-		hardFindings = append(hardFindings, aggResult.Findings...)
-		logVerbose("Scanners: %d findings (%d raw, %d after dedup)",
-			len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
+	scanCtx := scanner.ScanContext{
+		PlanPath:  resolvedPlan,
+		SourceDir: workDir,
+		WorkDir:   workDir,
 	}
+
+	rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
+	aggResult := scanner.Aggregate(rawResults)
+	scannerResult = &aggResult
+
+	hardFindings = append(hardFindings, aggResult.Findings...)
+	logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
+		resolvedScanner.Name(), len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
 
 	// 2b. Import external findings if specified (backward compat)
 	if findingsFile != "" {

@@ -83,7 +83,7 @@ func TestAll(t *testing.T) {
 	}
 }
 
-func TestAvailableSortedByPriority(t *testing.T) {
+func TestAvailable(t *testing.T) {
 	mgr := NewManager()
 	mgr.Register(&mockScanner{name: "low-pri", available: true, priority: 4})
 	mgr.Register(&mockScanner{name: "high-pri", available: true, priority: 1})
@@ -94,15 +94,18 @@ func TestAvailableSortedByPriority(t *testing.T) {
 	if len(avail) != 3 {
 		t.Fatalf("expected 3 available scanners, got %d", len(avail))
 	}
-	for i := 1; i < len(avail); i++ {
-		if avail[i].Priority() < avail[i-1].Priority() {
-			t.Errorf("not sorted by priority: %s(%d) before %s(%d)",
-				avail[i-1].Name(), avail[i-1].Priority(),
-				avail[i].Name(), avail[i].Priority())
+	// All three available scanners should be present (order not guaranteed)
+	names := map[string]bool{}
+	for _, s := range avail {
+		names[s.Name()] = true
+	}
+	for _, expected := range []string{"low-pri", "high-pri", "mid-pri"} {
+		if !names[expected] {
+			t.Errorf("expected %s in available scanners", expected)
 		}
 	}
-	if avail[0].Name() != "high-pri" {
-		t.Errorf("expected first scanner to be high-pri, got %s", avail[0].Name())
+	if names["unavail"] {
+		t.Error("unavail should not be in available list")
 	}
 }
 
@@ -132,15 +135,12 @@ func TestResolveAuto(t *testing.T) {
 	mgr.Register(&mockScanner{name: "s2", available: true, priority: 1})
 	mgr.Register(&mockScanner{name: "s3", available: false, priority: 2})
 
-	scanners, err := mgr.Resolve("auto")
-	if err != nil {
-		t.Fatalf("Resolve(auto) error: %v", err)
+	_, err := mgr.Resolve("auto")
+	if err == nil {
+		t.Fatal("Resolve(\"auto\") should return error")
 	}
-	if len(scanners) != 1 {
-		t.Fatalf("expected 1 scanner (single-scanner mode), got %d", len(scanners))
-	}
-	if scanners[0].Name() != "s2" {
-		t.Errorf("expected s2 (highest priority), got %s", scanners[0].Name())
+	if !stringContains(err.Error(), "not supported") {
+		t.Errorf("expected 'not supported' in error, got: %s", err.Error())
 	}
 }
 
@@ -149,33 +149,41 @@ func TestResolveAll(t *testing.T) {
 	mgr.Register(&mockScanner{name: "s1", available: true, priority: 2})
 	mgr.Register(&mockScanner{name: "s2", available: true, priority: 1})
 
-	scanners, err := mgr.Resolve("all")
-	if err != nil {
-		t.Fatalf("Resolve(all) error: %v", err)
+	_, err := mgr.Resolve("all")
+	if err == nil {
+		t.Fatal("Resolve(\"all\") should return error")
 	}
-	if len(scanners) != 1 {
-		t.Fatalf("expected 1 scanner (single-scanner mode), got %d", len(scanners))
-	}
-	if scanners[0].Name() != "s2" {
-		t.Errorf("expected s2 (highest priority), got %s", scanners[0].Name())
+	if !stringContains(err.Error(), "not supported") {
+		t.Errorf("expected 'not supported' in error, got: %s", err.Error())
 	}
 }
 
-func TestResolveExplicitNames(t *testing.T) {
+func TestResolveSingleExplicit(t *testing.T) {
 	mgr := NewManager()
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
 	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
 	mgr.Register(&mockScanner{name: "terrascan", available: true, priority: 3})
 
-	scanners, err := mgr.Resolve("tfsec,checkov")
+	s, err := mgr.Resolve("tfsec")
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	if len(scanners) != 1 {
-		t.Fatalf("expected 1 (single-scanner picks highest priority), got %d", len(scanners))
+	if s.Name() != "tfsec" {
+		t.Errorf("expected tfsec, got %s", s.Name())
 	}
-	if scanners[0].Name() != "checkov" {
-		t.Errorf("expected checkov (highest priority), got %s", scanners[0].Name())
+}
+
+func TestResolveMultipleReturnsError(t *testing.T) {
+	mgr := NewManager()
+	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
+	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+
+	_, err := mgr.Resolve("tfsec,checkov")
+	if err == nil {
+		t.Fatal("Resolve with comma-separated should return error")
+	}
+	if !stringContains(err.Error(), "only one scanner") {
+		t.Errorf("expected 'only one scanner' in error, got: %s", err.Error())
 	}
 }
 
@@ -204,12 +212,12 @@ func TestResolveUnavailableScanner(t *testing.T) {
 
 func TestResolveEmpty(t *testing.T) {
 	mgr := NewManager()
-	scanners, err := mgr.Resolve("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := mgr.Resolve("")
+	if err == nil {
+		t.Fatal("Resolve(\"\") should return error")
 	}
-	if scanners != nil {
-		t.Errorf("expected nil, got %v", scanners)
+	if !stringContains(err.Error(), "must be explicitly specified") {
+		t.Errorf("expected 'must be explicitly specified' in error, got: %s", err.Error())
 	}
 }
 
@@ -351,18 +359,10 @@ func TestAdaptersRegisteredInDefaultManager(t *testing.T) {
 	}
 }
 
-func TestDefaultManagerPriorityOrder(t *testing.T) {
+func TestDefaultManagerAvailable(t *testing.T) {
 	avail := DefaultManager.Available()
-	if len(avail) < 2 {
-		t.Skip("need at least 2 available scanners to test ordering")
-	}
-	for i := 1; i < len(avail); i++ {
-		if avail[i].Priority() < avail[i-1].Priority() {
-			t.Errorf("Available() not sorted: %s(%d) before %s(%d)",
-				avail[i-1].Name(), avail[i-1].Priority(),
-				avail[i].Name(), avail[i].Priority())
-		}
-	}
+	// Just verify it returns without error; actual availability depends on environment
+	_ = avail
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +387,17 @@ func TestGlobalAll(t *testing.T) {
 }
 
 func TestGlobalResolve(t *testing.T) {
+	// auto and all should both return errors
 	for _, input := range []string{"auto", "all"} {
-		scanners, err := Resolve(input)
-		if err != nil {
-			t.Errorf("Resolve(%q) error: %v", input, err)
+		_, err := Resolve(input)
+		if err == nil {
+			t.Errorf("Resolve(%q) should return error", input)
 		}
-		_ = scanners
+	}
+	// empty should return error
+	_, err := Resolve("")
+	if err == nil {
+		t.Error("Resolve(\"\") should return error")
 	}
 }
 

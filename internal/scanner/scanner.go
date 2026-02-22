@@ -36,6 +36,9 @@ type InstallHint struct {
 	Default string // fallback message
 }
 
+// ValidScanners lists all accepted scanner names.
+var ValidScanners = []string{"checkov", "tfsec", "terrascan"}
+
 // Scanner is the interface each vendor adapter must implement.
 type Scanner interface {
 	// Name returns the scanner's display name (e.g., "checkov", "tfsec").
@@ -51,7 +54,6 @@ type Scanner interface {
 	// EnsureInstalled checks availability and returns an install hint if missing.
 	EnsureInstalled() (bool, InstallHint)
 	// Priority returns the scanner's precedence rank (lower = higher priority).
-	// Checkov=1, tfsec=2, Terrascan=3.
 	Priority() int
 }
 
@@ -105,7 +107,7 @@ func (m *ScannerManager) All() map[string]Scanner {
 	return result
 }
 
-// Available returns only scanners whose binary is installed, sorted by priority.
+// Available returns only scanners whose binary is installed.
 func (m *ScannerManager) Available() []Scanner {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -115,9 +117,6 @@ func (m *ScannerManager) Available() []Scanner {
 			avail = append(avail, s)
 		}
 	}
-	sort.Slice(avail, func(i, j int) bool {
-		return avail[i].Priority() < avail[j].Priority()
-	})
 	return avail
 }
 
@@ -144,49 +143,40 @@ func (m *ScannerManager) Missing() []struct {
 	return missing
 }
 
-// Resolve selects a single scanner for execution.
+// Resolve validates and returns exactly one scanner.
 //
-// "auto" / "all" → picks the highest-priority available scanner.
-// comma-separated list → picks the first available by priority.
-// single name → uses that scanner if available.
-//
-// Only one scanner runs per execution to keep the pipeline simple.
-func (m *ScannerManager) Resolve(input string) ([]Scanner, error) {
+// Accepts a single scanner name (checkov, tfsec, terrascan).
+// Returns an error if input is empty, contains commas, or is "auto"/"all".
+func (m *ScannerManager) Resolve(input string) (Scanner, error) {
+	input = strings.TrimSpace(input)
+
 	if input == "" {
-		return nil, nil
+		return nil, fmt.Errorf("a scanner must be explicitly specified. Use --scanner=<name>. Allowed values: %s",
+			strings.Join(ValidScanners, ", "))
+	}
+
+	if strings.Contains(input, ",") {
+		return nil, fmt.Errorf("only one scanner is allowed per execution. Use --scanner=<name>. Allowed values: %s",
+			strings.Join(ValidScanners, ", "))
 	}
 
 	if input == "auto" || input == "all" {
-		available := m.Available()
-		if len(available) == 0 {
-			return nil, nil
-		}
-		// Return only the highest-priority scanner
-		return available[:1], nil
+		return nil, fmt.Errorf("'%s' is not supported. Specify one scanner explicitly. Allowed values: %s",
+			input, strings.Join(ValidScanners, ", "))
 	}
 
-	names := strings.Split(input, ",")
-	var candidates []Scanner
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		s, ok := m.Get(name)
-		if !ok {
-			return nil, fmt.Errorf("unknown scanner %q. Available: checkov, tfsec, terrascan", name)
-		}
-		if !s.Available() {
-			_, hint := s.EnsureInstalled()
-			return nil, fmt.Errorf("scanner %q is not installed. %s", name, hint.Default)
-		}
-		candidates = append(candidates, s)
+	s, ok := m.Get(input)
+	if !ok {
+		return nil, fmt.Errorf("unknown scanner %q. Allowed values: %s",
+			input, strings.Join(ValidScanners, ", "))
 	}
-	// Sort by priority and pick the first one
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].Priority() < candidates[j].Priority()
-	})
-	if len(candidates) > 1 {
-		candidates = candidates[:1]
+
+	if !s.Available() {
+		_, hint := s.EnsureInstalled()
+		return nil, fmt.Errorf("scanner %q is not installed. %s", input, hint.Default)
 	}
-	return candidates, nil
+
+	return s, nil
 }
 
 // RunAll executes multiple scanners concurrently and returns all results.
@@ -257,8 +247,8 @@ func All() map[string]Scanner {
 	return DefaultManager.All()
 }
 
-// Resolve parses a comma-separated scanner list using DefaultManager.
-func Resolve(input string) ([]Scanner, error) {
+// Resolve validates and returns exactly one scanner using DefaultManager.
+func Resolve(input string) (Scanner, error) {
 	return DefaultManager.Resolve(input)
 }
 

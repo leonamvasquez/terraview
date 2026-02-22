@@ -19,7 +19,7 @@ var (
 )
 
 // Version is set at build time via ldflags.
-var Version = "v0.3.0"
+var Version = "v0.3.1"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
@@ -29,7 +29,7 @@ var rootCmd = &cobra.Command{
 Security scanning and AI review for Terraform plans.
 
 Core Commands:
-  plan        Analyze a Terraform plan (scanners + AI)
+  plan        Analyze a Terraform plan (scanner + AI)
   apply       Review and conditionally apply the plan
   validate    Run scanner checks (no AI)
   drift       Detect and classify infrastructure drift
@@ -47,9 +47,9 @@ Utilities:
 
 Get started:
   cd my-terraform-project
-  terraview plan                    # run security scanners (default)
-  terraview plan --ai               # review with AI analysis
-  terraview plan --diagram          # show infrastructure diagram
+  terraview plan --scanner checkov          # run security scanner
+  terraview plan --scanner checkov --ai     # review with AI analysis
+  terraview plan --scanner checkov --diagram # show infrastructure diagram
   terraview validate                # scanner checks
   terraview drift                   # detect drift
   terraview provider list           # manage AI providers`,
@@ -120,35 +120,35 @@ Utilitários:
 
 Primeiros passos:
   cd meu-projeto-terraform
-  terraview plan                    # executar scanners de segurança (padrão)
-  terraview plan --ai               # revisão com análise de IA
-  terraview plan --diagram          # exibir diagrama de infraestrutura
+  terraview plan --scanner checkov          # executar scanner de segurança
+  terraview plan --scanner checkov --ai     # revisão com análise de IA
+  terraview plan --scanner checkov --diagram # diagrama de infraestrutura
   terraview validate                # verificações de scanner
   terraview drift                   # detectar drift
   terraview provider list           # gerenciar providers de IA`
 
 	// plan
 	planCmd.Short = "Analisar um plano Terraform para segurança, arquitetura e boas práticas"
-	planCmd.Long = `Analisa um plano Terraform usando scanners de segurança e revisão opcional com IA.
+	planCmd.Long = `Analisa um plano Terraform usando um scanner de segurança e revisão opcional com IA.
 
+O scanner deve ser especificado explicitamente via --scanner.
 Se --plan não for especificado, o terraview executará automaticamente:
   terraform init   (se necessário)
   terraform plan   (gera o plano)
   terraform show   (exporta JSON)
 
 Exemplos:
-  terraview plan                              # executar scanners disponíveis (padrão)
-  terraview plan --scanners checkov,tfsec     # executar scanners específicos
-  terraview plan --ai                         # scanners + análise com IA
-  terraview plan --ai --provider gemini       # usar Gemini AI
-  terraview plan --ai --explain               # IA + explicação em linguagem natural
-  terraview plan --diagram                    # exibir diagrama ASCII de infraestrutura
-  terraview plan --blast-radius               # analisar raio de impacto das mudanças
-  terraview plan --format compact             # saída mínima
-  terraview plan --format json                # apenas gerar review.json
-  terraview plan --format sarif               # saída SARIF para integração CI
-  terraview plan --strict                     # HIGH retorna código de saída 2
-  terraview plan --safe                       # modo seguro (modelo leve, menos recursos)
+  terraview plan --scanner checkov            # usar checkov
+  terraview plan --scanner tfsec              # usar tfsec
+  terraview plan --scanner checkov --ai       # scanner + análise com IA
+  terraview plan --scanner checkov --ai --provider gemini  # Gemini AI
+  terraview plan --scanner checkov --ai --explain  # IA + explicação
+  terraview plan --scanner checkov --diagram  # diagrama de infraestrutura
+  terraview plan --scanner checkov --blast-radius  # raio de impacto
+  terraview plan --scanner checkov --format compact  # saída mínima
+  terraview plan --scanner checkov --format sarif    # SARIF para CI
+  terraview plan --scanner checkov --strict   # HIGH retorna código de saída 2
+  terraview plan --scanner checkov --safe     # modo seguro
   terraview plan --findings checkov.json      # importar achados externos`
 
 	// apply
@@ -314,7 +314,7 @@ Exemplos:
 		"second-opinion": "IA valida achados dos scanners (implica --ai)",
 		"trend":          "Rastrear e exibir tendências de score ao longo do tempo",
 		"smell":          "Detectar design smells de infraestrutura",
-		"scanners":       "Executar scanners externos: all, checkov, tfsec, terrascan (separados por vírgula)",
+		"scanner":        "Scanner a usar: checkov, tfsec ou terrascan (obrigatório)",
 	})
 	translateFlags(applyCmd, map[string]string{
 		"non-interactive": "Pular prompt de confirmação (para CI)",

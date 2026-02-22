@@ -131,24 +131,16 @@ func runValidate(cmd *cobra.Command, args []string) error {
 }
 
 func runScannerTest(executor *terraformexec.Executor) bool {
-	// Resolve available scanners
-	scanners, err := scanner.Resolve("auto")
-	if err != nil {
-		fmt.Printf("\n  Failed to resolve scanners: %v\n\n", err)
-		return false
-	}
-
-	if len(scanners) == 0 {
+	// Pick the first available scanner
+	available := scanner.DefaultManager.Available()
+	if len(available) == 0 {
 		fmt.Printf("\n  %s No scanners available. Install checkov, tfsec, or terrascan.\n", output.Prefix())
 		fmt.Print("\n  Result: SKIPPED\n\n")
 		return true
 	}
 
-	names := make([]string, len(scanners))
-	for i, s := range scanners {
-		names[i] = s.Name()
-	}
-	fmt.Printf("\n  Scanners: %s\n", strings.Join(names, ", "))
+	selected := available[0]
+	fmt.Printf("\n  Scanner: %s\n", selected.Name())
 
 	// Ensure plan.json exists
 	planPath := executor.WorkDir()
@@ -172,7 +164,7 @@ func runScannerTest(executor *terraformexec.Executor) bool {
 		WorkDir:   executor.WorkDir(),
 	}
 
-	rawResults := scanner.RunAll(scanners, scanCtx)
+	rawResults := scanner.RunAll([]scanner.Scanner{selected}, scanCtx)
 	aggResult := scanner.Aggregate(rawResults)
 
 	criticalCount := 0
