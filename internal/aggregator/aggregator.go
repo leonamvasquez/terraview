@@ -121,6 +121,8 @@ func computeVerdict(findings []rules.Finding, strict bool) Verdict {
 
 	if safe && len(findings) == 0 {
 		reasons = append(reasons, "No issues found")
+	} else if safe && highCount > 0 {
+		reasons = append(reasons, fmt.Sprintf("No CRITICAL issues found (%d HIGH — use --strict to block)", highCount))
 	} else if safe {
 		reasons = append(reasons, "No CRITICAL or HIGH severity issues")
 	}
