@@ -22,7 +22,7 @@ func TestWriteSARIF_CreatesValidJSON(t *testing.T) {
 				Category: "security",
 				Resource: "aws_instance.web",
 				Message:  "Public SSH access",
-				Source:   "hard-rule",
+				Source:   "checkov",
 			},
 			{
 				RuleID:   "TAG001",
@@ -30,7 +30,7 @@ func TestWriteSARIF_CreatesValidJSON(t *testing.T) {
 				Category: "compliance",
 				Resource: "aws_s3_bucket.data",
 				Message:  "Missing required tags",
-				Source:   "hard-rule",
+				Source:   "tfsec",
 			},
 		},
 	}

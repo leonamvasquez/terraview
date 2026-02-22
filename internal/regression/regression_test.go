@@ -155,7 +155,7 @@ func TestDedup_SeverityMerge(t *testing.T) {
 	agg := aggregator.NewAggregator(scorer)
 	hard := []rules.Finding{
 		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity,
-			Resource: "aws_sg.test", Source: "hard-rule", Remediation: "restrict CIDR"},
+			Resource: "aws_sg.test", Source: "checkov", Remediation: "restrict CIDR"},
 	}
 	llm := []rules.Finding{
 		{RuleID: "SEC001", Severity: rules.SeverityCritical, Category: rules.CategorySecurity,
@@ -171,9 +171,9 @@ func TestDedup_SeverityMerge(t *testing.T) {
 		t.Errorf("expected CRITICAL (highest), got %s", f.Severity)
 	}
 	if f.Remediation != "restrict CIDR" {
-		t.Errorf("expected remediation from hard-rule, got %q", f.Remediation)
+		t.Errorf("expected remediation from scanner, got %q", f.Remediation)
 	}
-	if !strings.Contains(f.Source, "hard-rule") || !strings.Contains(f.Source, "llm") {
+	if !strings.Contains(f.Source, "checkov") || !strings.Contains(f.Source, "llm") {
 		t.Errorf("expected merged sources, got %q", f.Source)
 	}
 }
@@ -230,7 +230,7 @@ func TestDedup_ThreeSourcesMerge(t *testing.T) {
 	agg := aggregator.NewAggregator(scorer)
 	hard := []rules.Finding{
 		{RuleID: "SEC001", Severity: rules.SeverityMedium, Category: rules.CategorySecurity,
-			Resource: "aws_sg.test", Source: "hard-rule"},
+			Resource: "aws_sg.test", Source: "tfsec"},
 		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity,
 			Resource: "aws_sg.test", Source: "checkov"},
 	}
@@ -247,7 +247,7 @@ func TestDedup_ThreeSourcesMerge(t *testing.T) {
 	if f.Severity != rules.SeverityCritical {
 		t.Errorf("expected CRITICAL, got %s", f.Severity)
 	}
-	for _, src := range []string{"hard-rule", "checkov", "llm"} {
+	for _, src := range []string{"tfsec", "checkov", "llm"} {
 		if !strings.Contains(f.Source, src) {
 			t.Errorf("missing %q in source: %q", src, f.Source)
 		}

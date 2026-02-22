@@ -136,11 +136,11 @@ func TestResolveAuto(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(auto) error: %v", err)
 	}
-	if len(scanners) != 2 {
-		t.Fatalf("expected 2 available scanners, got %d", len(scanners))
+	if len(scanners) != 1 {
+		t.Fatalf("expected 1 scanner (single-scanner mode), got %d", len(scanners))
 	}
 	if scanners[0].Name() != "s2" {
-		t.Errorf("expected s2 first (priority 1), got %s", scanners[0].Name())
+		t.Errorf("expected s2 (highest priority), got %s", scanners[0].Name())
 	}
 }
 
@@ -153,11 +153,11 @@ func TestResolveAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(all) error: %v", err)
 	}
-	if len(scanners) != 2 {
-		t.Fatalf("expected 2 scanners, got %d", len(scanners))
+	if len(scanners) != 1 {
+		t.Fatalf("expected 1 scanner (single-scanner mode), got %d", len(scanners))
 	}
 	if scanners[0].Name() != "s2" {
-		t.Errorf("expected s2 first (priority 1), got %s", scanners[0].Name())
+		t.Errorf("expected s2 (highest priority), got %s", scanners[0].Name())
 	}
 }
 
@@ -171,11 +171,11 @@ func TestResolveExplicitNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	if len(scanners) != 2 {
-		t.Fatalf("expected 2, got %d", len(scanners))
+	if len(scanners) != 1 {
+		t.Fatalf("expected 1 (single-scanner picks highest priority), got %d", len(scanners))
 	}
 	if scanners[0].Name() != "checkov" {
-		t.Errorf("expected checkov first, got %s", scanners[0].Name())
+		t.Errorf("expected checkov (highest priority), got %s", scanners[0].Name())
 	}
 }
 

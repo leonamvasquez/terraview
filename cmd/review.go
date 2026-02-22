@@ -18,10 +18,9 @@ import (
 	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
+	"github.com/leonamvasquez/terraview/internal/normalizer"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/precedence"
-	"github.com/leonamvasquez/terraview/internal/resolver"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
@@ -70,9 +69,9 @@ If --plan is not specified, terraview will automatically run:
   terraform show   (exports JSON)
 
 Examples:
-  terraview plan                              # run all available scanners (default --scanners=all)
-  terraview plan --scanners checkov,tfsec     # run specific scanners
-  terraview plan --ai                         # scanners + AI analysis
+  terraview plan                              # auto-select best available scanner
+  terraview plan --scanners checkov           # use a specific scanner
+  terraview plan --ai                         # scanner + AI analysis
   terraview plan --plan plan.json             # use existing plan
   terraview plan --ai --provider gemini       # use Gemini AI
   terraview plan --ai --provider gemini       # use Gemini AI
@@ -105,10 +104,10 @@ func init() {
 	planCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	planCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
 	planCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
-	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates deterministic findings (implies --ai)")
+	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates scanner findings (implies --ai)")
 	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
 	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Run external scanners: all, checkov, tfsec, terrascan (comma-separated)")
+	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Scanner to use: all (auto-select best), checkov, tfsec, or terrascan")
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
@@ -314,7 +313,7 @@ func executeReview() (string, int, error) {
 		logVerbose("AI analysis skipped")
 	}
 
-	// 3b. Second opinion: AI validates deterministic findings
+	// 3b. Second opinion: AI validates scanner findings
 	if secondOpinionFlag && effectiveAI && len(hardFindings) > 0 {
 		soCtx, soCancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
 		defer soCancel()
@@ -344,24 +343,13 @@ func executeReview() (string, int, error) {
 		}
 	}
 
-	// 3c. Sort scanner findings by tool precedence
-	if len(hardFindings) > 0 {
-		precedence.SortByPrecedence(hardFindings)
-		logVerbose("Findings sorted by tool precedence (%s first)", hardFindings[0].Source)
-	}
-
-	// 3d. Conflict resolution: merge scanner + AI findings with precedence rules
-	var conflictResult *resolver.ConflictResult
+	// 3c. Deduplicate: merge scanner + AI findings (replaces normalizer + resolver)
 	if effectiveAI && (len(hardFindings) > 0 || len(aiFindings) > 0) {
-		res := resolver.New()
-		cr := res.Resolve(hardFindings, aiFindings)
-		conflictResult = &cr
-		// Replace separate lists with unified resolved findings
-		hardFindings = resolver.ToFindings(cr.Resolved)
-		aiFindings = nil // absorbed into hardFindings via resolver
-		aiSummary = ""   // preserve any existing summary below
-		logVerbose("Conflict resolution: %d confirmed, %d scanner-priority, %d ai-only, %d scanner-only",
-			cr.Confirmed, cr.ScannerPriority, cr.AIOnly, cr.ScannerOnly)
+		dr := normalizer.Deduplicate(hardFindings, aiFindings)
+		hardFindings = dr.Findings
+		aiFindings = nil // absorbed into hardFindings via dedup
+		aiSummary = ""
+		logVerbose("Dedup: %s", dr.Summary)
 	}
 
 	// 3e. Risk clustering: group findings by resource for risk analysis
@@ -510,14 +498,7 @@ func executeReview() (string, int, error) {
 		}
 	}
 
-	// 6b. Print conflict resolution summary if available
-	if conflictResult != nil && effectiveFormat != output.FormatJSON {
-		if brFlag {
-			fmt.Print(resolver.FormatResolutionBR(*conflictResult))
-		} else {
-			fmt.Print(resolver.FormatResolution(*conflictResult))
-		}
-	}
+	// (conflict resolution section removed — dedup summary is logged inline)
 
 	// 6c. Print risk clusters if available
 	if clusterResult != nil && clusterResult.HighRiskClusters > 0 && effectiveFormat != output.FormatJSON {
@@ -658,7 +639,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s WARNING: AI review failed (%v). Continuing with hard rules only.\n", output.Prefix(), err)
+		fmt.Fprintf(os.Stderr, "%s WARNING: AI review failed (%v). Continuing with scanner findings only.\n", output.Prefix(), err)
 		return nil, ""
 	}
 

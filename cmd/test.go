@@ -17,7 +17,7 @@ var validateCmd = &cobra.Command{
 	Use:     "validate",
 	Aliases: []string{"test"},
 	Short:   "Validate Terraform config and run security scanners (no AI)",
-	Long: `Runs a deterministic validation suite — no LLM dependency:
+	Long: `Runs a scanner-based validation suite — no LLM dependency:
 
   1. terraform fmt -check  — formatting verification
   2. terraform validate    — syntax and configuration checks

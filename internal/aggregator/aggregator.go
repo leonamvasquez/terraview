@@ -47,7 +47,7 @@ func NewAggregator(scorer *scoring.Scorer) *Aggregator {
 	return &Aggregator{scorer: scorer}
 }
 
-// Aggregate combines hard-rule findings and LLM findings into a single ReviewResult.
+// Aggregate combines scanner findings and LLM findings into a single ReviewResult.
 // When strict is true, HIGH findings also make the verdict NOT SAFE.
 func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFindings []rules.Finding, llmFindings []rules.Finding, llmSummary string, strict bool) ReviewResult {
 	allFindings := make([]rules.Finding, 0, len(hardRuleFindings)+len(llmFindings))

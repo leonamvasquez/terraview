@@ -11,7 +11,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-// Assessment is the AI contextual evaluation of a deterministic finding.
+// Assessment is the AI contextual evaluation of a scanner finding.
 type Assessment struct {
 	RuleID      string ` json:"rule_id" `
 	Resource    string ` json:"resource" `
@@ -30,7 +30,7 @@ type ReviewResult struct {
 	DisputeCount int          ` json:"dispute_count" `
 }
 
-// Reviewer validates deterministic findings using AI contextual analysis.
+// Reviewer validates scanner findings using AI contextual analysis.
 type Reviewer struct {
 	provider ai.Provider
 }
@@ -40,7 +40,7 @@ func NewReviewer(provider ai.Provider) *Reviewer {
 	return &Reviewer{provider: provider}
 }
 
-// Review sends deterministic findings to AI for contextual validation.
+// Review sends scanner findings to AI for contextual validation.
 func (r *Reviewer) Review(ctx context.Context, findings []rules.Finding, resources []parser.NormalizedResource, topologyCtx string) (*ReviewResult, error) {
 	if len(findings) == 0 {
 		return &ReviewResult{Summary: "No findings to review."}, nil
@@ -71,7 +71,7 @@ func buildSecondOpinionPrompt(findings []rules.Finding, topologyCtx string) stri
 	var sb strings.Builder
 
 	sb.WriteString("You are a senior infrastructure security reviewer providing a SECOND OPINION.\n\n")
-	sb.WriteString("Deterministic rules have already flagged the following findings.\n")
+	sb.WriteString("Scanners have already flagged the following findings.\n")
 	sb.WriteString("Your job is to VALIDATE each finding with contextual analysis.\n\n")
 	sb.WriteString("For each finding, determine:\n")
 	sb.WriteString("1. Do you AGREE with the finding?\n")
@@ -131,7 +131,7 @@ func parseSecondOpinionResponse(raw string, findings []rules.Finding) (*ReviewRe
 			Resource:   f.Resource,
 			Agree:      true,
 			Confidence: "medium",
-			Context:    "AI validation unavailable; defaulting to agreement with deterministic rule.",
+			Context:    "AI validation unavailable; defaulting to agreement with scanner finding.",
 		})
 	}
 

@@ -26,5 +26,5 @@ type Finding struct {
 	Resource    string `json:"resource" yaml:"resource"`
 	Message     string `json:"message" yaml:"message"`
 	Remediation string `json:"remediation,omitempty" yaml:"remediation,omitempty"`
-	Source      string `json:"source" yaml:"source"` // "hard-rule" or "llm"
+	Source      string `json:"source" yaml:"source"` // e.g. "checkov", "tfsec", "llm"
 }

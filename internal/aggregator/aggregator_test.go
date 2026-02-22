@@ -68,7 +68,7 @@ func TestAggregate_Deduplication(t *testing.T) {
 	agg := NewAggregator(scorer)
 
 	hardFindings := []rules.Finding{
-		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_sg.test", Source: "hard-rule"},
+		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_sg.test", Source: "checkov"},
 	}
 	llmFindings := []rules.Finding{
 		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_sg.test", Source: "llm"},

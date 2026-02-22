@@ -19,7 +19,7 @@ var (
 )
 
 // Version is set at build time via ldflags.
-var Version = "dev"
+var Version = "v0.3.0"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
@@ -31,7 +31,7 @@ Security scanning and AI review for Terraform plans.
 Core Commands:
   plan        Analyze a Terraform plan (scanners + AI)
   apply       Review and conditionally apply the plan
-  validate    Run deterministic checks (no AI)
+  validate    Run scanner checks (no AI)
   drift       Detect and classify infrastructure drift
   explain     Explain infrastructure in natural language
 
@@ -50,7 +50,7 @@ Get started:
   terraview plan                    # run security scanners (default)
   terraview plan --ai               # review with AI analysis
   terraview plan --diagram          # show infrastructure diagram
-  terraview validate                # deterministic checks
+  terraview validate                # scanner checks
   terraview drift                   # detect drift
   terraview provider list           # manage AI providers`,
 	SilenceUsage:  true,
@@ -104,7 +104,7 @@ Escaneamento de segurança e revisão com IA para planos Terraform.
 Comandos Principais:
   plan        Analisar um plano Terraform (regras + IA)
   apply       Revisar e aplicar condicionalmente o plano
-  validate    Executar verificações determinísticas (sem IA)
+  validate    Executar verificações de scanner (sem IA)
   drift       Detectar e classificar drift de infraestrutura
   explain     Explicar infraestrutura em linguagem natural
 
@@ -123,7 +123,7 @@ Primeiros passos:
   terraview plan                    # executar scanners de segurança (padrão)
   terraview plan --ai               # revisão com análise de IA
   terraview plan --diagram          # exibir diagrama de infraestrutura
-  terraview validate                # verificações determinísticas
+  terraview validate                # verificações de scanner
   terraview drift                   # detectar drift
   terraview provider list           # gerenciar providers de IA`
 
@@ -167,7 +167,7 @@ Exemplos:
 
 	// validate
 	validateCmd.Short = "Validar configuração Terraform e executar scanners de segurança (sem IA)"
-	validateCmd.Long = `Executa uma suíte de validação determinística — sem dependência de LLM:
+	validateCmd.Long = `Executa uma suíte de validação com scanners — sem dependência de LLM:
 
   1. terraform fmt -check  — verificação de formatação
   2. terraform validate    — verificações de sintaxe e configuração
@@ -311,7 +311,7 @@ Exemplos:
 		"diagram":        "Exibir diagrama ASCII de infraestrutura",
 		"blast-radius":   "Analisar raio de impacto das mudanças",
 		"findings":       "Importar achados externos de Checkov/tfsec/Trivy JSON",
-		"second-opinion": "IA valida achados determinísticos (implica --ai)",
+		"second-opinion": "IA valida achados dos scanners (implica --ai)",
 		"trend":          "Rastrear e exibir tendências de score ao longo do tempo",
 		"smell":          "Detectar design smells de infraestrutura",
 		"scanners":       "Executar scanners externos: all, checkov, tfsec, terrascan (separados por vírgula)",

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/spf13/cobra"
@@ -115,37 +114,7 @@ func runSetupEN() error {
 		}
 	}
 
-	// ── Section 2: Scanner Precedence ─────────────────────────────
-	fmt.Println()
-	fmt.Println(ansiBold + "  Tool Precedence" + ansiReset)
-	fmt.Println(ansiDim + "  (lower number = higher priority)" + ansiReset)
-	fmt.Println()
-	precedence := []struct {
-		pri  int
-		name string
-	}{
-		{1, "Checkov"},
-		{2, "tfsec/Trivy"},
-		{3, "Terrascan"},
-		{4, "Deterministic rules"},
-		{5, "AI analysis"},
-	}
-	for _, p := range precedence {
-		marker := ansiDim + "○" + ansiReset
-		// Check if it's an installed scanner
-		for _, a := range available {
-			if strings.EqualFold(a.Name(), strings.Split(p.name, "/")[0]) {
-				marker = ansiGreen + "●" + ansiReset
-				break
-			}
-		}
-		if p.pri >= 5 {
-			marker = ansiGreen + "●" + ansiReset // always available
-		}
-		fmt.Printf("  %s %d. %s\n", marker, p.pri, p.name)
-	}
-
-	// ── Section 3: AI Provider ────────────────────────────────────
+	// ── Section 2: AI Provider ────────────────────────────────────
 	fmt.Println()
 	fmt.Println(ansiBold + "  AI Provider" + ansiReset)
 	fmt.Println()
@@ -204,7 +173,7 @@ func runSetupEN() error {
 	fmt.Println()
 	fmt.Printf("  %sterraview plan%s                 # scanners only\n", ansiCyan, ansiReset)
 	fmt.Printf("  %sterraview plan --ai%s             # scanners + AI\n", ansiCyan, ansiReset)
-	fmt.Printf("  %sterraview validate%s              # fast deterministic checks\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview validate%s              # fast scanner checks\n", ansiCyan, ansiReset)
 	fmt.Println()
 
 	return nil
@@ -288,36 +257,7 @@ func runSetupBR() error {
 		}
 	}
 
-	// ── Seção 2: Precedência de Ferramentas ──────────────────────
-	fmt.Println()
-	fmt.Println(ansiBold + "  Precedência de Ferramentas" + ansiReset)
-	fmt.Println(ansiDim + "  (número menor = maior prioridade)" + ansiReset)
-	fmt.Println()
-	precedence := []struct {
-		pri  int
-		name string
-	}{
-		{1, "Checkov"},
-		{2, "tfsec/Trivy"},
-		{3, "Terrascan"},
-		{4, "Regras determinísticas"},
-		{5, "Análise por IA"},
-	}
-	for _, p := range precedence {
-		marker := ansiDim + "○" + ansiReset
-		for _, a := range available {
-			if strings.EqualFold(a.Name(), strings.Split(p.name, "/")[0]) {
-				marker = ansiGreen + "●" + ansiReset
-				break
-			}
-		}
-		if p.pri >= 5 {
-			marker = ansiGreen + "●" + ansiReset
-		}
-		fmt.Printf("  %s %d. %s\n", marker, p.pri, p.name)
-	}
-
-	// ── Seção 3: Provider de IA ──────────────────────────────────
+	// ── Seção 2: Provider de IA ──────────────────────────────────
 	fmt.Println()
 	fmt.Println(ansiBold + "  Provider de IA" + ansiReset)
 	fmt.Println()
@@ -373,7 +313,7 @@ func runSetupBR() error {
 	fmt.Println()
 	fmt.Printf("  %sterraview plan%s                 # apenas scanners\n", ansiCyan, ansiReset)
 	fmt.Printf("  %sterraview plan --ai%s             # scanners + IA\n", ansiCyan, ansiReset)
-	fmt.Printf("  %sterraview validate%s              # verificações determinísticas\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview validate%s              # verificações rápidas\n", ansiCyan, ansiReset)
 	fmt.Println()
 
 	return nil

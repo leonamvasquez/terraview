@@ -144,20 +144,29 @@ func (m *ScannerManager) Missing() []struct {
 	return missing
 }
 
-// Resolve parses a comma-separated scanner list.
-// "auto" detects all installed scanners and returns them sorted by priority.
-// "all" is an alias for "auto".
+// Resolve selects a single scanner for execution.
+//
+// "auto" / "all" → picks the highest-priority available scanner.
+// comma-separated list → picks the first available by priority.
+// single name → uses that scanner if available.
+//
+// Only one scanner runs per execution to keep the pipeline simple.
 func (m *ScannerManager) Resolve(input string) ([]Scanner, error) {
 	if input == "" {
 		return nil, nil
 	}
 
 	if input == "auto" || input == "all" {
-		return m.Available(), nil
+		available := m.Available()
+		if len(available) == 0 {
+			return nil, nil
+		}
+		// Return only the highest-priority scanner
+		return available[:1], nil
 	}
 
 	names := strings.Split(input, ",")
-	var scanners []Scanner
+	var candidates []Scanner
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		s, ok := m.Get(name)
@@ -168,13 +177,16 @@ func (m *ScannerManager) Resolve(input string) ([]Scanner, error) {
 			_, hint := s.EnsureInstalled()
 			return nil, fmt.Errorf("scanner %q is not installed. %s", name, hint.Default)
 		}
-		scanners = append(scanners, s)
+		candidates = append(candidates, s)
 	}
-	// Sort by priority
-	sort.Slice(scanners, func(i, j int) bool {
-		return scanners[i].Priority() < scanners[j].Priority()
+	// Sort by priority and pick the first one
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Priority() < candidates[j].Priority()
 	})
-	return scanners, nil
+	if len(candidates) > 1 {
+		candidates = candidates[:1]
+	}
+	return candidates, nil
 }
 
 // RunAll executes multiple scanners concurrently and returns all results.

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leonamvasquez/terraview/internal/precedence"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
@@ -23,12 +22,12 @@ type ResolvedFinding struct {
 
 // ConflictResult holds the complete output of the conflict resolver.
 type ConflictResult struct {
-	Resolved         []ResolvedFinding `json:"resolved"`
-	Confirmed        int               `json:"confirmed"`
-	ScannerPriority  int               `json:"scanner_priority"`
-	AIOnly           int               `json:"ai_only"`
-	ScannerOnly      int               `json:"scanner_only"`
-	Summary          string            `json:"summary"`
+	Resolved        []ResolvedFinding `json:"resolved"`
+	Confirmed       int               `json:"confirmed"`
+	ScannerPriority int               `json:"scanner_priority"`
+	AIOnly          int               `json:"ai_only"`
+	ScannerOnly     int               `json:"scanner_only"`
+	Summary         string            `json:"summary"`
 }
 
 // Resolver resolves conflicts between scanner and AI findings.
@@ -65,7 +64,7 @@ func (r *Resolver) Resolve(scannerFindings, aiFindings []rules.Finding) Conflict
 				Finding: sf,
 				Resolution: Resolution{
 					Action:     "scanner-only",
-					Confidence: precedence.ConfidenceWeight(sf.Source),
+					Confidence: 0.8,
 					Note:       "Detected by scanner only",
 				},
 			})
@@ -108,7 +107,7 @@ func (r *Resolver) Resolve(scannerFindings, aiFindings []rules.Finding) Conflict
 						Finding: resolved,
 						Resolution: Resolution{
 							Action:     "scanner-priority",
-							Confidence: precedence.ConfidenceWeight(sf.Source),
+							Confidence: 0.8,
 							Note: fmt.Sprintf("Severity conflict: %s says %s, AI says %s — scanner precedence applied",
 								sf.Source, sf.Severity, af.Severity),
 						},
@@ -125,7 +124,7 @@ func (r *Resolver) Resolve(scannerFindings, aiFindings []rules.Finding) Conflict
 				Finding: sf,
 				Resolution: Resolution{
 					Action:     "scanner-only",
-					Confidence: precedence.ConfidenceWeight(sf.Source),
+					Confidence: 0.8,
 					Note:       "Detected by scanner only",
 				},
 			})
@@ -142,7 +141,7 @@ func (r *Resolver) Resolve(scannerFindings, aiFindings []rules.Finding) Conflict
 			Finding: af,
 			Resolution: Resolution{
 				Action:     "ai-only",
-				Confidence: precedence.ConfidenceWeight(af.Source),
+				Confidence: 0.5,
 				Note:       "Detected by AI only — lower confidence",
 			},
 		})

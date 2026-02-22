@@ -237,7 +237,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 	if len(result.Findings) > 0 {
 		sourceGroups := groupBySource(result.Findings)
 		sourceOrder := []string{}
-		// Deterministic ordering: scanner sources first, then AI, then others
+		// Stable ordering: scanner sources first, then AI, then others
 		seen := map[string]bool{}
 		for _, f := range result.Findings {
 			src := sourceLabel(f.Source)
@@ -585,8 +585,6 @@ func sourceLabel(source string) string {
 	case strings.HasPrefix(source, "external:"):
 		name := strings.TrimPrefix(source, "external:")
 		return strings.ToUpper(name) + " (import)"
-	case source == "hard-rule":
-		return "Rules"
 	default:
 		if source == "" {
 			return "AI"

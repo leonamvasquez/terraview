@@ -8,16 +8,16 @@ import (
 
 func TestAnalyzer_MultipleSources(t *testing.T) {
 	findings := []rules.Finding{
-		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "hard-rule"},
-		{RuleID: "CKV_001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "external:checkov"},
-		{RuleID: "BP001", Severity: "MEDIUM", Category: "best-practice", Resource: "aws_s3_bucket.data", Source: "hard-rule"},
+		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},
+		{RuleID: "CKV_001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "tfsec"},
+		{RuleID: "BP001", Severity: "MEDIUM", Category: "best-practice", Resource: "aws_s3_bucket.data", Source: "terrascan"},
 	}
 
 	analyzer := NewAnalyzer()
 	result := analyzer.Analyze(findings)
 
-	if len(result.Sources) != 2 {
-		t.Errorf("expected 2 sources, got %d", len(result.Sources))
+	if len(result.Sources) != 3 {
+		t.Errorf("expected 3 sources, got %d", len(result.Sources))
 	}
 	if len(result.Correlations) != 1 {
 		t.Errorf("expected 1 correlation, got %d", len(result.Correlations))
@@ -32,7 +32,7 @@ func TestAnalyzer_MultipleSources(t *testing.T) {
 
 func TestAnalyzer_SingleSource(t *testing.T) {
 	findings := []rules.Finding{
-		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "hard-rule"},
+		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},
 	}
 
 	analyzer := NewAnalyzer()
@@ -60,11 +60,11 @@ func TestNormalizeSource(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"hard-rule", "hard-rule"},
+		{"checkov", "checkov"},
 		{"external:checkov", "checkov"},
 		{"external:tfsec", "tfsec"},
 		{"", "unknown"},
-		{"ai-review", "ai-review"},
+		{"llm", "llm"},
 	}
 	for _, tt := range tests {
 		got := normalizeSource(tt.input)

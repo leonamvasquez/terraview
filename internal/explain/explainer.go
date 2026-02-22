@@ -99,7 +99,7 @@ func buildExplainPrompt(_ []parser.NormalizedResource, findings []rules.Finding)
 	sb.WriteString("- What a human reviewer should pay attention to\n\n")
 
 	if len(findings) > 0 {
-		sb.WriteString("The following deterministic findings were already detected:\n")
+		sb.WriteString("The following scanner findings were already detected:\n")
 		for _, f := range findings {
 			sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", f.Severity, f.Resource, f.Message))
 		}
