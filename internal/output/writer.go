@@ -545,6 +545,15 @@ func translateReason(reason string) string {
 	case "No CRITICAL or HIGH severity issues":
 		return "Nenhum achado CRÍTICO ou ALTO"
 	}
+	// Pattern: "No CRITICAL issues found (N HIGH — use --strict to block)"
+	if strings.Contains(reason, "No CRITICAL issues found") && strings.Contains(reason, "--strict") {
+		// Replace English parts, keeping the count number
+		r := strings.NewReplacer(
+			"No CRITICAL issues found", "Nenhum achado CRÍTICO encontrado",
+			"HIGH — use --strict to block", "ALTO(S) — use --strict para bloquear",
+		)
+		return r.Replace(reason)
+	}
 	return reason
 }
 

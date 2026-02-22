@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/rules"
@@ -105,45 +106,50 @@ func TestAggregate_Verdict(t *testing.T) {
 	agg := NewAggregator(scorer)
 
 	tests := []struct {
-		name      string
-		findings  []rules.Finding
-		strict    bool
-		wantSafe  bool
-		wantLabel string
+		name               string
+		findings           []rules.Finding
+		strict             bool
+		wantSafe           bool
+		wantLabel          string
+		wantReasonContains string // must appear in at least one reason string
 	}{
 		{
-			name:      "no findings is SAFE",
-			findings:  nil,
-			strict:    false,
-			wantSafe:  true,
-			wantLabel: "SAFE",
+			name:               "no findings is SAFE",
+			findings:           nil,
+			strict:             false,
+			wantSafe:           true,
+			wantLabel:          "SAFE",
+			wantReasonContains: "No issues found",
 		},
 		{
 			name: "critical makes NOT SAFE",
 			findings: []rules.Finding{
 				{RuleID: "SEC003", Severity: rules.SeverityCritical, Category: rules.CategorySecurity, Resource: "aws_iam.test"},
 			},
-			strict:    false,
-			wantSafe:  false,
-			wantLabel: "NOT SAFE",
+			strict:             false,
+			wantSafe:           false,
+			wantLabel:          "NOT SAFE",
+			wantReasonContains: "CRITICAL",
 		},
 		{
 			name: "high in non-strict is SAFE",
 			findings: []rules.Finding{
 				{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_sg.test"},
 			},
-			strict:    false,
-			wantSafe:  true,
-			wantLabel: "SAFE",
+			strict:             false,
+			wantSafe:           true,
+			wantLabel:          "SAFE",
+			wantReasonContains: "--strict", // new message must mention --strict
 		},
 		{
 			name: "high in strict is NOT SAFE",
 			findings: []rules.Finding{
 				{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_sg.test"},
 			},
-			strict:    true,
-			wantSafe:  false,
-			wantLabel: "NOT SAFE",
+			strict:             true,
+			wantSafe:           false,
+			wantLabel:          "NOT SAFE",
+			wantReasonContains: "HIGH",
 		},
 		{
 			name: "medium and low only is SAFE",
@@ -151,9 +157,10 @@ func TestAggregate_Verdict(t *testing.T) {
 				{RuleID: "REL001", Severity: rules.SeverityMedium, Category: rules.CategoryReliability, Resource: "aws_db.test"},
 				{RuleID: "COMP001", Severity: rules.SeverityLow, Category: rules.CategoryCompliance, Resource: "aws_cw.test"},
 			},
-			strict:    false,
-			wantSafe:  true,
-			wantLabel: "SAFE",
+			strict:             false,
+			wantSafe:           true,
+			wantLabel:          "SAFE",
+			wantReasonContains: "No CRITICAL or HIGH severity issues",
 		},
 	}
 
@@ -168,6 +175,18 @@ func TestAggregate_Verdict(t *testing.T) {
 			}
 			if len(result.Verdict.Reasons) == 0 {
 				t.Error("verdict should have at least one reason")
+			}
+			if tt.wantReasonContains != "" {
+				found := false
+				for _, r := range result.Verdict.Reasons {
+					if strings.Contains(r, tt.wantReasonContains) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("verdict reasons %v should contain %q", result.Verdict.Reasons, tt.wantReasonContains)
+				}
 			}
 		})
 	}
