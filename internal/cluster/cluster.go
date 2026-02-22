@@ -11,13 +11,13 @@ import (
 
 // RiskCluster groups findings that target the same resource or related resources.
 type RiskCluster struct {
-	ID             string          `json:"id"`
-	Resources      []string        `json:"resources"`
-	Findings       []rules.Finding `json:"findings"`
-	Sources        []string        `json:"sources"`
-	RiskScore      float64         `json:"risk_score"`
-	Severity       string          `json:"severity"`
-	SourceCount    int             `json:"source_count"`
+	ID          string          `json:"id"`
+	Resources   []string        `json:"resources"`
+	Findings    []rules.Finding `json:"findings"`
+	Sources     []string        `json:"sources"`
+	RiskScore   float64         `json:"risk_score"`
+	Severity    string          `json:"severity"`
+	SourceCount int             `json:"source_count"`
 }
 
 // ClusterResult is the output of the risk cluster builder.
@@ -101,12 +101,12 @@ func (b *Builder) buildCluster(key string, findings []rules.Finding) RiskCluster
 	severity := highestSeverity(findings)
 
 	return RiskCluster{
-		ID:             key,
-		Resources:      resources,
-		Findings:       findings,
-		Sources:        sources,
-		RiskScore:      riskScore,
-		Severity:       severity,
+		ID:          key,
+		Resources:   resources,
+		Findings:    findings,
+		Sources:     sources,
+		RiskScore:   riskScore,
+		Severity:    severity,
 		SourceCount: len(sources),
 	}
 }
