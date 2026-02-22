@@ -26,11 +26,12 @@ type DeduplicateResult struct {
 // IsEquivalent returns true when an AI finding is considered a structural
 // duplicate of a scanner finding. The comparison uses:
 //
-//   - Same resource identifier (case-insensitive)
-//   - Same normalised risk category (case-insensitive)
-//   - Similar severity level (same or within one rank)
+//   - Same resource identifier (case-insensitive, trimmed)
+//   - Same canonical risk category
 //
-// All three conditions must hold for equivalence.
+// Severity is intentionally excluded: a scanner HIGH and an AI MEDIUM about
+// the same risk on the same resource are still equivalent. The scanner
+// severity is always preserved.
 func IsEquivalent(scanner, ai rules.Finding) bool {
 	if !strings.EqualFold(
 		strings.TrimSpace(scanner.Resource),
@@ -39,14 +40,7 @@ func IsEquivalent(scanner, ai rules.Finding) bool {
 		return false
 	}
 
-	if !strings.EqualFold(
-		strings.TrimSpace(scanner.Category),
-		strings.TrimSpace(ai.Category),
-	) {
-		return false
-	}
-
-	return severitiesClose(scanner.Severity, ai.Severity)
+	return canonicalRiskCategory(scanner.Category) == canonicalRiskCategory(ai.Category)
 }
 
 // Deduplicate merges scanner findings with AI findings, applying three rules:
@@ -115,9 +109,9 @@ func Deduplicate(scannerFindings, aiFindings []rules.Finding) DeduplicateResult 
 			sf := &out[entry.idx]
 			if IsEquivalent(*sf, af) {
 				matched = true
-				// Enrichment: attach AI remediation if scanner lacks one.
-				if sf.Remediation == "" && af.Remediation != "" {
-					sf.Remediation = af.Remediation
+				// Enrichment: merge AI remediation into scanner finding.
+				if af.Remediation != "" {
+					sf.Remediation = enrichRemediation(sf.Remediation, af.Remediation)
 					result.AIEnriched++
 				}
 				result.AIDiscarded++
@@ -139,34 +133,59 @@ func Deduplicate(scannerFindings, aiFindings []rules.Finding) DeduplicateResult 
 
 // ── helpers ────────────────────────────────────────────────────────
 
-// severitiesClose returns true if the two severity levels are the same or
-// within one rank (e.g. HIGH↔MEDIUM is close, CRITICAL↔LOW is not).
-func severitiesClose(a, b string) bool {
-	ra := sevRank(a)
-	rb := sevRank(b)
-	diff := ra - rb
-	if diff < 0 {
-		diff = -diff
+// canonicalRiskCategory normalises a category string to one of the five
+// canonical categories defined in rules/types.go. AI providers sometimes
+// return variations ("Security", "SECURITY", "sec", "iam-security"); this
+// function maps them deterministically.
+func canonicalRiskCategory(cat string) string {
+	norm := strings.ToLower(strings.TrimSpace(cat))
+	switch {
+	case norm == "" || norm == "unknown":
+		return "security" // safe default — most findings are security
+	case strings.Contains(norm, "security") || strings.Contains(norm, "iam") || strings.Contains(norm, "encryption") || strings.Contains(norm, "network"):
+		return rules.CategorySecurity
+	case strings.Contains(norm, "compliance") || strings.Contains(norm, "regulatory"):
+		return rules.CategoryCompliance
+	case strings.Contains(norm, "best-practice") || strings.Contains(norm, "best_practice") || strings.Contains(norm, "convention") || strings.Contains(norm, "naming") || strings.Contains(norm, "tagging"):
+		return rules.CategoryBestPractice
+	case strings.Contains(norm, "maintain") || strings.Contains(norm, "readability") || strings.Contains(norm, "complexity"):
+		return rules.CategoryMaintainability
+	case strings.Contains(norm, "reliab") || strings.Contains(norm, "availability") || strings.Contains(norm, "disaster") || strings.Contains(norm, "backup"):
+		return rules.CategoryReliability
+	default:
+		return norm // pass-through if already canonical
 	}
-	return diff <= 1
 }
 
-// sevRank maps severity strings to a numeric order (lower = more severe).
-func sevRank(sev string) int {
-	switch strings.ToUpper(strings.TrimSpace(sev)) {
-	case rules.SeverityCritical:
-		return 0
-	case rules.SeverityHigh:
-		return 1
-	case rules.SeverityMedium:
-		return 2
-	case rules.SeverityLow:
-		return 3
-	case rules.SeverityInfo:
-		return 4
-	default:
-		return 5
+// enrichRemediation merges AI remediation into a scanner finding's remediation.
+// If the scanner has no remediation, the AI text replaces it directly.
+// If the scanner already has remediation, AI suggestions are appended under a
+// section header, avoiding duplicate text.
+func enrichRemediation(scannerRem, aiRem string) string {
+	scannerRem = strings.TrimSpace(scannerRem)
+	aiRem = strings.TrimSpace(aiRem)
+
+	if scannerRem == "" {
+		return aiRem
 	}
+	if aiRem == "" {
+		return scannerRem
+	}
+
+	// Avoid duplicating identical text.
+	if strings.EqualFold(scannerRem, aiRem) {
+		return scannerRem
+	}
+
+	// Check if the AI text is already embedded in the scanner remediation.
+	if strings.Contains(
+		strings.ToLower(scannerRem),
+		strings.ToLower(aiRem),
+	) {
+		return scannerRem
+	}
+
+	return scannerRem + "\n\nAI Suggestions:\n" + aiRem
 }
 
 // normalizeResource produces a canonical, comparable resource key.

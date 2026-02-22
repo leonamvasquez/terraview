@@ -2,6 +2,7 @@ package normalizer
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/rules"
@@ -33,11 +34,11 @@ func TestIsEquivalent_SeverityWithinOneRank(t *testing.T) {
 	}
 }
 
-func TestIsEquivalent_SeverityTooFar(t *testing.T) {
+func TestIsEquivalent_SeverityIgnored(t *testing.T) {
 	s := rules.Finding{Resource: "aws_sg.test", Category: "security", Severity: "CRITICAL"}
 	a := rules.Finding{Resource: "aws_sg.test", Category: "security", Severity: "LOW"}
-	if IsEquivalent(s, a) {
-		t.Error("CRITICAL and LOW (3 ranks apart) should NOT be equivalent")
+	if !IsEquivalent(s, a) {
+		t.Error("severity must NOT block equivalence (same resource+category)")
 	}
 }
 
@@ -57,11 +58,11 @@ func TestIsEquivalent_DifferentCategory(t *testing.T) {
 	}
 }
 
-func TestIsEquivalent_EmptyCategory(t *testing.T) {
+func TestIsEquivalent_EmptyCategoryDefaultsSecurity(t *testing.T) {
 	s := rules.Finding{Resource: "aws_instance.web", Category: "security", Severity: "HIGH"}
 	a := rules.Finding{Resource: "aws_instance.web", Category: "", Severity: "HIGH"}
-	if IsEquivalent(s, a) {
-		t.Error("empty category vs non-empty should NOT be equivalent")
+	if !IsEquivalent(s, a) {
+		t.Error("empty category defaults to security, should match security")
 	}
 }
 
@@ -145,7 +146,7 @@ func TestDeduplicate_AIEnrichment(t *testing.T) {
 	}
 }
 
-func TestDeduplicate_NoEnrichmentWhenScannerHasRemediation(t *testing.T) {
+func TestDeduplicate_EnrichmentWhenScannerHasRemediation(t *testing.T) {
 	scannerFindings := []rules.Finding{
 		{RuleID: "CKV_1", Resource: "aws_sg.test", Severity: "HIGH", Category: "security", Source: "checkov", Remediation: "Scanner fix"},
 	}
@@ -153,11 +154,12 @@ func TestDeduplicate_NoEnrichmentWhenScannerHasRemediation(t *testing.T) {
 		{RuleID: "AI_1", Resource: "aws_sg.test", Severity: "HIGH", Category: "security", Source: "llm", Remediation: "AI fix"},
 	}
 	r := Deduplicate(scannerFindings, aiFindings)
-	if r.AIEnriched != 0 {
-		t.Errorf("should not enrich when scanner already has remediation, got %d", r.AIEnriched)
+	if r.AIEnriched != 1 {
+		t.Errorf("should enrich when AI has remediation, got %d", r.AIEnriched)
 	}
-	if r.Findings[0].Remediation != "Scanner fix" {
-		t.Errorf("scanner remediation should be preserved, got %q", r.Findings[0].Remediation)
+	want := "Scanner fix\n\nAI Suggestions:\nAI fix"
+	if r.Findings[0].Remediation != want {
+		t.Errorf("expected appended remediation:\n%s\ngot:\n%s", want, r.Findings[0].Remediation)
 	}
 }
 
@@ -193,7 +195,7 @@ func TestDeduplicate_SameResourceDifferentCategory(t *testing.T) {
 	}
 }
 
-func TestDeduplicate_SameResourceSameCategoryDistantSeverity(t *testing.T) {
+func TestDeduplicate_SameResourceSameCategoryAnySeverity(t *testing.T) {
 	scannerFindings := []rules.Finding{
 		{RuleID: "CKV_1", Resource: "aws_sg.test", Severity: "CRITICAL", Category: "security", Source: "checkov"},
 	}
@@ -201,8 +203,11 @@ func TestDeduplicate_SameResourceSameCategoryDistantSeverity(t *testing.T) {
 		{RuleID: "AI_1", Resource: "aws_sg.test", Severity: "INFO", Category: "security", Source: "llm"},
 	}
 	r := Deduplicate(scannerFindings, aiFindings)
-	if len(r.Findings) != 2 {
-		t.Fatalf("same resource+category but distant severity → both kept, got %d", len(r.Findings))
+	if len(r.Findings) != 1 {
+		t.Fatalf("same resource+category should merge regardless of severity, got %d", len(r.Findings))
+	}
+	if r.Findings[0].Severity != "CRITICAL" {
+		t.Errorf("scanner severity must be preserved, got %q", r.Findings[0].Severity)
 	}
 }
 
@@ -286,45 +291,120 @@ func TestDeduplicate_Performance10K(t *testing.T) {
 
 // ── Helper tests ───────────────────────────────────────────────────
 
-func TestSeveritiesClose(t *testing.T) {
+func TestIsEquivalent_CanonicalCategoryVariation(t *testing.T) {
+	s := rules.Finding{Resource: "aws_sg.test", Category: "security", Severity: "HIGH"}
+	a := rules.Finding{Resource: "aws_sg.test", Category: "iam-security", Severity: "LOW"}
+	if !IsEquivalent(s, a) {
+		t.Error("iam-security should canonicalize to security")
+	}
+}
+
+func TestCanonicalRiskCategory(t *testing.T) {
 	tests := []struct {
-		a, b string
-		want bool
+		input string
+		want  string
 	}{
-		{"HIGH", "HIGH", true},
-		{"HIGH", "MEDIUM", true},
-		{"CRITICAL", "HIGH", true},
-		{"CRITICAL", "LOW", false},
-		{"HIGH", "INFO", false},
-		{"MEDIUM", "LOW", true},
-		{"LOW", "INFO", true},
-		{"CRITICAL", "MEDIUM", false},
+		{"security", "security"},
+		{"Security", "security"},
+		{"SECURITY", "security"},
+		{"iam-security", "security"},
+		{"network", "security"},
+		{"encryption", "security"},
+		{"compliance", "compliance"},
+		{"regulatory", "compliance"},
+		{"best-practice", "best-practice"},
+		{"best_practice", "best-practice"},
+		{"naming", "best-practice"},
+		{"tagging", "best-practice"},
+		{"convention", "best-practice"},
+		{"maintainability", "maintainability"},
+		{"readability", "maintainability"},
+		{"complexity", "maintainability"},
+		{"reliability", "reliability"},
+		{"availability", "reliability"},
+		{"disaster", "reliability"},
+		{"backup", "reliability"},
+		{"", "security"},
+		{"unknown", "security"},
+		{"cost", "cost"},
 	}
 	for _, tc := range tests {
-		got := severitiesClose(tc.a, tc.b)
+		got := canonicalRiskCategory(tc.input)
 		if got != tc.want {
-			t.Errorf("severitiesClose(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			t.Errorf("canonicalRiskCategory(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }
 
-func TestSevRank(t *testing.T) {
-	tests := []struct {
-		sev  string
-		want int
-	}{
-		{"CRITICAL", 0},
-		{"HIGH", 1},
-		{"MEDIUM", 2},
-		{"LOW", 3},
-		{"INFO", 4},
-		{"UNKNOWN", 5},
+func TestEnrichRemediation_ScannerEmpty(t *testing.T) {
+	got := enrichRemediation("", "AI fix here")
+	if got != "AI fix here" {
+		t.Errorf("expected AI text, got %q", got)
 	}
-	for _, tc := range tests {
-		got := sevRank(tc.sev)
-		if got != tc.want {
-			t.Errorf("sevRank(%q) = %d, want %d", tc.sev, got, tc.want)
-		}
+}
+
+func TestEnrichRemediation_AIEmpty(t *testing.T) {
+	got := enrichRemediation("Scanner fix", "")
+	if got != "Scanner fix" {
+		t.Errorf("expected scanner text, got %q", got)
+	}
+}
+
+func TestEnrichRemediation_BothPresent(t *testing.T) {
+	got := enrichRemediation("Scanner fix", "Additional AI advice")
+	want := "Scanner fix\n\nAI Suggestions:\nAdditional AI advice"
+	if got != want {
+		t.Errorf("expected appended text:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestEnrichRemediation_IdenticalText(t *testing.T) {
+	got := enrichRemediation("Restrict ingress", "Restrict ingress")
+	if got != "Restrict ingress" {
+		t.Errorf("identical text should not duplicate, got %q", got)
+	}
+}
+
+func TestEnrichRemediation_IdenticalCaseInsensitive(t *testing.T) {
+	got := enrichRemediation("Restrict Ingress", "restrict ingress")
+	if got != "Restrict Ingress" {
+		t.Errorf("case-insensitive duplicate should not duplicate, got %q", got)
+	}
+}
+
+func TestEnrichRemediation_SubstringAlreadyPresent(t *testing.T) {
+	got := enrichRemediation("Restrict ingress to specific CIDRs. Use security groups.", "restrict ingress to specific cidrs")
+	if strings.Contains(got, "AI Suggestions:") {
+		t.Error("should not append when AI text is already a substring")
+	}
+}
+
+func TestDeduplicate_EquivalentDifferentSeverity(t *testing.T) {
+	scannerFindings := []rules.Finding{
+		{RuleID: "CKV_1", Resource: "aws_sg.test", Severity: "HIGH", Category: "security", Source: "checkov"},
+	}
+	aiFindings := []rules.Finding{
+		{RuleID: "AI_1", Resource: "aws_sg.test", Severity: "CRITICAL", Category: "security", Source: "llm"},
+	}
+	r := Deduplicate(scannerFindings, aiFindings)
+	if r.Findings[0].Severity != "HIGH" {
+		t.Errorf("scanner severity should be preserved, got %q", r.Findings[0].Severity)
+	}
+	if r.Findings[0].RuleID != "CKV_1" {
+		t.Errorf("scanner rule ID should be preserved, got %q", r.Findings[0].RuleID)
+	}
+}
+
+func TestDeduplicate_EnrichmentNoDuplicateText(t *testing.T) {
+	scannerFindings := []rules.Finding{
+		{RuleID: "CKV_1", Resource: "aws_sg.test", Severity: "HIGH", Category: "security", Source: "checkov", Remediation: "Restrict ingress"},
+	}
+	aiFindings := []rules.Finding{
+		{RuleID: "AI_1", Resource: "aws_sg.test", Severity: "HIGH", Category: "security", Source: "llm", Remediation: "restrict ingress"},
+	}
+	r := Deduplicate(scannerFindings, aiFindings)
+	if strings.Contains(r.Findings[0].Remediation, "AI Suggestions:") {
+		t.Error("identical text should not be duplicated in remediation")
 	}
 }
 
