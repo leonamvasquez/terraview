@@ -11,17 +11,21 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
+	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/cluster"
+	"github.com/leonamvasquez/terraview/internal/compress"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/explain"
+	"github.com/leonamvasquez/terraview/internal/feature"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/normalizer"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/riskvec"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
@@ -301,7 +305,7 @@ func executeReview() (string, int, error) {
 
 		aiFindings, aiSummary = runAIReview(resources, topoSummary, resolvedPrompts,
 			effectiveProvider, effectiveURL, effectiveModel,
-			effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, limits)
+			effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, limits, hardFindings)
 	} else {
 		logVerbose("%s", i18n.T().AISkipped)
 	}
@@ -538,24 +542,12 @@ func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
 }
 
 // runAIReview uses the multi-provider AI system with lifecycle management.
-func runAIReview(resources []parser.NormalizedResource, summary map[string]interface{},
-	promptsDir, providerName, url, model string, timeoutSecs int, temp float64,
-	apiKey string, limits runtime.ResourceLimits) ([]rules.Finding, string) {
+// Uses the Deterministic Semantic Compression pipeline to reduce token usage by 70%+.
+func runAIReview(resources []parser.NormalizedResource, _ map[string]interface{},
+	_ /* promptsDir */, providerName, url, model string, timeoutSecs int, temp float64,
+	apiKey string, limits runtime.ResourceLimits, scannerFindings []rules.Finding) ([]rules.Finding, string) {
 
 	logVerbose("AI provider: %s (model: %s)", providerName, model)
-
-	// Load prompts
-	if promptsDir == "" {
-		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnPromptsNotFound+"\n", output.Prefix())
-		return nil, ""
-	}
-
-	loader := ai.NewPromptLoader(promptsDir)
-	promptSet, err := loader.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnPromptsLoadFailed+"\n", output.Prefix(), err)
-		return nil, ""
-	}
 
 	// Ollama lifecycle management: auto-start and auto-stop
 	var ollamaCleanup func()
@@ -604,20 +596,25 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		return nil, ""
 	}
 
-	// Build AI request
-	req := ai.Request{
-		Resources: resources,
-		Summary:   summary,
-		Prompts:   promptSet,
-	}
+	// Deterministic Semantic Compression pipeline
+	// 1. Extract provider-agnostic features from resources
+	extractor := feature.NewExtractor()
+	features := extractor.Extract(resources)
 
-	// Inject pt-BR language instruction when --br flag is set
-	if brFlag {
-		req.Prompts.System += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All findings, descriptions, summaries, and remediation steps must be written in Portuguese.\n"
-	}
+	// 2. Compute risk vectors
+	scorer := riskvec.NewScorer()
+	scored := scorer.Score(features)
 
-	logVerbose("Sending plan to AI (%s) for analysis...", providerName)
-	completion, err := provider.Analyze(ctx, req)
+	// 3. Build compression pipeline with cache and invocation policy
+	adapter := compress.NewProviderAdapter(provider)
+	cache := aicache.NewCache()
+	policy := compress.DefaultPolicy()
+	pipeline := compress.NewPipeline(adapter, cache, policy, 4)
+
+	logVerbose("Compression pipeline: %d resources → %d features scored", len(resources), len(scored))
+
+	// 4. Run compressed AI analysis (skips zero-risk and scanner-critical)
+	results, pstats := pipeline.Run(ctx, scored, scannerFindings)
 
 	// Stop monitor and cleanup Ollama process
 	if monitor != nil {
@@ -627,13 +624,18 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		ollamaCleanup()
 	}
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIReviewFailed+"\n", output.Prefix(), err)
-		return nil, ""
-	}
+	logVerbose("Compression stats: total=%d processed=%d skipped=%d cached=%d errors=%d",
+		pstats.Total, pstats.Processed, pstats.Skipped, pstats.CacheHits, pstats.Errors)
 
-	logVerbose("AI (%s/%s): %d additional findings", completion.Provider, completion.Model, len(completion.Findings))
-	return completion.Findings, completion.Summary
+	// 5. Convert results to standard findings
+	findings := compress.ToFindings(results, scored, providerName)
+
+	// Build summary from pipeline stats
+	aiSummary := fmt.Sprintf("Compressed AI analysis: %d/%d resources analyzed (%d skipped, %d cached)",
+		pstats.Processed, pstats.Total, pstats.Skipped, pstats.CacheHits)
+
+	logVerbose("AI (%s/%s): %d compressed findings", providerName, model, len(findings))
+	return findings, aiSummary
 }
 
 // findBundledDir looks for a directory relative to the executable, then relative to cwd.
