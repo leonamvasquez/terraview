@@ -11,8 +11,8 @@ import (
 
 func TestAllSpecs_Count(t *testing.T) {
 	specs := AllSpecs()
-	if len(specs) < 4 {
-		t.Errorf("AllSpecs() returned %d specs, want at least 4", len(specs))
+	if len(specs) < 3 {
+		t.Errorf("AllSpecs() returned %d specs, want at least 3", len(specs))
 	}
 }
 
@@ -27,7 +27,7 @@ func TestAllSpecs_NoDuplicateNames(t *testing.T) {
 }
 
 func TestSpecFor_KnownScanners(t *testing.T) {
-	for _, name := range []string{"checkov", "tfsec", "terrascan", "kics"} {
+	for _, name := range []string{"checkov", "tfsec", "terrascan"} {
 		spec := SpecFor(name)
 		if spec == nil {
 			t.Errorf("SpecFor(%q) returned nil", name)
@@ -153,17 +153,6 @@ func TestSmartInstall_CheckovInvariant(t *testing.T) {
 	p := platform.PlatformInfo{OS: "linux", Arch: "amd64"}
 	result := SmartInstall(spec, p, t.TempDir())
 	assertSmartInstallSane(t, "checkov", result)
-}
-
-func TestSmartInstall_KICSInvariant(t *testing.T) {
-	// KICS has no binary; it may succeed via brew (macOS) or provide a fallback.
-	spec := SpecFor("kics")
-	if spec == nil {
-		t.Fatal("kics spec not found")
-	}
-	p := platform.PlatformInfo{OS: "linux", Arch: "amd64"}
-	result := SmartInstall(spec, p, t.TempDir())
-	assertSmartInstallSane(t, "kics", result)
 }
 
 func TestSmartInstall_WindowsArm64Terrascan(t *testing.T) {

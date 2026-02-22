@@ -139,7 +139,7 @@ func runScannerTest(executor *terraformexec.Executor) bool {
 	}
 
 	if len(scanners) == 0 {
-		fmt.Printf("\n  %s No scanners available. Install checkov, tfsec, terrascan, or kics.\n", output.Prefix())
+		fmt.Printf("\n  %s No scanners available. Install checkov, tfsec, or terrascan.\n", output.Prefix())
 		fmt.Print("\n  Result: SKIPPED\n\n")
 		return true
 	}

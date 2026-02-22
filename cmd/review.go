@@ -108,7 +108,7 @@ func init() {
 	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates deterministic findings (implies --ai)")
 	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
 	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Run external scanners: all, checkov, tfsec, terrascan, kics (comma-separated)")
+	planCmd.Flags().StringVar(&scannersFlag, "scanners", "all", "Run external scanners: all, checkov, tfsec, terrascan (comma-separated)")
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
@@ -251,9 +251,9 @@ func executeReview() (string, int, error) {
 
 	if len(scanners) == 0 {
 		if brFlag {
-			fmt.Fprintf(os.Stderr, "%s AVISO: Nenhum scanner disponível. Instale checkov, tfsec, terrascan ou kics.\n", output.Prefix())
+			fmt.Fprintf(os.Stderr, "%s AVISO: Nenhum scanner disponível. Instale checkov, tfsec ou terrascan.\n", output.Prefix())
 		} else {
-			fmt.Fprintf(os.Stderr, "%s WARNING: No scanners available. Install checkov, tfsec, terrascan, or kics.\n", output.Prefix())
+			fmt.Fprintf(os.Stderr, "%s WARNING: No scanners available. Install checkov, tfsec, or terrascan.\n", output.Prefix())
 		}
 	} else {
 		names := make([]string, len(scanners))

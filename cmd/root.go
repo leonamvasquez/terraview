@@ -314,7 +314,7 @@ Exemplos:
 		"second-opinion": "IA valida achados determinísticos (implica --ai)",
 		"trend":          "Rastrear e exibir tendências de score ao longo do tempo",
 		"smell":          "Detectar design smells de infraestrutura",
-		"scanners":       "Executar scanners externos: all, checkov, tfsec, terrascan, kics (separados por vírgula)",
+		"scanners":       "Executar scanners externos: all, checkov, tfsec, terrascan (separados por vírgula)",
 	})
 	translateFlags(applyCmd, map[string]string{
 		"non-interactive": "Pular prompt de confirmação (para CI)",

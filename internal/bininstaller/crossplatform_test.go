@@ -65,21 +65,6 @@ func TestCrossPlatform_TerrascanURLsAllPlatforms(t *testing.T) {
 	}
 }
 
-func TestCrossPlatform_KICSNoURLAnyPlatform(t *testing.T) {
-	// KICS no longer ships pre-built binaries — should behave like checkov.
-	inst := &KICSInstaller{}
-	for _, p := range allPlatforms() {
-		url := inst.DownloadURL(p, inst.LatestVersion())
-		if url != "" {
-			t.Errorf("kics should have no URL for %s, got %s", p.String(), url)
-		}
-		fb := inst.FallbackCommand(p)
-		if fb == "" {
-			t.Errorf("kics should have a fallback for %s", p.String())
-		}
-	}
-}
-
 func TestCrossPlatform_CheckovNoURLAnyPlatform(t *testing.T) {
 	inst := &CheckovInstaller{}
 	for _, p := range allPlatforms() {
@@ -134,7 +119,7 @@ func TestCrossPlatform_BinaryNames(t *testing.T) {
 			p.BinaryExt = ".exe"
 		}
 
-		for _, name := range []string{"tfsec", "terrascan", "kics"} {
+		for _, name := range []string{"tfsec", "terrascan"} {
 			bn := p.BinaryName(name)
 			if tc.wantExt && !strings.HasSuffix(bn, ".exe") {
 				t.Errorf("%s/%s: binary name %q should end in .exe", tc.os, tc.arch, bn)
@@ -229,7 +214,6 @@ func TestCrossPlatform_VersionStrings(t *testing.T) {
 	installers := []BinaryInstaller{
 		&TfsecInstaller{},
 		&TerrascanInstaller{},
-		&KICSInstaller{},
 	}
 	for _, inst := range installers {
 		v := inst.LatestVersion()
@@ -251,7 +235,7 @@ func TestCrossPlatform_VersionStrings(t *testing.T) {
 // --- InstallerFor lookup completeness ---
 
 func TestCrossPlatform_InstallerForAll(t *testing.T) {
-	names := []string{"checkov", "tfsec", "terrascan", "kics"}
+	names := []string{"checkov", "tfsec", "terrascan"}
 	for _, name := range names {
 		inst := InstallerFor(name)
 		if inst == nil {
@@ -274,7 +258,6 @@ func TestCrossPlatform_ArchiveFlags(t *testing.T) {
 	}{
 		{"tfsec", false, true},
 		{"terrascan", true, true},
-		{"kics", false, false},
 		{"checkov", false, false},
 	}
 	for _, tc := range tests {

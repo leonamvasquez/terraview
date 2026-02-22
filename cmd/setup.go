@@ -127,9 +127,8 @@ func runSetupEN() error {
 		{1, "Checkov"},
 		{2, "tfsec/Trivy"},
 		{3, "Terrascan"},
-		{4, "KICS"},
-		{5, "Deterministic rules"},
-		{6, "AI analysis"},
+		{4, "Deterministic rules"},
+		{5, "AI analysis"},
 	}
 	for _, p := range precedence {
 		marker := ansiDim + "○" + ansiReset
@@ -301,9 +300,8 @@ func runSetupBR() error {
 		{1, "Checkov"},
 		{2, "tfsec/Trivy"},
 		{3, "Terrascan"},
-		{4, "KICS"},
-		{5, "Regras determinísticas"},
-		{6, "Análise por IA"},
+		{4, "Regras determinísticas"},
+		{5, "Análise por IA"},
 	}
 	for _, p := range precedence {
 		marker := ansiDim + "○" + ansiReset

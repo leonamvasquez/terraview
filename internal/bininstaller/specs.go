@@ -36,7 +36,6 @@ var allScannerSpecs = []*ScannerSpec{
 	checkovSpec(),
 	tfsecSpec(),
 	terrascanSpec(),
-	kicsSpec(),
 }
 
 // AllSpecs returns specs for all known scanners.
@@ -290,49 +289,6 @@ func terrascanSpec() *ScannerSpec {
 				return "Download from https://github.com/tenable/terrascan/releases/tag/v1.19.9"
 			}
 			return "https://github.com/tenable/terrascan/releases"
-		},
-	}
-}
-
-// kicsSpec — https://docs.kics.io/latest/getting-started/
-// KICS no longer ships pre-built binaries since v2.x.
-// The main package lives at cmd/console — go install produces a binary named
-// "console" which must be renamed to "kics".
-// KICS requires Go 1.24+; most distro packages (Ubuntu, Debian) ship Go 1.18
-// which is too old, so we download Go from golang.org when needed.
-// Install via: brew (macOS/Linux), build from source (Go 1.24+), Docker.
-func kicsSpec() *ScannerSpec {
-	return &ScannerSpec{
-		Name:    "kics",
-		Version: "2.1.19",
-		pkgCmdsFn: func(p platform.PlatformInfo) [][]string {
-			switch p.OS {
-			case "darwin":
-				return [][]string{{"brew", "install", "kics"}}
-			case "linux":
-				return [][]string{
-					// 1) Homebrew (Linuxbrew)
-					{"brew", "install", "kics"},
-					// 2) go install (requires Go 1.24+ already in PATH).
-					//    cmd/console produces a binary named "console" → rename.
-					{"sh", "-c", "GOBIN=/usr/local/bin go install github.com/Checkmarx/kics/v2/cmd/console@latest && mv /usr/local/bin/console /usr/local/bin/kics"},
-					// 3) No modern Go: download Go 1.24 from golang.org, build kics.
-					{"sh", "-c", `apt-get update -qq && apt-get install -y -qq curl && rm -rf /usr/local/go && curl -fsSL "https://go.dev/dl/go1.24.6.linux-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/').tar.gz" | tar -C /usr/local -xzf - && GOBIN=/usr/local/bin /usr/local/go/bin/go install github.com/Checkmarx/kics/v2/cmd/console@latest && mv /usr/local/bin/console /usr/local/bin/kics`},
-				}
-			}
-			// Windows: no brew, no binary — Docker only (not auto-installed)
-			return nil
-		},
-		fallbackFn: func(p platform.PlatformInfo) string {
-			switch p.OS {
-			case "darwin":
-				return "brew install kics  (or: docker run checkmarx/kics)"
-			case "linux":
-				return "brew install kics  (or: docker run checkmarx/kics)"
-			case "windows":
-				return "docker run checkmarx/kics  (docs: https://docs.kics.io/latest/getting-started/)"
-			}
-			return "docker run checkmarx/kics"
 		},
 	}
 }

@@ -301,33 +301,6 @@ func (t *TerrascanInstaller) DownloadURL(p platform.PlatformInfo, version string
 		version, version, osName, archName)
 }
 
-// KICSInstaller handles KICS.
-// Ref: https://docs.kics.io/latest/getting-started/
-// KICS no longer ships pre-built binaries since v2.x.
-// Install via: brew (macOS/Linux), Docker (all platforms).
-type KICSInstaller struct{}
-
-func (k *KICSInstaller) Name() string                                     { return "kics" }
-func (k *KICSInstaller) LatestVersion() string                            { return "2.1.19" }
-func (k *KICSInstaller) IsArchive() bool                                  { return false }
-func (k *KICSInstaller) SupportsDirectBinary() bool                       { return false }
-func (k *KICSInstaller) ArchiveBinaryName(_ platform.PlatformInfo) string { return "" }
-
-func (k *KICSInstaller) DownloadURL(_ platform.PlatformInfo, _ string) string {
-	// KICS no longer ships pre-built binaries in GitHub Releases.
-	return ""
-}
-
-func (k *KICSInstaller) FallbackCommand(p platform.PlatformInfo) string {
-	switch p.OS {
-	case "darwin", "linux":
-		return "brew install kics  (or: docker run checkmarx/kics)"
-	case "windows":
-		return "docker run checkmarx/kics  (see: https://docs.kics.io/latest/getting-started/)"
-	}
-	return "docker run checkmarx/kics"
-}
-
 // CheckovInstaller handles Checkov — Python-only, no direct binary download.
 // Ref: https://www.checkov.io/2.Basics/Installing%20Checkov.html
 // Install via: pip3/pip, brew (macOS/Linux), choco (Windows).
@@ -362,7 +335,6 @@ func AllInstallers() []BinaryInstaller {
 		&CheckovInstaller{},
 		&TfsecInstaller{},
 		&TerrascanInstaller{},
-		&KICSInstaller{},
 	}
 }
 

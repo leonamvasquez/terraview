@@ -51,8 +51,8 @@ func TestGetCommandVersionArgs_BannerBeforeVersion(t *testing.T) {
 	}
 }
 
-// TestGetCommandVersionArgs_SubcommandStyle simulates tools like kics/terrascan
-// which report version via a subcommand: "kics version" → "Keeping ... 2.1.19".
+// TestGetCommandVersionArgs_SubcommandStyle simulates tools like terrascan
+// which report version via a subcommand: "terrascan version" → "Keeping ... 2.1.19".
 func TestGetCommandVersionArgs_SubcommandStyle(t *testing.T) {
 	output := "Keeping Infrastructure as Code Secure 2.1.19\n"
 	bin := makeFakeVersionBinary(t, output, 0)

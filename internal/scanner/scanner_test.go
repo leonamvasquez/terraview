@@ -313,7 +313,6 @@ func TestAdaptersPriority(t *testing.T) {
 		{"checkov", 1},
 		{"tfsec", 2},
 		{"terrascan", 3},
-		{"kics", 4},
 	}
 
 	all := DefaultManager.All()
@@ -343,7 +342,7 @@ func TestAdaptersEnsureInstalled(t *testing.T) {
 }
 
 func TestAdaptersRegisteredInDefaultManager(t *testing.T) {
-	expected := []string{"checkov", "tfsec", "terrascan", "kics"}
+	expected := []string{"checkov", "tfsec", "terrascan"}
 	all := DefaultManager.All()
 	for _, name := range expected {
 		if _, ok := all[name]; !ok {
@@ -382,8 +381,8 @@ func TestGlobalRegisterAndGet(t *testing.T) {
 
 func TestGlobalAll(t *testing.T) {
 	all := All()
-	if len(all) < 4 {
-		t.Errorf("expected at least 4 registered scanners, got %d", len(all))
+	if len(all) < 3 {
+		t.Errorf("expected at least 3 registered scanners, got %d", len(all))
 	}
 }
 

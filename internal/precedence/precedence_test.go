@@ -15,11 +15,10 @@ func TestRank(t *testing.T) {
 		{"tfsec", 2},
 		{"trivy", 2},
 		{"terrascan", 3},
-		{"kics", 4},
-		{"hard-rule", 5},
-		{"deterministic", 5},
-		{"llm", 6},
-		{"ai", 6},
+		{"hard-rule", 4},
+		{"deterministic", 4},
+		{"llm", 5},
+		{"ai", 5},
 		{"unknown", 99},
 	}
 	for _, tc := range tests {
@@ -80,7 +79,6 @@ func TestClassifyTier(t *testing.T) {
 		{"checkov", "Tier 1 (scanner)"},
 		{"tfsec", "Tier 1 (scanner)"},
 		{"terrascan", "Tier 2 (scanner)"},
-		{"kics", "Tier 2 (scanner)"},
 		{"hard-rule", "Tier 3 (deterministic)"},
 		{"llm", "Tier 4 (AI)"},
 		{"unknown", "Tier 5 (unknown)"},

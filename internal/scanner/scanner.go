@@ -51,7 +51,7 @@ type Scanner interface {
 	// EnsureInstalled checks availability and returns an install hint if missing.
 	EnsureInstalled() (bool, InstallHint)
 	// Priority returns the scanner's precedence rank (lower = higher priority).
-	// Checkov=1, tfsec=2, Terrascan=3, KICS=4.
+	// Checkov=1, tfsec=2, Terrascan=3.
 	Priority() int
 }
 
@@ -162,7 +162,7 @@ func (m *ScannerManager) Resolve(input string) ([]Scanner, error) {
 		name = strings.TrimSpace(name)
 		s, ok := m.Get(name)
 		if !ok {
-			return nil, fmt.Errorf("unknown scanner %q. Available: checkov, tfsec, terrascan, kics", name)
+			return nil, fmt.Errorf("unknown scanner %q. Available: checkov, tfsec, terrascan", name)
 		}
 		if !s.Available() {
 			_, hint := s.EnsureInstalled()

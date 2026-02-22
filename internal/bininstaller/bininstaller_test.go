@@ -86,29 +86,6 @@ func TestTerrascanInstaller_DownloadURL(t *testing.T) {
 	}
 }
 
-func TestKICSInstaller_NoDirectBinary(t *testing.T) {
-	// KICS no longer ships pre-built binaries in GitHub Releases.
-	inst := &KICSInstaller{}
-	for _, p := range []platform.PlatformInfo{
-		{OS: "linux", Arch: "amd64"},
-		{OS: "linux", Arch: "arm64"},
-		{OS: "darwin", Arch: "amd64"},
-		{OS: "darwin", Arch: "arm64"},
-		{OS: "windows", Arch: "amd64"},
-	} {
-		url := inst.DownloadURL(p, inst.LatestVersion())
-		if url != "" {
-			t.Errorf("kics should have no download URL for %s/%s, got %q", p.OS, p.Arch, url)
-		}
-	}
-	if inst.SupportsDirectBinary() {
-		t.Error("kics should not support direct binary")
-	}
-	if inst.LatestVersion() == "" {
-		t.Error("kics should still report a latest version")
-	}
-}
-
 func TestCheckovInstaller_NoDirectBinary(t *testing.T) {
 	inst := &CheckovInstaller{}
 	p := testPlatform("linux", "amd64")
@@ -235,14 +212,14 @@ func TestInstall_FallbackForCheckov(t *testing.T) {
 
 func TestAllInstallers(t *testing.T) {
 	all := AllInstallers()
-	if len(all) != 4 {
-		t.Errorf("expected 4 installers, got %d", len(all))
+	if len(all) != 3 {
+		t.Errorf("expected 3 installers, got %d", len(all))
 	}
 	names := make(map[string]bool)
 	for _, inst := range all {
 		names[inst.Name()] = true
 	}
-	for _, expected := range []string{"checkov", "tfsec", "terrascan", "kics"} {
+	for _, expected := range []string{"checkov", "tfsec", "terrascan"} {
 		if !names[expected] {
 			t.Errorf("missing installer for %q", expected)
 		}

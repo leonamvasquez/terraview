@@ -105,7 +105,7 @@ var scannersInstallCmd = &cobra.Command{
 Examples:
   tv scanners install              # install all missing scanners
   tv scanners install tfsec        # install tfsec only
-  tv scanners install checkov kics # install specific scanners`,
+  tv scanners install checkov tfsec # install specific scanners`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, _ := platform.Detect()
 		forceReinstall, _ := cmd.Flags().GetBool("force")
@@ -185,9 +185,6 @@ Examples:
 					fmt.Printf("  [info] %-12s manual installation required:\n", name)
 				}
 				fmt.Printf("           $ %s%s%s\n", ansiBold, result.Fallback, ansiReset)
-				if name == "kics" && p.OS == "windows" {
-					fmt.Printf("           (Windows: Docker is the only supported method for kics)\n")
-				}
 
 			default:
 				// Failed with error

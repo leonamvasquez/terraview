@@ -12,11 +12,10 @@ var toolRank = map[string]int{
 	"tfsec":          2,
 	"trivy":          2, // alias for tfsec
 	"terrascan":      3,
-	"kics":           4,
-	"hard-rule":      5, // deterministic rules
-	"deterministic":  5,
-	"llm":            6, // AI analysis
-	"ai":             6,
+	"hard-rule":      4, // deterministic rules
+	"deterministic":  4,
+	"llm":            5, // AI analysis
+	"ai":             5,
 }
 
 // Rank returns the precedence rank for a source name.
@@ -65,11 +64,11 @@ func ClassifyTier(source string) string {
 	switch {
 	case r <= 2:
 		return "Tier 1 (scanner)"
-	case r <= 4:
+	case r == 3:
 		return "Tier 2 (scanner)"
-	case r == 5:
+	case r == 4:
 		return "Tier 3 (deterministic)"
-	case r == 6:
+	case r == 5:
 		return "Tier 4 (AI)"
 	default:
 		return "Tier 5 (unknown)"
@@ -88,10 +87,8 @@ func ConfidenceWeight(source string) float64 {
 	case 3:
 		return 0.85
 	case 4:
-		return 0.80
-	case 5:
 		return 0.70
-	case 6:
+	case 5:
 		return 0.50
 	default:
 		return 0.30
