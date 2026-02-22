@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
@@ -16,7 +17,7 @@ type RiskCluster struct {
 	Sources        []string        `json:"sources"`
 	RiskScore      float64         `json:"risk_score"`
 	Severity       string          `json:"severity"`
-	AgreementCount int             `json:"agreement_count"`
+	SourceCount    int             `json:"source_count"`
 }
 
 // ClusterResult is the output of the risk cluster builder.
@@ -106,7 +107,7 @@ func (b *Builder) buildCluster(key string, findings []rules.Finding) RiskCluster
 		Sources:        sources,
 		RiskScore:      riskScore,
 		Severity:       severity,
-		AgreementCount: len(sources),
+		SourceCount: len(sources),
 	}
 }
 
@@ -124,14 +125,14 @@ func (b *Builder) calculateRisk(findings []rules.Finding, sourceCount int) float
 		baseScore += w
 	}
 
-	agreementMultiplier := 1.0
+	sourceMultiplier := 1.0
 	if sourceCount >= 3 {
-		agreementMultiplier = 1.5
+		sourceMultiplier = 1.5
 	} else if sourceCount >= 2 {
-		agreementMultiplier = 1.25
+		sourceMultiplier = 1.25
 	}
 
-	score := baseScore * agreementMultiplier
+	score := baseScore * sourceMultiplier
 	if score > 100.0 {
 		score = 100.0
 	}
@@ -183,36 +184,21 @@ func setToSorted(m map[string]bool) []string {
 	return s
 }
 
-// FormatClusters returns a human-readable summary of clusters.
+// FormatClusters returns a localized human-readable summary of clusters.
+// It uses i18n.T() so the output language follows the active locale.
 func FormatClusters(result *ClusterResult) string {
+	m := i18n.T()
 	if result == nil || len(result.Clusters) == 0 {
-		return "No risk clusters identified."
+		return m.ClusterNoRisk
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Risk Clusters: %s\n\n", result.Summary))
+	sb.WriteString(fmt.Sprintf(m.ClusterHeader+"\n\n", result.Summary))
 	for i, c := range result.Clusters {
 		icon := riskIcon(c.RiskScore)
-		sb.WriteString(fmt.Sprintf("%s Cluster #%d: %s (risk: %.0f, %s)\n",
+		sb.WriteString(fmt.Sprintf(m.ClusterEntryFmt+"\n",
 			icon, i+1, c.ID, c.RiskScore, c.Severity))
-		sb.WriteString(fmt.Sprintf("   Sources: %s | Findings: %d | Agreement: %d sources\n",
-			strings.Join(c.Sources, ", "), len(c.Findings), c.AgreementCount))
-	}
-	return sb.String()
-}
-
-// FormatClustersBR returns a Brazilian Portuguese summary.
-func FormatClustersBR(result *ClusterResult) string {
-	if result == nil || len(result.Clusters) == 0 {
-		return "Nenhum cluster de risco identificado."
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Clusters de Risco: %s\n\n", result.Summary))
-	for i, c := range result.Clusters {
-		icon := riskIcon(c.RiskScore)
-		sb.WriteString(fmt.Sprintf("%s Cluster #%d: %s (risco: %.0f, %s)\n",
-			icon, i+1, c.ID, c.RiskScore, c.Severity))
-		sb.WriteString(fmt.Sprintf("   Fontes: %s | Achados: %d | Concordancia: %d fontes\n",
-			strings.Join(c.Sources, ", "), len(c.Findings), c.AgreementCount))
+		sb.WriteString(fmt.Sprintf(m.ClusterSourcesLblFmt+"\n",
+			m.ClusterSources, strings.Join(c.Sources, ", "), len(c.Findings)))
 	}
 	return sb.String()
 }

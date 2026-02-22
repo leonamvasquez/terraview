@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/spf13/cobra"
@@ -19,7 +20,7 @@ var (
 )
 
 // Version is set at build time via ldflags.
-var Version = "v0.3.1"
+var Version = "v0.3.2"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
@@ -84,6 +85,7 @@ func init() {
 	for _, arg := range os.Args {
 		if arg == "--br" {
 			brFlag = true
+			i18n.SetLang("pt-BR")
 			applyBRTranslations()
 		}
 		if arg == "--no-color" {

@@ -110,38 +110,108 @@ func buildExplainPrompt(_ []parser.NormalizedResource, findings []rules.Finding)
 }
 
 // ParseExplanation parses a raw AI response into an Explanation struct.
+// It tolerates structural variations: summary may be a string or a nested object.
 func ParseExplanation(raw string) (*Explanation, error) {
 	raw = strings.TrimSpace(raw)
 
+	// Try direct unmarshal first
 	var expl Explanation
 	if err := json.Unmarshal([]byte(raw), &expl); err == nil && expl.Summary != "" {
 		expl.RiskLevel = normalizeRiskLevel(expl.RiskLevel)
 		return &expl, nil
 	}
 
-	cleaned := raw
-	if idx := strings.Index(raw, "```json"); idx != -1 {
-		endIdx := strings.Index(raw[idx+7:], "```")
-		if endIdx != -1 {
-			cleaned = raw[idx+7 : idx+7+endIdx]
+	// Try parsing as a generic map to handle summary-as-object
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &m); err == nil {
+		return explFromMap(m), nil
+	}
+
+	// Try extracting from code fences
+	cleaned := extractFromCodeFence(raw)
+	if cleaned != raw {
+		if err := json.Unmarshal([]byte(cleaned), &expl); err == nil && expl.Summary != "" {
+			expl.RiskLevel = normalizeRiskLevel(expl.RiskLevel)
+			return &expl, nil
 		}
-	} else if idx := strings.Index(raw, "```"); idx != -1 {
-		endIdx := strings.Index(raw[idx+3:], "```")
-		if endIdx != -1 {
-			cleaned = raw[idx+3 : idx+3+endIdx]
+		if err := json.Unmarshal([]byte(cleaned), &m); err == nil {
+			return explFromMap(m), nil
 		}
 	}
 
-	cleaned = strings.TrimSpace(cleaned)
-	if err := json.Unmarshal([]byte(cleaned), &expl); err == nil && expl.Summary != "" {
-		expl.RiskLevel = normalizeRiskLevel(expl.RiskLevel)
-		return &expl, nil
-	}
-
+	// Fallback: use raw text as summary
 	return &Explanation{
 		Summary:   raw,
 		RiskLevel: "medium",
 	}, nil
+}
+
+// extractFromCodeFence extracts JSON from markdown code fences if present.
+func extractFromCodeFence(raw string) string {
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		endIdx := strings.Index(raw[idx+7:], "```")
+		if endIdx != -1 {
+			return strings.TrimSpace(raw[idx+7 : idx+7+endIdx])
+		}
+	}
+	if idx := strings.Index(raw, "```"); idx != -1 {
+		endIdx := strings.Index(raw[idx+3:], "```")
+		if endIdx != -1 {
+			return strings.TrimSpace(raw[idx+3 : idx+3+endIdx])
+		}
+	}
+	return raw
+}
+
+// explFromMap builds an Explanation from a generic map, handling
+// summary as either string or nested object.
+func explFromMap(m map[string]interface{}) *Explanation {
+	expl := &Explanation{RiskLevel: "medium"}
+
+	switch v := m["summary"].(type) {
+	case string:
+		expl.Summary = v
+	case map[string]interface{}:
+		// Summary is a nested object — extract text content
+		if s, ok := v["summary"].(string); ok {
+			expl.Summary = s
+		} else if s, ok := v["overview"].(string); ok {
+			expl.Summary = s
+		} else {
+			// Serialize the object as fallback
+			b, _ := json.Marshal(v)
+			expl.Summary = string(b)
+		}
+	default:
+		if v != nil {
+			expl.Summary = fmt.Sprintf("%v", v)
+		}
+	}
+
+	expl.Changes = toStringSlice(m["changes"])
+	expl.Risks = toStringSlice(m["risks"])
+	expl.Suggestions = toStringSlice(m["suggestions"])
+
+	if rl, ok := m["risk_level"].(string); ok {
+		expl.RiskLevel = normalizeRiskLevel(rl)
+	}
+
+	return expl
+}
+
+// toStringSlice converts an interface{} ([]interface{}) to []string.
+func toStringSlice(v interface{}) []string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func normalizeRiskLevel(level string) string {

@@ -232,9 +232,16 @@ func buildInfraExplainPrompt(resources []parser.NormalizedResource, topoGraph *t
 func parseInfraExplanation(raw string) *InfraExplanation {
 	raw = strings.TrimSpace(raw)
 
+	// Try direct unmarshal first
 	var expl InfraExplanation
 	if err := json.Unmarshal([]byte(raw), &expl); err == nil && expl.Overview != "" {
 		return &expl
+	}
+
+	// Try generic map to handle overview-as-object
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &m); err == nil {
+		return infraExplFromMap(m)
 	}
 
 	// Try extracting JSON from code fences
@@ -242,18 +249,22 @@ func parseInfraExplanation(raw string) *InfraExplanation {
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		endIdx := strings.Index(raw[idx+7:], "```")
 		if endIdx != -1 {
-			cleaned = raw[idx+7 : idx+7+endIdx]
+			cleaned = strings.TrimSpace(raw[idx+7 : idx+7+endIdx])
 		}
 	} else if idx := strings.Index(raw, "```"); idx != -1 {
 		endIdx := strings.Index(raw[idx+3:], "```")
 		if endIdx != -1 {
-			cleaned = raw[idx+3 : idx+3+endIdx]
+			cleaned = strings.TrimSpace(raw[idx+3 : idx+3+endIdx])
 		}
 	}
 
-	cleaned = strings.TrimSpace(cleaned)
-	if err := json.Unmarshal([]byte(cleaned), &expl); err == nil && expl.Overview != "" {
-		return &expl
+	if cleaned != raw {
+		if err := json.Unmarshal([]byte(cleaned), &expl); err == nil && expl.Overview != "" {
+			return &expl
+		}
+		if err := json.Unmarshal([]byte(cleaned), &m); err == nil {
+			return infraExplFromMap(m)
+		}
 	}
 
 	// Fallback: use raw text as overview
@@ -261,6 +272,78 @@ func parseInfraExplanation(raw string) *InfraExplanation {
 		Overview:     raw,
 		Architecture: "Unable to parse structured response",
 	}
+}
+
+// infraExplFromMap builds an InfraExplanation from a generic map, handling
+// overview/architecture as either string or nested object.
+func infraExplFromMap(m map[string]interface{}) *InfraExplanation {
+	expl := &InfraExplanation{}
+
+	switch v := m["overview"].(type) {
+	case string:
+		expl.Overview = v
+	case map[string]interface{}:
+		if s, ok := v["overview"].(string); ok {
+			expl.Overview = s
+		} else if s, ok := v["summary"].(string); ok {
+			expl.Overview = s
+		} else {
+			b, _ := json.Marshal(v)
+			expl.Overview = string(b)
+		}
+	default:
+		if v != nil {
+			expl.Overview = fmt.Sprintf("%v", v)
+		}
+	}
+
+	if s, ok := m["architecture"].(string); ok {
+		expl.Architecture = s
+	}
+
+	// Parse components array
+	if arr, ok := m["components"].([]interface{}); ok {
+		for _, item := range arr {
+			if obj, ok := item.(map[string]interface{}); ok {
+				c := ComponentExpl{}
+				if s, ok := obj["resource"].(string); ok {
+					c.Resource = s
+				}
+				if s, ok := obj["purpose"].(string); ok {
+					c.Purpose = s
+				}
+				if s, ok := obj["role"].(string); ok {
+					c.Role = s
+				}
+				expl.Components = append(expl.Components, c)
+			}
+		}
+	}
+
+	expl.Connections = infraToStringSlice(m["connections"])
+	expl.Patterns = infraToStringSlice(m["patterns"])
+	expl.Concerns = infraToStringSlice(m["concerns"])
+
+	if expl.Overview == "" {
+		expl.Overview = "Unable to parse structured response"
+	}
+
+	return expl
+}
+
+// infraToStringSlice converts an interface{} ([]interface{}) to []string.
+func infraToStringSlice(v interface{}) []string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func printInfraExplanation(expl *InfraExplanation) {

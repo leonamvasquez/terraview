@@ -38,9 +38,27 @@ type llmFinding struct {
 }
 
 // llmResponse is the expected structured output from any LLM provider.
+// Summary may arrive as a string or as a nested JSON object depending on the model.
 type llmResponse struct {
-	Findings []llmFinding `json:"findings"`
-	Summary  string       `json:"summary"`
+	Findings []llmFinding    `json:"findings"`
+	Summary  json.RawMessage `json:"summary"`
+}
+
+// extractSummary safely extracts a string from the Summary field,
+// which may be a JSON string, an object, or absent.
+func (r *llmResponse) extractSummary() string {
+	if len(r.Summary) == 0 {
+		return ""
+	}
+
+	// Try as a plain string first (most common case)
+	var s string
+	if err := json.Unmarshal(r.Summary, &s); err == nil {
+		return s
+	}
+
+	// If it's a JSON object/array, re-serialize it as a compact string
+	return string(r.Summary)
 }
 
 // buildSystemPrompt assembles the system prompt from prompt templates.
@@ -173,7 +191,7 @@ func parseResponse(response, providerName string) ([]rules.Finding, string, erro
 		})
 	}
 
-	return findings, llmResp.Summary, nil
+	return findings, llmResp.extractSummary(), nil
 }
 
 func normalizeSeverity(s string) string {

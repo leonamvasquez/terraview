@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
@@ -36,8 +37,8 @@ func TestBuildSingleResource(t *testing.T) {
 	if len(c.Findings) != 2 {
 		t.Errorf("expected 2 findings, got %d", len(c.Findings))
 	}
-	if c.AgreementCount != 2 {
-		t.Errorf("expected agreement 2, got %d", c.AgreementCount)
+	if c.SourceCount != 2 {
+		t.Errorf("expected source count 2, got %d", c.SourceCount)
 	}
 	if c.Severity != "HIGH" {
 		t.Errorf("expected HIGH, got %s", c.Severity)
@@ -76,7 +77,7 @@ func TestSortedByRiskDescending(t *testing.T) {
 	}
 }
 
-func TestAgreementMultiplier(t *testing.T) {
+func TestSourceMultiplier(t *testing.T) {
 	b := NewBuilder()
 	r1 := b.Build([]rules.Finding{
 		{RuleID: "R1", Severity: "HIGH", Resource: "aws_instance.x", Source: "checkov"},
@@ -148,11 +149,13 @@ func TestFormatClusters(t *testing.T) {
 }
 
 func TestFormatClustersBR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	b := NewBuilder()
 	result := b.Build([]rules.Finding{
 		{RuleID: "R1", Severity: "HIGH", Resource: "aws_instance.web", Source: "checkov"},
 	})
-	out := FormatClustersBR(result)
+	out := FormatClusters(result)
 	if !strings.Contains(out, "Clusters de Risco") {
 		t.Error("expected pt-BR header")
 	}

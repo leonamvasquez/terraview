@@ -16,6 +16,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/explain"
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/normalizer"
@@ -268,7 +269,7 @@ func executeReview() (string, int, error) {
 	if findingsFile != "" {
 		externalFindings, err := importer.Import(findingsFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s WARNING: Failed to import findings from %s: %v\n", output.Prefix(), findingsFile, err)
+			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnImportFailed+"\n", output.Prefix(), findingsFile, err)
 		} else {
 			hardFindings = append(hardFindings, externalFindings...)
 			logVerbose("Imported %d external findings from %s", len(externalFindings), findingsFile)
@@ -298,7 +299,7 @@ func executeReview() (string, int, error) {
 			effectiveProvider, effectiveURL, effectiveModel,
 			effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, limits)
 	} else {
-		logVerbose("AI analysis skipped")
+		logVerbose("%s", i18n.T().AISkipped)
 	}
 
 	// 3b. Second opinion: AI validates scanner findings
@@ -318,12 +319,12 @@ func executeReview() (string, int, error) {
 
 		soProvider, err := ai.NewProvider(soCtx, effectiveProvider, providerCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s WARNING: AI provider for --second-opinion not available: %v\n", output.Prefix(), err)
+			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIProviderUnavail+"\n", output.Prefix(), "--second-opinion", err)
 		} else {
 			reviewer := secondopinion.NewReviewer(soProvider)
 			soResult, err := reviewer.Review(soCtx, hardFindings, resources, topoGraph.FormatContext())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s WARNING: Second opinion failed: %v\n", output.Prefix(), err)
+				fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnSecondOpinionFailed+"\n", output.Prefix(), err)
 			} else {
 				hardFindings = secondopinion.EnrichFindings(hardFindings, soResult)
 				logVerbose("Second opinion: %d agree, %d disputed", soResult.AgreeCount, soResult.DisputeCount)
@@ -411,7 +412,7 @@ func executeReview() (string, int, error) {
 
 		explainProvider, err := ai.NewProvider(explainCtx, effectiveProvider, providerCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s WARNING: AI provider for --explain not available: %v\n", output.Prefix(), err)
+			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnExplainUnavail+"\n", output.Prefix(), err)
 		} else {
 			var explainer *explain.Explainer
 			if brFlag {
@@ -421,7 +422,7 @@ func executeReview() (string, int, error) {
 			}
 			explanation, err := explainer.Explain(explainCtx, resources, result.Findings)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s WARNING: AI explanation failed: %v\n", output.Prefix(), err)
+				fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnExplainFailed+"\n", output.Prefix(), err)
 			} else {
 				result.Explanation = explanation
 				logVerbose("AI explanation generated")
@@ -434,7 +435,7 @@ func executeReview() (string, int, error) {
 		tracker := trend.NewTracker(workDir)
 		trendResult, err := tracker.Record(result.Score, len(result.Findings), result.TotalResources, result.SeverityCounts, "")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s WARNING: trend tracking failed: %v\n", output.Prefix(), err)
+			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnTrendFailed+"\n", output.Prefix(), err)
 		} else {
 			logVerbose("Trend recorded: %s", trendResult.Narrative)
 			fmt.Println()
@@ -491,11 +492,7 @@ func executeReview() (string, int, error) {
 	// 6c. Print risk clusters if available
 	if clusterResult != nil && clusterResult.HighRiskClusters > 0 && effectiveFormat != output.FormatJSON {
 		fmt.Println()
-		if brFlag {
-			fmt.Print(cluster.FormatClustersBR(clusterResult))
-		} else {
-			fmt.Print(cluster.FormatClusters(clusterResult))
-		}
+		fmt.Print(cluster.FormatClusters(clusterResult))
 	}
 
 	// 6d. Print blast radius if generated
@@ -545,14 +542,14 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 
 	// Load prompts
 	if promptsDir == "" {
-		fmt.Fprintf(os.Stderr, "%s WARNING: Prompts directory not found. Skipping AI analysis.\n", output.Prefix())
+		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnPromptsNotFound+"\n", output.Prefix())
 		return nil, ""
 	}
 
 	loader := ai.NewPromptLoader(promptsDir)
 	promptSet, err := loader.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s WARNING: Failed to load prompts (%v). Skipping AI analysis.\n", output.Prefix(), err)
+		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnPromptsLoadFailed+"\n", output.Prefix(), err)
 		return nil, ""
 	}
 
@@ -563,7 +560,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		bgCtx := context.Background()
 		cleanup, err := lc.Ensure(bgCtx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s WARNING: Ollama not available (%v). Skipping AI analysis.\n", output.Prefix(), err)
+			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnOllamaUnavail+"\n", output.Prefix(), err)
 			return nil, ""
 		}
 		ollamaCleanup = cleanup
@@ -599,7 +596,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 		if ollamaCleanup != nil {
 			ollamaCleanup()
 		}
-		fmt.Fprintf(os.Stderr, "%s WARNING: AI provider %q not available (%v). Skipping AI analysis.\n", output.Prefix(), providerName, err)
+		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIProviderFailed+"\n", output.Prefix(), providerName, err)
 		return nil, ""
 	}
 
@@ -627,7 +624,7 @@ func runAIReview(resources []parser.NormalizedResource, summary map[string]inter
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s WARNING: AI review failed (%v). Continuing with scanner findings only.\n", output.Prefix(), err)
+		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIReviewFailed+"\n", output.Prefix(), err)
 		return nil, ""
 	}
 
