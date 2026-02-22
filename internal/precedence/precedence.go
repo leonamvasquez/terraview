@@ -7,7 +7,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-var ToolRank = map[string]int{
+var toolRank = map[string]int{
 	"checkov":        1,
 	"tfsec":          2,
 	"trivy":          2, // alias for tfsec
@@ -22,7 +22,7 @@ var ToolRank = map[string]int{
 // Rank returns the precedence rank for a source name.
 // Unknown sources get rank 99 (lowest precedence).
 func Rank(source string) int {
-	r, ok := ToolRank[strings.ToLower(source)]
+	r, ok := toolRank[strings.ToLower(source)]
 	if ok {
 		return r
 	}

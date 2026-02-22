@@ -198,12 +198,10 @@ func runFilterSelector(title string, allItems []selectItem, defaultIndex int) (s
 			}
 			return "", false
 
-		case n == 1 && buf[0] == 27: // ESC
-			if n == 1 { // lone ESC — could also be start of escape seq, handle below
-				rawPrint("\033[?25h")
-				eraseLines(prevLines)
-				return "", false
-			}
+		case n == 1 && buf[0] == 27: // lone ESC
+			rawPrint("\033[?25h")
+			eraseLines(prevLines)
+			return "", false
 
 		case n == 1 && buf[0] == 3: // Ctrl+C
 			rawPrint("\033[?25h\r\n")
