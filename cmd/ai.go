@@ -258,10 +258,17 @@ func runAITest(cmd *cobra.Command, args []string) error {
 	providerName := cfg.LLM.Provider
 	fmt.Printf("Testando provider: %s%s%s  (modelo: %s)\n", ansiBold, providerName, ansiReset, cfg.LLM.Model)
 
+	// When the provider is not ollama and no explicit URL was set, clear the
+	// default Ollama URL so each provider falls back to its own base URL.
+	effectiveURL := cfg.LLM.URL
+	if providerName != "ollama" && effectiveURL == "http://localhost:11434" {
+		effectiveURL = ""
+	}
+
 	providerCfg := ai.ProviderConfig{
 		Model:       cfg.LLM.Model,
 		APIKey:      cfg.LLM.APIKey,
-		BaseURL:     cfg.LLM.URL,
+		BaseURL:     effectiveURL,
 		Temperature: cfg.LLM.Temperature,
 		TimeoutSecs: cfg.LLM.TimeoutSeconds,
 		MaxTokens:   4096,

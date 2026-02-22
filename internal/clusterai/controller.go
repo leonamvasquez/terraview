@@ -1,6 +1,6 @@
 // Package clusterai implements cluster-level adaptive AI invocation.
 // Instead of running AI per-resource, it groups findings into clusters
-// by resource identity and runs AI per-cluster with adaptive depth.
+// by resource identity and runs a SINGLE batched AI call with all clusters.
 // This reduces token usage by 80%+ while preserving analysis quality.
 package clusterai
 
@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -78,13 +77,13 @@ type FullAnalysisResponse struct {
 
 // ClusterResult holds the AI result for a single cluster.
 type ClusterResult struct {
-	ClusterID   string
-	Mode        Mode
-	Enrichment  *EnrichmentResponse
-	FullResult  *FullAnalysisResponse
-	SkipReason  string
-	CacheHit    bool
-	Error       error
+	ClusterID  string
+	Mode       Mode
+	Enrichment *EnrichmentResponse
+	FullResult *FullAnalysisResponse
+	SkipReason string
+	CacheHit   bool
+	Error      error
 }
 
 // ControllerStats holds aggregate statistics from a controller run.
@@ -112,6 +111,7 @@ type ClusterCache struct {
 	entries map[string]CachedClusterResult
 	hits    int
 	misses  int
+	summary string // AI-generated summary for --explain
 }
 
 // NewClusterCache creates a new empty cluster cache.
@@ -140,6 +140,20 @@ func (cc *ClusterCache) Put(key string, result CachedClusterResult) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	cc.entries[key] = result
+}
+
+// SetSummary stores the AI-generated summary for --explain reuse.
+func (cc *ClusterCache) SetSummary(s string) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	cc.summary = s
+}
+
+// Summary returns the cached AI summary.
+func (cc *ClusterCache) Summary() string {
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	return cc.summary
 }
 
 // Stats returns cache hit/miss/size statistics.
@@ -275,20 +289,22 @@ func (c *Controller) Cache() *ClusterCache {
 	return c.cache
 }
 
+// pendingCluster tracks a cluster that needs AI analysis.
+type pendingCluster struct {
+	index int
+	mode  Mode
+	hash  string
+}
+
 // Run processes all clusters through adaptive AI invocation.
-// O(n) in the number of clusters. Uses bounded worker pool.
+// Uses a SINGLE batched AI call for all non-skip clusters,
+// reducing token usage to match or beat the v0.3.4 single-call approach.
 func (c *Controller) Run(ctx context.Context, clusters []cluster.RiskCluster) ([]ClusterResult, ControllerStats) {
 	results := make([]ClusterResult, len(clusters))
 	stats := ControllerStats{TotalClusters: len(clusters)}
 
-	type workItem struct {
-		index   int
-		cluster cluster.RiskCluster
-		mode    Mode
-		hash    string
-	}
-
-	var work []workItem
+	// Phase 1: Classify clusters and check cache
+	var pending []pendingCluster
 	for i := range clusters {
 		rc := &clusters[i]
 		mode := DetermineMode(rc)
@@ -304,7 +320,6 @@ func (c *Controller) Run(ctx context.Context, clusters []cluster.RiskCluster) ([
 			continue
 		}
 
-		// Check cache
 		if cached, ok := c.cache.Get(hash); ok {
 			results[i] = ClusterResult{
 				ClusterID:  rc.ID,
@@ -317,258 +332,219 @@ func (c *Controller) Run(ctx context.Context, clusters []cluster.RiskCluster) ([
 			continue
 		}
 
-		work = append(work, workItem{
-			index:   i,
-			cluster: clusters[i],
-			mode:    mode,
-			hash:    hash,
-		})
+		pending = append(pending, pendingCluster{index: i, mode: mode, hash: hash})
 	}
 
-	if len(work) == 0 {
+	if len(pending) == 0 {
 		return results, stats
 	}
 
-	// Bounded worker pool
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, c.workers)
-
-	for _, w := range work {
-		wg.Add(1)
-		go func(wi workItem) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			result := c.processCluster(ctx, &wi.cluster, wi.mode, wi.hash)
-			results[wi.index] = result
-		}(w)
+	// Phase 2: Build a SINGLE batched prompt for all pending clusters
+	req := ai.Request{
+		Resources: c.buildBatchResources(clusters, pending),
+		Summary:   c.buildBatchPrompt(clusters, pending),
+		Prompts: ai.Prompts{
+			System: c.buildBatchSystemPrompt(),
+		},
 	}
 
-	wg.Wait()
+	// Phase 3: Single AI call
+	completion, err := c.provider.Analyze(ctx, req)
+	if err != nil {
+		for _, p := range pending {
+			results[p.index] = ClusterResult{
+				ClusterID: clusters[p.index].ID,
+				Mode:      p.mode,
+				Error:     err,
+			}
+			stats.Errors++
+		}
+		return results, stats
+	}
 
-	// Count stats
-	for _, r := range results {
-		if r.Mode == ModeSkip {
+	// Phase 4: Store the AI summary for --explain
+	c.cache.SetSummary(completion.Summary)
+
+	// Phase 5: Initialize result slots for pending clusters
+	for _, p := range pending {
+		results[p.index] = ClusterResult{
+			ClusterID: clusters[p.index].ID,
+			Mode:      p.mode,
+		}
+	}
+
+	// Phase 6: Map AI findings back to clusters
+	clusterMap := make(map[string]int) // resource address → pending index
+	for _, p := range pending {
+		rc := &clusters[p.index]
+		for _, res := range rc.Resources {
+			clusterMap[res] = p.index
+		}
+		clusterMap[rc.ID] = p.index
+	}
+
+	for _, f := range completion.Findings {
+		idx, ok := clusterMap[f.Resource]
+		if !ok {
+			// Try partial match
+			for res, pidx := range clusterMap {
+				if strings.Contains(f.Resource, res) || strings.Contains(res, f.Resource) {
+					idx = pidx
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
 			continue
 		}
-		if r.CacheHit {
-			continue // already counted
+
+		r := &results[idx]
+		switch r.Mode {
+		case ModeEnrichmentOnly:
+			if r.Enrichment == nil {
+				r.Enrichment = &EnrichmentResponse{Confidence: 0.85}
+			}
+			if f.Remediation != "" {
+				if r.Enrichment.RemediationImprovements != "" {
+					r.Enrichment.RemediationImprovements += "; "
+				}
+				r.Enrichment.RemediationImprovements += f.Remediation
+			}
+			if f.Message != "" {
+				if r.Enrichment.ArchitecturalNotes != "" {
+					r.Enrichment.ArchitecturalNotes += "; "
+				}
+				r.Enrichment.ArchitecturalNotes += f.Message
+			}
+
+		case ModeFullAnalysis:
+			if r.FullResult == nil {
+				r.FullResult = &FullAnalysisResponse{
+					Severity:   normalizeSeverity(f.Severity),
+					Confidence: 0.85,
+				}
+			}
+			if f.Category != "" {
+				r.FullResult.RiskCategories = append(r.FullResult.RiskCategories, f.Category)
+			}
+			if f.Message != "" {
+				if r.FullResult.ArchitecturalRisk != "" {
+					r.FullResult.ArchitecturalRisk += "; "
+				}
+				r.FullResult.ArchitecturalRisk += f.Message
+			}
+			if f.Remediation != "" {
+				if r.FullResult.Remediation != "" {
+					r.FullResult.Remediation += "; "
+				}
+				r.FullResult.Remediation += f.Remediation
+			}
 		}
+	}
+
+	// Phase 7: Cache results and count stats
+	for _, p := range pending {
+		r := results[p.index]
 		if r.Error != nil {
 			stats.Errors++
-		} else if r.Mode == ModeEnrichmentOnly {
+			continue
+		}
+
+		cached := CachedClusterResult{Mode: r.Mode}
+		switch r.Mode {
+		case ModeEnrichmentOnly:
+			cached.Enrichment = r.Enrichment
 			stats.Enriched++
-		} else if r.Mode == ModeFullAnalysis {
+		case ModeFullAnalysis:
+			cached.FullResult = r.FullResult
 			stats.FullAnalysis++
 		}
+		c.cache.Put(p.hash, cached)
 	}
 
 	return results, stats
 }
 
-func (c *Controller) processCluster(ctx context.Context, rc *cluster.RiskCluster, mode Mode, hash string) ClusterResult {
-	result := ClusterResult{
-		ClusterID: rc.ID,
-		Mode:      mode,
-	}
+// ────────────────────────── Batch Prompt Builders ──────────────
 
-	switch mode {
-	case ModeEnrichmentOnly:
-		resp, err := c.runEnrichment(ctx, rc)
-		if err != nil {
-			result.Error = err
-			return result
-		}
-		result.Enrichment = resp
-		c.cache.Put(hash, CachedClusterResult{
-			Mode:       ModeEnrichmentOnly,
-			Enrichment: resp,
-		})
+// buildBatchSystemPrompt creates a concise system prompt for cluster analysis.
+// Does NOT include a custom JSON schema — lets the provider's buildSystemPrompt()
+// append the standard {findings, summary} schema that parseResponse() expects.
+func (c *Controller) buildBatchSystemPrompt() string {
+	prompt := `You are a cloud infrastructure security auditor. Analyze the pre-scored Terraform resource clusters below.
 
-	case ModeFullAnalysis:
-		resp, err := c.runFullAnalysis(ctx, rc)
-		if err != nil {
-			result.Error = err
-			return result
-		}
-		result.FullResult = resp
-		c.cache.Put(hash, CachedClusterResult{
-			Mode:       ModeFullAnalysis,
-			FullResult: resp,
-		})
-	}
+Each cluster groups scanner findings by resource. Your job:
+1. For "enrichment" clusters: improve remediation advice with architectural context
+2. For "analysis" clusters: perform full risk evaluation
 
-	return result
-}
+Return ONE finding per cluster. Use the cluster's resource address as the "resource" field.
+Be concise and actionable. Focus on the highest-impact remediation.`
 
-// ────────────────────────── LLM Prompts ──────────────────────
-
-const enrichmentSystemPrompt = `You are a deterministic cloud security remediation optimizer. Improve remediation concisely. Output strict JSON only.
-
-You will receive a cluster summary with severity distribution and risk categories.
-Your job is to improve remediation advice and add architectural context.
-
-You MUST respond ONLY with valid JSON matching this exact schema:
-{
-  "remediation_improvements": "concise improved remediation steps",
-  "architectural_notes": "architectural context and risk implications",
-  "confidence": 0.0 to 1.0
-}
-
-Rules:
-- No markdown. No explanations outside JSON.
-- Deterministic, concise phrasing.
-- confidence must be a float between 0.0 and 1.0`
-
-const fullAnalysisSystemPrompt = `You are a cloud architecture risk evaluator. Analyze compressed cluster risk data and return strict JSON only.
-
-You will receive a compressed cluster risk vector. Each axis ranges from 0 (no risk) to 3 (critical risk).
-
-You MUST respond ONLY with valid JSON matching this exact schema:
-{
-  "risk_categories": ["security", "compliance", "best-practice", "maintainability", "reliability"],
-  "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-  "architectural_risk": "concise description of the primary architectural risk",
-  "remediation": "specific actionable remediation steps",
-  "confidence": 0.0 to 1.0
-}
-
-Rules:
-- No markdown. No explanations outside JSON.
-- Deterministic, concise phrasing.
-- severity must be one of: CRITICAL, HIGH, MEDIUM, LOW
-- confidence must be a float between 0.0 and 1.0
-- risk_categories must be from the allowed set above`
-
-func (c *Controller) runEnrichment(ctx context.Context, rc *cluster.RiskCluster) (*EnrichmentResponse, error) {
-	payload := EnrichmentPayload{
-		ClusterType:          detectClusterType(rc),
-		Provider:             detectClusterProvider(rc),
-		RiskCategories:       collectCategories(rc.Findings),
-		SeverityDistribution: severityDistribution(rc.Findings),
-	}
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal enrichment payload: %w", err)
-	}
-
-	systemPrompt := enrichmentSystemPrompt
 	if c.lang == "pt-BR" {
-		systemPrompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text must be in Portuguese.\n"
+		prompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR)."
 	}
 
-	req := ai.Request{
-		Resources: []parser.NormalizedResource{
-			{Address: rc.ID, Type: detectClusterType(rc), Provider: detectClusterProvider(rc)},
-		},
-		Summary: map[string]interface{}{
-			"cluster_analysis":    true,
-			"mode":                "enrichment_only",
-			"_compressed_prompt":  fmt.Sprintf("Improve remediation for the following cluster:\n\n%s", string(payloadJSON)),
-		},
-		Prompts: ai.Prompts{
-			System: systemPrompt,
-		},
-	}
-
-	completion, err := c.provider.Analyze(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("enrichment AI call failed: %w", err)
-	}
-
-	return parseEnrichmentResponse(completion.Summary)
+	return prompt
 }
 
-func (c *Controller) runFullAnalysis(ctx context.Context, rc *cluster.RiskCluster) (*FullAnalysisResponse, error) {
-	payload := FullAnalysisPayload{
-		ClusterType: detectClusterType(rc),
-		Provider:    detectClusterProvider(rc),
-		RiskVector:  buildClusterRiskVector(rc),
-		Flags:       collectFlags(rc),
-	}
+// buildBatchPrompt creates the compressed batch summary for all pending clusters.
+func (c *Controller) buildBatchPrompt(clusters []cluster.RiskCluster, pending []pendingCluster) map[string]interface{} {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%d clusters requiring analysis:\n\n", len(pending)))
 
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal full analysis payload: %w", err)
-	}
+	for _, p := range pending {
+		rc := &clusters[p.index]
+		dist := severityDistribution(rc.Findings)
+		cats := collectCategories(rc.Findings)
 
-	systemPrompt := fullAnalysisSystemPrompt
-	if c.lang == "pt-BR" {
-		systemPrompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text must be in Portuguese.\n"
-	}
+		sb.WriteString(fmt.Sprintf("### %s [%s]\n", rc.ID, p.mode))
+		sb.WriteString(fmt.Sprintf("Type: %s | Provider: %s | Findings: %d\n",
+			detectClusterType(rc), detectClusterProvider(rc), len(rc.Findings)))
+		sb.WriteString(fmt.Sprintf("Severity: CRIT=%d HIGH=%d MED=%d LOW=%d\n",
+			dist["CRITICAL"], dist["HIGH"], dist["MEDIUM"], dist["LOW"]))
+		sb.WriteString(fmt.Sprintf("Categories: %s\n", strings.Join(cats, ", ")))
 
-	req := ai.Request{
-		Resources: []parser.NormalizedResource{
-			{Address: rc.ID, Type: detectClusterType(rc), Provider: detectClusterProvider(rc)},
-		},
-		Summary: map[string]interface{}{
-			"cluster_analysis":   true,
-			"mode":               "full_analysis",
-			"_compressed_prompt": fmt.Sprintf("Analyze the following cluster risk vector:\n\n%s", string(payloadJSON)),
-		},
-		Prompts: ai.Prompts{
-			System: systemPrompt,
-		},
-	}
-
-	completion, err := c.provider.Analyze(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("full analysis AI call failed: %w", err)
-	}
-
-	return parseFullAnalysisResponse(completion.Summary)
-}
-
-// ────────────────────────── Response Parsing ──────────────────
-
-func parseEnrichmentResponse(raw string) (*EnrichmentResponse, error) {
-	cleaned := extractJSON(raw)
-	var resp EnrichmentResponse
-	if err := json.Unmarshal([]byte(cleaned), &resp); err == nil && resp.Confidence > 0 {
-		return &resp, nil
-	}
-
-	// Fallback
-	return &EnrichmentResponse{
-		RemediationImprovements: cleaned,
-		ArchitecturalNotes:      "",
-		Confidence:              0.3,
-	}, nil
-}
-
-func parseFullAnalysisResponse(raw string) (*FullAnalysisResponse, error) {
-	cleaned := extractJSON(raw)
-	var resp FullAnalysisResponse
-	if err := json.Unmarshal([]byte(cleaned), &resp); err == nil && resp.Severity != "" {
-		return &resp, nil
-	}
-
-	// Fallback
-	return &FullAnalysisResponse{
-		Severity:          "INFO",
-		ArchitecturalRisk: cleaned,
-		Confidence:        0.3,
-	}, nil
-}
-
-func extractJSON(raw string) string {
-	raw = strings.TrimSpace(raw)
-
-	if idx := strings.Index(raw, "```json"); idx != -1 {
-		endIdx := strings.Index(raw[idx+7:], "```")
-		if endIdx != -1 {
-			return strings.TrimSpace(raw[idx+7 : idx+7+endIdx])
+		// Include top finding rule IDs for context
+		var ruleIDs []string
+		seen := make(map[string]bool)
+		for _, f := range rc.Findings {
+			if !seen[f.RuleID] && len(ruleIDs) < 5 {
+				ruleIDs = append(ruleIDs, f.RuleID)
+				seen[f.RuleID] = true
+			}
 		}
-	}
-	if idx := strings.Index(raw, "```"); idx != -1 {
-		endIdx := strings.Index(raw[idx+3:], "```")
-		if endIdx != -1 {
-			return strings.TrimSpace(raw[idx+3 : idx+3+endIdx])
+		sb.WriteString(fmt.Sprintf("Top rules: %s\n", strings.Join(ruleIDs, ", ")))
+
+		// Include risk vector for full analysis clusters
+		if p.mode == ModeFullAnalysis {
+			rv := buildClusterRiskVector(rc)
+			sb.WriteString(fmt.Sprintf("Risk vector: net=%d enc=%d iam=%d gov=%d obs=%d\n",
+				rv.Network, rv.Encryption, rv.Identity, rv.Governance, rv.Observability))
 		}
+
+		sb.WriteString("\n")
 	}
-	return raw
+
+	return map[string]interface{}{
+		"cluster_analysis": true,
+		"total_clusters":   len(pending),
+		"analysis":         sb.String(),
+	}
+}
+
+// buildBatchResources creates the resource list for the batched request.
+func (c *Controller) buildBatchResources(clusters []cluster.RiskCluster, pending []pendingCluster) []parser.NormalizedResource {
+	resources := make([]parser.NormalizedResource, 0, len(pending))
+	for _, p := range pending {
+		rc := &clusters[p.index]
+		resources = append(resources, parser.NormalizedResource{
+			Address:  rc.ID,
+			Type:     detectClusterType(rc),
+			Provider: detectClusterProvider(rc),
+		})
+	}
+	return resources
 }
 
 // ────────────────────────── Result Conversion ────────────────
@@ -576,6 +552,10 @@ func extractJSON(raw string) string {
 // ToFindings converts cluster-level AI results into standard rules.Finding entries.
 func ToFindings(results []ClusterResult, clusters []cluster.RiskCluster, providerName string) []rules.Finding {
 	var findings []rules.Finding
+	pName := providerName
+	if len(pName) > 3 {
+		pName = pName[:3]
+	}
 
 	for i, r := range results {
 		if r.Mode == ModeSkip || r.Error != nil {
@@ -589,26 +569,34 @@ func ToFindings(results []ClusterResult, clusters []cluster.RiskCluster, provide
 
 		switch r.Mode {
 		case ModeEnrichmentOnly:
-			if r.Enrichment != nil && r.Enrichment.RemediationImprovements != "" {
+			if r.Enrichment != nil && (r.Enrichment.RemediationImprovements != "" || r.Enrichment.ArchitecturalNotes != "") {
+				msg := r.Enrichment.ArchitecturalNotes
+				if msg == "" {
+					msg = r.Enrichment.RemediationImprovements
+				}
 				findings = append(findings, rules.Finding{
-					RuleID:      fmt.Sprintf("AI-CLU-%s-ENR", strings.ToUpper(providerName[:minInt(3, len(providerName))])),
+					RuleID:      fmt.Sprintf("AI-CLU-%s-ENR", strings.ToUpper(pName)),
 					Severity:    "INFO",
 					Category:    "best-practice",
 					Resource:    resource,
-					Message:     r.Enrichment.ArchitecturalNotes,
+					Message:     msg,
 					Remediation: r.Enrichment.RemediationImprovements,
 					Source:      "ai/" + providerName,
 				})
 			}
 
 		case ModeFullAnalysis:
-			if r.FullResult != nil && r.FullResult.ArchitecturalRisk != "" {
+			if r.FullResult != nil && (r.FullResult.ArchitecturalRisk != "" || r.FullResult.Remediation != "") {
 				category := "best-practice"
 				if len(r.FullResult.RiskCategories) > 0 {
 					category = normalizeCategory(r.FullResult.RiskCategories[0])
 				}
+				catCode := category
+				if len(catCode) > 3 {
+					catCode = catCode[:3]
+				}
 				findings = append(findings, rules.Finding{
-					RuleID:      fmt.Sprintf("AI-CLU-%s-%s", strings.ToUpper(providerName[:minInt(3, len(providerName))]), strings.ToUpper(category[:minInt(3, len(category))])),
+					RuleID:      fmt.Sprintf("AI-CLU-%s-%s", strings.ToUpper(pName), strings.ToUpper(catCode)),
 					Severity:    normalizeSeverity(r.FullResult.Severity),
 					Category:    category,
 					Resource:    resource,
@@ -624,8 +612,16 @@ func ToFindings(results []ClusterResult, clusters []cluster.RiskCluster, provide
 }
 
 // GenerateExplainSummary builds an explanation summary from cached cluster results.
-// This is used by --explain to avoid re-invoking AI.
+// Uses the AI-generated summary (from the single batched call) when available,
+// falling back to structured data from individual cluster results.
 func GenerateExplainSummary(cache *ClusterCache) string {
+	// Primary: use the AI-generated summary from the batched call
+	aiSummary := cache.Summary()
+	if aiSummary != "" {
+		return aiSummary
+	}
+
+	// Fallback: build from cached results
 	all := cache.AllResults()
 	if len(all) == 0 {
 		return ""
@@ -641,7 +637,7 @@ func GenerateExplainSummary(cache *ClusterCache) string {
 		switch r.Mode {
 		case ModeEnrichmentOnly:
 			enriched++
-			if r.Enrichment != nil {
+			if r.Enrichment != nil && r.Enrichment.ArchitecturalNotes != "" {
 				sb.WriteString(fmt.Sprintf("- [Enrichment] %s\n", r.Enrichment.ArchitecturalNotes))
 			}
 		case ModeFullAnalysis:

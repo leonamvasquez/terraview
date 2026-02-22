@@ -133,10 +133,17 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
 	defer cancel()
 
+	// When the provider is not ollama and no explicit URL was set, clear the
+	// default Ollama URL so each provider falls back to its own base URL.
+	explainURL := cfg.LLM.URL
+	if effectiveProvider != "ollama" && explainURL == "http://localhost:11434" {
+		explainURL = ""
+	}
+
 	providerCfg := ai.ProviderConfig{
 		Model:       effectiveModel,
 		APIKey:      cfg.LLM.APIKey,
-		BaseURL:     cfg.LLM.URL,
+		BaseURL:     explainURL,
 		Temperature: 0.3,
 		TimeoutSecs: effectiveTimeout,
 		MaxTokens:   8192,

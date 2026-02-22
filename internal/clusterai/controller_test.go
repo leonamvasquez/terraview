@@ -2,7 +2,6 @@ package clusterai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -18,29 +17,34 @@ import (
 
 type mockProvider struct {
 	callCount atomic.Int64
-	responses map[string]string // mode → raw response
+	findings  []rules.Finding // findings returned by Analyze
+	summary   string          // summary returned by Analyze
 	err       error
 }
 
 func newMockProvider() *mockProvider {
-	enrichResp, _ := json.Marshal(EnrichmentResponse{
-		RemediationImprovements: "Apply least-privilege IAM policies and enable encryption at rest",
-		ArchitecturalNotes:      "Cluster has multiple security-sensitive resources needing hardening",
-		Confidence:              0.92,
-	})
-	fullResp, _ := json.Marshal(FullAnalysisResponse{
-		RiskCategories:    []string{"security"},
-		Severity:          "HIGH",
-		ArchitecturalRisk: "Unrestricted network access combined with missing encryption",
-		Remediation:       "Restrict CIDR blocks and enable server-side encryption",
-		Confidence:        0.95,
-	})
-
 	return &mockProvider{
-		responses: map[string]string{
-			"enrichment_only": string(enrichResp),
-			"full_analysis":   string(fullResp),
+		findings: []rules.Finding{
+			{
+				RuleID:      "AI-MOC-SEC",
+				Severity:    "HIGH",
+				Category:    "security",
+				Resource:    "aws_security_group.open",
+				Message:     "Cluster has multiple security-sensitive resources needing hardening",
+				Remediation: "Apply least-privilege IAM policies and enable encryption at rest",
+				Source:      "ai/mock",
+			},
+			{
+				RuleID:      "AI-MOC-SEC",
+				Severity:    "HIGH",
+				Category:    "security",
+				Resource:    "aws_instance.web",
+				Message:     "Unrestricted network access combined with missing encryption",
+				Remediation: "Restrict CIDR blocks and enable server-side encryption",
+				Source:      "ai/mock",
+			},
 		},
+		summary: "Multiple clusters show significant security risks including unrestricted access and missing encryption.",
 	}
 }
 
@@ -54,14 +58,25 @@ func (m *mockProvider) Analyze(_ context.Context, req ai.Request) (ai.Completion
 		return ai.Completion{}, m.err
 	}
 
-	mode, _ := req.Summary["mode"].(string)
-	resp, ok := m.responses[mode]
-	if !ok {
-		resp = m.responses["enrichment_only"]
+	// Filter findings to only those matching requested resources
+	var matched []rules.Finding
+	for _, f := range m.findings {
+		for _, r := range req.Resources {
+			if f.Resource == r.Address || strings.Contains(f.Resource, r.Address) || strings.Contains(r.Address, f.Resource) {
+				matched = append(matched, f)
+				break
+			}
+		}
+	}
+
+	// If no matches, return all findings (for backward compat)
+	if len(matched) == 0 {
+		matched = m.findings
 	}
 
 	return ai.Completion{
-		Summary:  resp,
+		Findings: matched,
+		Summary:  m.summary,
 		Model:    "mock-model",
 		Provider: "mock",
 	}, nil
@@ -245,15 +260,21 @@ func TestCache_ReusePreventsSecondAICall(t *testing.T) {
 	rc := makeCluster("aws_security_group.open", findings, []string{"scanner:checkov"})
 	clusters := []cluster.RiskCluster{rc}
 
-	// First run
-	results1, _ := ctrl.Run(context.Background(), clusters)
+	// First run — single batched AI call
+	results1, stats1 := ctrl.Run(context.Background(), clusters)
 	callsAfterFirst := provider.callCount.Load()
 
 	if results1[0].Error != nil {
 		t.Fatalf("unexpected error: %v", results1[0].Error)
 	}
+	if callsAfterFirst != 1 {
+		t.Errorf("expected exactly 1 batched AI call, got %d", callsAfterFirst)
+	}
+	if stats1.Enriched != 1 {
+		t.Errorf("expected 1 enriched, got %d", stats1.Enriched)
+	}
 
-	// Second run — should use cache
+	// Second run — should use cache, no additional AI calls
 	results2, stats2 := ctrl.Run(context.Background(), clusters)
 	callsAfterSecond := provider.callCount.Load()
 
@@ -275,7 +296,6 @@ func TestExplain_DoesNotTriggerAI(t *testing.T) {
 	cache := NewClusterCache()
 	ctrl := NewController(provider, cache, 1)
 
-	// Pre-populate cache with results
 	findings := []rules.Finding{
 		makeFinding("HIGH", "aws_sg.open", "scanner:checkov", "security", "SG open"),
 		makeFinding("HIGH", "aws_sg.open", "scanner:checkov", "security", "SG wide"),
@@ -285,7 +305,7 @@ func TestExplain_DoesNotTriggerAI(t *testing.T) {
 	}
 	rc := makeCluster("aws_security_group.open", findings, []string{"scanner:checkov"})
 
-	// Run once to populate cache
+	// Run once to populate cache (single batched call)
 	ctrl.Run(context.Background(), []cluster.RiskCluster{rc})
 	callsAfterRun := provider.callCount.Load()
 
@@ -298,6 +318,10 @@ func TestExplain_DoesNotTriggerAI(t *testing.T) {
 	}
 	if summary == "" {
 		t.Error("expected non-empty explain summary from cache")
+	}
+	// Verify it uses the AI-generated summary
+	if !strings.Contains(summary, "security risks") {
+		t.Errorf("expected AI-generated summary, got: %q", summary)
 	}
 }
 
@@ -326,6 +350,18 @@ func TestController_SkipsLowSeverity(t *testing.T) {
 
 func TestController_EnrichmentMode(t *testing.T) {
 	provider := newMockProvider()
+	// Add a finding matching the enrichment cluster
+	provider.findings = []rules.Finding{
+		{
+			RuleID:      "AI-MOC-SEC",
+			Severity:    "HIGH",
+			Category:    "security",
+			Resource:    "aws_security_group.open",
+			Message:     "Cluster has multiple security-sensitive resources needing hardening",
+			Remediation: "Apply least-privilege IAM policies and enable encryption at rest",
+			Source:      "ai/mock",
+		},
+	}
 	ctrl := NewController(provider, nil, 2)
 
 	var findings []rules.Finding
@@ -343,8 +379,15 @@ func TestController_EnrichmentMode(t *testing.T) {
 	if results[0].Enrichment == nil {
 		t.Fatal("expected enrichment response")
 	}
-	if results[0].Enrichment.Confidence <= 0 {
-		t.Error("expected positive confidence")
+	if results[0].Enrichment.ArchitecturalNotes == "" {
+		t.Error("expected non-empty architectural notes from AI finding message")
+	}
+	if results[0].Enrichment.RemediationImprovements == "" {
+		t.Error("expected non-empty remediation improvements")
+	}
+	// Verify single batched API call
+	if provider.callCount.Load() != 1 {
+		t.Errorf("expected exactly 1 batched AI call, got %d", provider.callCount.Load())
 	}
 	if stats.Enriched != 1 {
 		t.Errorf("expected 1 enriched, got %d", stats.Enriched)
@@ -353,6 +396,18 @@ func TestController_EnrichmentMode(t *testing.T) {
 
 func TestController_FullAnalysisMode(t *testing.T) {
 	provider := newMockProvider()
+	// Add a finding matching the full analysis cluster
+	provider.findings = []rules.Finding{
+		{
+			RuleID:      "AI-MOC-SEC",
+			Severity:    "HIGH",
+			Category:    "security",
+			Resource:    "aws_instance.web",
+			Message:     "Unrestricted network access combined with missing encryption",
+			Remediation: "Restrict CIDR blocks and enable server-side encryption",
+			Source:      "ai/mock",
+		},
+	}
 	ctrl := NewController(provider, nil, 2)
 
 	findings := []rules.Finding{
@@ -371,6 +426,13 @@ func TestController_FullAnalysisMode(t *testing.T) {
 	if results[0].FullResult.Severity != "HIGH" {
 		t.Errorf("expected severity HIGH, got %q", results[0].FullResult.Severity)
 	}
+	if results[0].FullResult.ArchitecturalRisk == "" {
+		t.Error("expected non-empty architectural risk from AI finding message")
+	}
+	// Verify single batched API call
+	if provider.callCount.Load() != 1 {
+		t.Errorf("expected exactly 1 batched AI call, got %d", provider.callCount.Load())
+	}
 	if stats.FullAnalysis != 1 {
 		t.Errorf("expected 1 full analysis, got %d", stats.FullAnalysis)
 	}
@@ -378,8 +440,7 @@ func TestController_FullAnalysisMode(t *testing.T) {
 
 func TestController_ErrorHandling(t *testing.T) {
 	provider := &mockProvider{
-		err:       fmt.Errorf("connection refused"),
-		responses: map[string]string{},
+		err: fmt.Errorf("connection refused"),
 	}
 	ctrl := NewController(provider, nil, 2)
 
@@ -404,6 +465,27 @@ func TestController_ErrorHandling(t *testing.T) {
 
 func TestController_MixedClusters(t *testing.T) {
 	provider := newMockProvider()
+	// Add findings for all cluster types
+	provider.findings = []rules.Finding{
+		{
+			RuleID:      "AI-MOC-SEC",
+			Severity:    "HIGH",
+			Category:    "security",
+			Resource:    "aws_security_group.enrich",
+			Message:     "Security group needs hardening",
+			Remediation: "Restrict CIDR blocks",
+			Source:      "ai/mock",
+		},
+		{
+			RuleID:      "AI-MOC-SEC",
+			Severity:    "HIGH",
+			Category:    "security",
+			Resource:    "aws_instance.full",
+			Message:     "Unrestricted network access",
+			Remediation: "Apply least-privilege policies",
+			Source:      "ai/mock",
+		},
+	}
 	ctrl := NewController(provider, nil, 2)
 
 	clusters := []cluster.RiskCluster{
@@ -443,6 +525,11 @@ func TestController_MixedClusters(t *testing.T) {
 	}
 	if results[2].Mode != ModeFullAnalysis {
 		t.Errorf("cluster 2 should be full_analysis, got %s", results[2].Mode)
+	}
+
+	// Key assertion: only 1 batched AI call for 2 non-skip clusters
+	if provider.callCount.Load() != 1 {
+		t.Errorf("expected exactly 1 batched AI call, got %d", provider.callCount.Load())
 	}
 
 	if stats.Skipped != 1 {
@@ -552,9 +639,9 @@ func TestCache_ConcurrencySafety(t *testing.T) {
 
 func TestDetectClusterProvider(t *testing.T) {
 	tests := []struct {
-		id       string
+		id        string
 		resources []string
-		want     string
+		want      string
 	}{
 		{"aws_security_group.open", []string{"aws_security_group.open"}, "aws"},
 		{"azurerm_virtual_machine.vm", []string{"azurerm_virtual_machine.vm"}, "azure"},
@@ -608,7 +695,9 @@ func TestCollectCategories(t *testing.T) {
 }
 
 func TestGenerateExplainSummary(t *testing.T) {
+	// Test 1: AI summary takes priority
 	cache := NewClusterCache()
+	cache.SetSummary("AI-generated assessment of the infrastructure security.")
 	cache.Put("key1", CachedClusterResult{
 		Mode: ModeEnrichmentOnly,
 		Enrichment: &EnrichmentResponse{
@@ -617,7 +706,15 @@ func TestGenerateExplainSummary(t *testing.T) {
 			Confidence:              0.9,
 		},
 	})
-	cache.Put("key2", CachedClusterResult{
+
+	summary := GenerateExplainSummary(cache)
+	if summary != "AI-generated assessment of the infrastructure security." {
+		t.Errorf("expected AI summary to take priority, got: %q", summary)
+	}
+
+	// Test 2: Falls back to structured data when no AI summary
+	cache2 := NewClusterCache()
+	cache2.Put("key2", CachedClusterResult{
 		Mode: ModeFullAnalysis,
 		FullResult: &FullAnalysisResponse{
 			Severity:          "HIGH",
@@ -627,12 +724,12 @@ func TestGenerateExplainSummary(t *testing.T) {
 		},
 	})
 
-	summary := GenerateExplainSummary(cache)
-	if summary == "" {
-		t.Error("expected non-empty summary")
+	summary2 := GenerateExplainSummary(cache2)
+	if summary2 == "" {
+		t.Error("expected non-empty fallback summary")
 	}
-	if !strings.Contains(summary, "enriched") && !strings.Contains(summary, "analyzed") {
-		t.Error("summary should mention enriched/analyzed counts")
+	if !strings.Contains(summary2, "analyzed") {
+		t.Error("fallback summary should mention analyzed counts")
 	}
 }
 
