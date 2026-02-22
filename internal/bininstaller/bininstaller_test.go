@@ -24,24 +24,35 @@ func testPlatform(os, arch string) platform.PlatformInfo {
 
 func TestTfsecInstaller_DownloadURL(t *testing.T) {
 	inst := &TfsecInstaller{}
+	version := inst.LatestVersion()
 	tests := []struct {
-		os, arch string
-		contains string
+		os, arch  string
+		contains  string
+		isArchive bool
 	}{
-		{"linux", "amd64", "tfsec-linux-amd64"},
-		{"linux", "arm64", "tfsec-linux-arm64"},
-		{"darwin", "amd64", "tfsec-darwin-amd64"},
-		{"darwin", "arm64", "tfsec-darwin-arm64"},
-		{"windows", "amd64", "tfsec-windows-amd64.exe"},
+		// Linux/Darwin: direct binary (no .tar.gz)
+		{"linux", "amd64", "tfsec-linux-amd64", false},
+		{"linux", "arm64", "tfsec-linux-arm64", false},
+		{"darwin", "amd64", "tfsec-darwin-amd64", false},
+		{"darwin", "arm64", "tfsec-darwin-arm64", false},
+		// Windows: tarball archive
+		{"windows", "amd64", "tfsec_" + version + "_windows_amd64.tar.gz", true},
+		{"windows", "arm64", "tfsec_" + version + "_windows_arm64.tar.gz", true},
 	}
 	for _, tc := range tests {
 		p := testPlatform(tc.os, tc.arch)
-		url := inst.DownloadURL(p, "1.28.11")
+		url := inst.DownloadURL(p, version)
 		if !strings.Contains(url, tc.contains) {
 			t.Errorf("tfsec URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
 		}
 		if !strings.HasPrefix(url, "https://") {
 			t.Errorf("URL should start with https://, got %q", url)
+		}
+		if tc.isArchive && !strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("tfsec windows URL should end in .tar.gz, got %q", url)
+		}
+		if !tc.isArchive && strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("tfsec linux/darwin URL should NOT end in .tar.gz, got %q", url)
 		}
 	}
 }
@@ -51,40 +62,50 @@ func TestTerrascanInstaller_DownloadURL(t *testing.T) {
 	tests := []struct {
 		os, arch string
 		contains string
+		empty    bool
 	}{
-		{"linux", "amd64", "Linux_x86_64"},
-		{"linux", "arm64", "Linux_arm64"},
-		{"darwin", "amd64", "Darwin_x86_64"},
-		{"darwin", "arm64", "Darwin_arm64"},
-		{"windows", "amd64", "Windows_x86_64"},
+		{"linux", "amd64", "Linux_x86_64", false},
+		{"linux", "arm64", "Linux_arm64", false},
+		{"darwin", "amd64", "Darwin_x86_64", false},
+		{"darwin", "arm64", "Darwin_arm64", false},
+		{"windows", "amd64", "Windows_x86_64", false},
+		{"windows", "arm64", "", true}, // NOT available
 	}
 	for _, tc := range tests {
 		p := testPlatform(tc.os, tc.arch)
 		url := inst.DownloadURL(p, "1.19.9")
-		if !strings.Contains(url, tc.contains) {
-			t.Errorf("terrascan URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
+		if tc.empty {
+			if url != "" {
+				t.Errorf("terrascan URL for %s/%s should be empty (not available), got %q", tc.os, tc.arch, url)
+			}
+		} else {
+			if !strings.Contains(url, tc.contains) {
+				t.Errorf("terrascan URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
+			}
 		}
 	}
 }
 
-func TestKICSInstaller_DownloadURL(t *testing.T) {
+func TestKICSInstaller_NoDirectBinary(t *testing.T) {
+	// KICS no longer ships pre-built binaries in GitHub Releases.
 	inst := &KICSInstaller{}
-	tests := []struct {
-		os, arch string
-		contains string
-	}{
-		{"linux", "amd64", "kics_2.1.3_linux_amd64"},
-		{"linux", "arm64", "kics_2.1.3_linux_arm64"},
-		{"darwin", "amd64", "kics_2.1.3_darwin_amd64"},
-		{"darwin", "arm64", "kics_2.1.3_darwin_arm64"},
-		{"windows", "amd64", "kics_2.1.3_windows_amd64"},
-	}
-	for _, tc := range tests {
-		p := testPlatform(tc.os, tc.arch)
-		url := inst.DownloadURL(p, "2.1.3")
-		if !strings.Contains(url, tc.contains) {
-			t.Errorf("kics URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
+	for _, p := range []platform.PlatformInfo{
+		{OS: "linux", Arch: "amd64"},
+		{OS: "linux", Arch: "arm64"},
+		{OS: "darwin", Arch: "amd64"},
+		{OS: "darwin", Arch: "arm64"},
+		{OS: "windows", Arch: "amd64"},
+	} {
+		url := inst.DownloadURL(p, inst.LatestVersion())
+		if url != "" {
+			t.Errorf("kics should have no download URL for %s/%s, got %q", p.OS, p.Arch, url)
 		}
+	}
+	if inst.SupportsDirectBinary() {
+		t.Error("kics should not support direct binary")
+	}
+	if inst.LatestVersion() == "" {
+		t.Error("kics should still report a latest version")
 	}
 }
 

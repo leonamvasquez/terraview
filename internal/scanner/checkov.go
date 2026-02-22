@@ -28,11 +28,16 @@ func (s *CheckovScanner) EnsureInstalled() (bool, InstallHint) {
 	if s.Available() {
 		return true, InstallHint{}
 	}
+	// Try auto-install via package manager (pip3, brew, etc.)
+	result := AutoInstallScanner("checkov")
+	if result.Installed {
+		return true, InstallHint{}
+	}
 	return false, InstallHint{
-		Pip:     "pip install checkov",
+		Pip:     "pip3 install checkov",
 		Brew:    "brew install checkov",
 		URL:     "https://www.checkov.io/",
-		Default: "Install with: pip install checkov",
+		Default: "pip3 install checkov  (or: brew install checkov)",
 	}
 }
 

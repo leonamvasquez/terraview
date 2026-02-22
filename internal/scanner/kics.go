@@ -28,7 +28,7 @@ func (s *KICSScanner) EnsureInstalled() (bool, InstallHint) {
 	if s.Available() {
 		return true, InstallHint{}
 	}
-	// Try auto-install via bininstaller
+	// Try auto-install via brew (macOS/Linux only)
 	result := AutoInstallScanner("kics")
 	if result.Installed {
 		return true, InstallHint{}
@@ -36,7 +36,7 @@ func (s *KICSScanner) EnsureInstalled() (bool, InstallHint) {
 	return false, InstallHint{
 		Brew:    "brew install kics",
 		URL:     "https://kics.io/",
-		Default: "Install with: brew install kics",
+		Default: "brew install kics  (or: docker run checkmarx/kics)",
 	}
 }
 
