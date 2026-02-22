@@ -386,7 +386,7 @@ func executeReview() (string, int, error) {
 	// 4c. Generate diagram if requested (deterministic, no AI)
 	if diagramFlag {
 		gen := diagram.NewGenerator()
-		result.Diagram = gen.Generate(resources)
+		result.Diagram = gen.GenerateWithGraph(resources, topoGraph)
 		logVerbose("Infrastructure diagram generated")
 	}
 
