@@ -35,9 +35,6 @@ Examples:
 	RunE: runValidate,
 }
 
-func init() {
-}
-
 func runValidate(cmd *cobra.Command, args []string) error {
 	if err := workspace.Validate(workDir); err != nil {
 		return err
