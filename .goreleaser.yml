@@ -63,7 +63,7 @@ release:
   github:
     owner: leonamvasquez
     name: terraview
-  draft: true
+  draft: false
   prerelease: auto
   name_template: "{{ .ProjectName }} v{{ .Version }}"
 
