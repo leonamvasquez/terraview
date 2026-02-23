@@ -19,6 +19,15 @@ review.md
 drift.json
 plan.json
 tfplan
+!examples/plan.json
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+
+# Environment / secrets
+.env
+.env.*
 
 # IDE
 .idea/
@@ -33,3 +42,6 @@ Thumbs.db
 
 # Vendor (if used)
 vendor/
+
+# Logs
+*.log

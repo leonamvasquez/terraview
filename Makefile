@@ -43,10 +43,10 @@ lint:
 	fi
 
 run: build
-	$(BUILD_DIR)/$(BINARY_NAME) review --plan examples/plan.json --skip-llm -v
+	$(BUILD_DIR)/$(BINARY_NAME) scan checkov --plan examples/plan.json -v
 
 run-with-llm: build
-	$(BUILD_DIR)/$(BINARY_NAME) review --plan examples/plan.json -v
+	$(BUILD_DIR)/$(BINARY_NAME) scan checkov --plan examples/plan.json --ai -v
 
 # Build for all platforms
 dist: clean
@@ -83,7 +83,7 @@ docker-run: docker-build
 	docker run --rm --network host \
 		-v $(PWD)/examples:/workspace \
 		$(BINARY_NAME):latest \
-		review --plan /workspace/plan.json --output /workspace -v
+		scan checkov --plan /workspace/plan.json --output /workspace -v
 
 install: build
 	@echo "Installing $(BINARY_NAME) $(VERSION)..."
@@ -136,8 +136,8 @@ help:
 	@echo "  clean        Remove build artifacts"
 	@echo ""
 	@echo "Run:"
-	@echo "  run          Build and review example plan (no LLM)"
-	@echo "  run-with-llm Build and review example plan (with LLM)"
+	@echo "  run          Build and scan example plan (no LLM)"
+	@echo "  run-with-llm Build and scan example plan (with LLM)"
 	@echo ""
 	@echo "Distribution:"
 	@echo "  dist         Build for all platforms (linux/darwin/windows, amd64/arm64)"

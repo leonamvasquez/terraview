@@ -104,9 +104,11 @@ var layerDefs = map[string]layerDef{
 // layerMapping maps resource types to their logical layer.
 var layerMapping = map[string]string{
 	// DNS & CDN
-	"aws_route53_record":          "DNS",
-	"aws_route53_zone":            "DNS",
-	"aws_cloudfront_distribution": "DNS",
+	"aws_route53_record":                    "DNS",
+	"aws_route53_zone":                      "DNS",
+	"aws_cloudfront_distribution":           "DNS",
+	"aws_cloudfront_origin_access_control":  "DNS",
+	"aws_cloudfront_origin_access_identity": "DNS",
 
 	// Access / Load Balancing
 	"aws_lb":                         "Access",
@@ -139,6 +141,8 @@ var layerMapping = map[string]string{
 	"aws_instance":                  "Compute",
 	"aws_launch_template":           "Compute",
 	"aws_autoscaling_group":         "Compute",
+	"aws_appautoscaling_target":     "Compute",
+	"aws_appautoscaling_policy":     "Compute",
 	"aws_ecs_cluster":               "Compute",
 	"aws_ecs_service":               "Compute",
 	"aws_ecs_task_definition":       "Compute",
@@ -154,16 +158,22 @@ var layerMapping = map[string]string{
 	"aws_db_instance":                                    "Data",
 	"aws_db_subnet_group":                                "Data",
 	"aws_rds_cluster":                                    "Data",
+	"aws_rds_cluster_instance":                           "Data",
 	"aws_dynamodb_table":                                 "Data",
 	"aws_elasticache_cluster":                            "Data",
 	"aws_elasticache_replication_group":                  "Data",
+	"aws_elasticache_subnet_group":                       "Data",
 	"aws_s3_bucket":                                      "Data",
 	"aws_s3_bucket_versioning":                           "Data",
 	"aws_s3_bucket_server_side_encryption_configuration": "Data",
 	"aws_s3_bucket_public_access_block":                  "Data",
 	"aws_s3_bucket_policy":                               "Data",
+	"aws_s3_bucket_lifecycle_configuration":              "Data",
+	"aws_s3_bucket_logging":                              "Data",
+	"aws_s3_bucket_cors_configuration":                   "Data",
 	"aws_sqs_queue":                                      "Data",
 	"aws_sns_topic":                                      "Data",
+	"aws_sns_topic_subscription":                         "Data",
 	"aws_ebs_volume":                                     "Data",
 	"azurerm_storage_account":                            "Data",
 	"google_storage_bucket":                              "Data",
@@ -193,55 +203,87 @@ var layerMapping = map[string]string{
 	"aws_cloudtrail":                    "Monitoring",
 	"aws_flow_log":                      "Monitoring",
 	"aws_config_configuration_recorder": "Monitoring",
+
+	// Managed rules (Security Layer)
+	"aws_wafv2_web_acl_association": "Security",
 }
 
 // serviceLabels maps resource types to friendly display names.
 var serviceLabels = map[string]string{
 	// AWS
-	"aws_vpc":                     "Amazon VPC",
-	"aws_subnet":                  "Subnet",
-	"aws_internet_gateway":        "Internet Gateway",
-	"aws_nat_gateway":             "NAT Gateway",
-	"aws_route_table":             "Route Table",
-	"aws_eip":                     "Elastic IP",
-	"aws_instance":                "EC2 Instance",
-	"aws_launch_template":         "Launch Template",
-	"aws_autoscaling_group":       "Auto Scaling Group",
-	"aws_ecs_cluster":             "ECS Cluster",
-	"aws_ecs_service":             "ECS Service",
-	"aws_ecs_task_definition":     "ECS Task Definition",
-	"aws_eks_cluster":             "EKS Cluster",
-	"aws_eks_node_group":          "EKS Node Group",
-	"aws_lambda_function":         "Lambda Function",
-	"aws_db_instance":             "Amazon RDS",
-	"aws_rds_cluster":             "RDS Cluster",
-	"aws_dynamodb_table":          "DynamoDB Table",
-	"aws_elasticache_cluster":     "ElastiCache",
-	"aws_s3_bucket":               "Amazon S3",
-	"aws_ebs_volume":              "EBS Volume",
-	"aws_sqs_queue":               "Amazon SQS",
-	"aws_sns_topic":               "Amazon SNS",
-	"aws_lb":                      "Application LB",
-	"aws_alb":                     "Application LB",
-	"aws_lb_listener":             "LB Listener",
-	"aws_lb_target_group":         "LB Target Group",
-	"aws_cloudfront_distribution": "Amazon CloudFront",
-	"aws_route53_zone":            "Amazon Route 53",
-	"aws_route53_record":          "Route 53 Record",
-	"aws_api_gateway_rest_api":    "API Gateway",
-	"aws_apigatewayv2_api":        "API Gateway v2",
-	"aws_security_group":          "Security Group",
-	"aws_iam_role":                "IAM Role",
-	"aws_iam_policy":              "IAM Policy",
-	"aws_iam_role_policy":         "IAM Role Policy",
-	"aws_iam_user":                "IAM User",
-	"aws_kms_key":                 "KMS Key",
-	"aws_acm_certificate":         "ACM Certificate",
-	"aws_wafv2_web_acl":           "WAF v2 ACL",
-	"aws_cloudwatch_log_group":    "CloudWatch Logs",
-	"aws_cloudwatch_metric_alarm": "CloudWatch Alarm",
-	"aws_cloudtrail":              "CloudTrail",
-	"aws_flow_log":                "VPC Flow Log",
+	"aws_vpc":                               "Amazon VPC",
+	"aws_subnet":                            "Subnet",
+	"aws_internet_gateway":                  "Internet Gateway",
+	"aws_nat_gateway":                       "NAT Gateway",
+	"aws_route_table":                       "Route Table",
+	"aws_eip":                               "Elastic IP",
+	"aws_instance":                          "EC2 Instance",
+	"aws_launch_template":                   "Launch Template",
+	"aws_autoscaling_group":                 "Auto Scaling Group",
+	"aws_ecs_cluster":                       "ECS Cluster",
+	"aws_ecs_service":                       "ECS Service",
+	"aws_ecs_task_definition":               "ECS Task Definition",
+	"aws_eks_cluster":                       "EKS Cluster",
+	"aws_eks_node_group":                    "EKS Node Group",
+	"aws_lambda_function":                   "Lambda Function",
+	"aws_db_instance":                       "Amazon RDS",
+	"aws_rds_cluster":                       "RDS Cluster",
+	"aws_dynamodb_table":                    "DynamoDB Table",
+	"aws_elasticache_cluster":               "ElastiCache",
+	"aws_s3_bucket":                         "Amazon S3",
+	"aws_ebs_volume":                        "EBS Volume",
+	"aws_sqs_queue":                         "Amazon SQS",
+	"aws_sns_topic":                         "Amazon SNS",
+	"aws_lb":                                "Application LB",
+	"aws_alb":                               "Application LB",
+	"aws_lb_listener":                       "LB Listener",
+	"aws_lb_target_group":                   "LB Target Group",
+	"aws_cloudfront_distribution":           "Amazon CloudFront",
+	"aws_route53_zone":                      "Amazon Route 53",
+	"aws_route53_record":                    "Route 53 Record",
+	"aws_api_gateway_rest_api":              "API Gateway",
+	"aws_apigatewayv2_api":                  "API Gateway v2",
+	"aws_security_group":                    "Security Group",
+	"aws_iam_role":                          "IAM Role",
+	"aws_iam_policy":                        "IAM Policy",
+	"aws_iam_role_policy":                   "IAM Role Policy",
+	"aws_kms_key":                           "KMS Key",
+	"aws_acm_certificate":                   "ACM Certificate",
+	"aws_wafv2_web_acl":                     "WAF v2 ACL",
+	"aws_cloudwatch_log_group":              "CloudWatch Logs",
+	"aws_cloudwatch_metric_alarm":           "CloudWatch Alarm",
+	"aws_cloudtrail":                        "CloudTrail",
+	"aws_flow_log":                          "VPC Flow Log",
+	"aws_rds_cluster_instance":              "RDS Instance",
+	"aws_appautoscaling_target":             "Auto Scaling Target",
+	"aws_appautoscaling_policy":             "Auto Scaling Policy",
+	"aws_cloudfront_origin_access_control":  "CloudFront OAC",
+	"aws_cloudfront_origin_access_identity": "CloudFront OAI",
+	"aws_elasticache_replication_group":     "ElastiCache Redis",
+	"aws_elasticache_subnet_group":          "ElastiCache Subnet",
+	"aws_s3_bucket_lifecycle_configuration": "S3 Lifecycle",
+	"aws_s3_bucket_versioning":              "S3 Versioning",
+	"aws_s3_bucket_server_side_encryption_configuration": "S3 Encryption",
+	"aws_s3_bucket_public_access_block":                  "S3 Access Block",
+	"aws_s3_bucket_policy":                               "S3 Bucket Policy",
+	"aws_s3_bucket_logging":                              "S3 Logging",
+	"aws_s3_bucket_cors_configuration":                   "S3 CORS",
+	"aws_iam_role_policy_attachment":                     "IAM Attachment",
+	"aws_iam_instance_profile":                           "Instance Profile",
+	"aws_iam_group":                                      "IAM Group",
+	"aws_kms_alias":                                      "KMS Alias",
+	"aws_route_table_association":                        "Route Assoc.",
+	"aws_route":                                          "Route",
+	"aws_db_subnet_group":                                "DB Subnet Group",
+	"aws_vpc_peering_connection":                         "VPC Peering",
+	"aws_network_interface":                              "Network Interface",
+	"aws_security_group_rule":                            "SG Rule",
+	"aws_lambda_permission":                              "Lambda Permission",
+	"aws_waf_web_acl":                                    "WAF ACL",
+	"aws_wafv2_web_acl_association":                      "WAF Association",
+	"aws_config_configuration_recorder":                  "AWS Config",
+	"aws_sns_topic_subscription":                         "SNS Subscription",
+	"aws_lb_target_group_attachment":                     "TG Attachment",
 	// Azure
 	"azurerm_virtual_network":       "Virtual Network",
 	"azurerm_subnet":                "Subnet",
@@ -265,19 +307,29 @@ func getLayer(resourceType string) string {
 
 	parts := strings.Split(resourceType, "_")
 	if len(parts) >= 2 {
+		// Check data-related keywords FIRST so "rds_cluster" → Data, not Compute.
 		switch {
-		case containsPart(parts, "vpc") || containsPart(parts, "subnet") || containsPart(parts, "network"):
-			return "Network"
-		case containsPart(parts, "instance") || containsPart(parts, "cluster") || containsPart(parts, "lambda"):
-			return "Compute"
-		case containsPart(parts, "db") || containsPart(parts, "database") || containsPart(parts, "storage") || containsPart(parts, "bucket") || containsPart(parts, "s3"):
+		case containsPart(parts, "db") || containsPart(parts, "rds") || containsPart(parts, "database") ||
+			containsPart(parts, "dynamodb") || containsPart(parts, "elasticache") ||
+			containsPart(parts, "storage") || containsPart(parts, "bucket") || containsPart(parts, "s3") ||
+			containsPart(parts, "sqs") || containsPart(parts, "sns"):
 			return "Data"
-		case containsPart(parts, "lb") || containsPart(parts, "gateway") || containsPart(parts, "dns") || containsPart(parts, "route53"):
+		case containsPart(parts, "cloudfront") || containsPart(parts, "route53") || containsPart(parts, "dns"):
+			return "DNS"
+		case containsPart(parts, "lb") || containsPart(parts, "alb") || containsPart(parts, "gateway"):
 			return "Access"
-		case containsPart(parts, "security") || containsPart(parts, "iam") || containsPart(parts, "kms") || containsPart(parts, "firewall"):
+		case containsPart(parts, "security") || containsPart(parts, "iam") || containsPart(parts, "kms") ||
+			containsPart(parts, "firewall") || containsPart(parts, "waf") || containsPart(parts, "acm"):
 			return "Security"
-		case containsPart(parts, "cloudwatch") || containsPart(parts, "log") || containsPart(parts, "alarm") || containsPart(parts, "monitor"):
+		case containsPart(parts, "cloudwatch") || containsPart(parts, "log") || containsPart(parts, "alarm") ||
+			containsPart(parts, "monitor") || containsPart(parts, "cloudtrail") || containsPart(parts, "config"):
 			return "Monitoring"
+		case containsPart(parts, "vpc") || containsPart(parts, "subnet") || containsPart(parts, "network") ||
+			containsPart(parts, "route") || containsPart(parts, "eip") || containsPart(parts, "nat"):
+			return "Network"
+		case containsPart(parts, "instance") || containsPart(parts, "cluster") || containsPart(parts, "lambda") ||
+			containsPart(parts, "ecs") || containsPart(parts, "eks") || containsPart(parts, "autoscaling"):
+			return "Compute"
 		}
 	}
 
@@ -411,7 +463,6 @@ const (
 	diagramWidth  = 80
 	connectorChar = "│"
 	arrowDown     = "▼"
-	arrowRight    = "►"
 	cornerTL      = "┌"
 	cornerTR      = "┐"
 	cornerBL      = "└"

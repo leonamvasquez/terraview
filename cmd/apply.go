@@ -16,44 +16,59 @@ var (
 )
 
 var applyCmd = &cobra.Command{
-	Use:   "apply",
-	Short: "Review the plan and apply if safe",
-	Long: `Runs a full review of the Terraform plan, then conditionally applies it.
+	Use:   "apply [scanner]",
+	Short: "Scan and conditionally apply the Terraform plan",
+	Long: `Runs a full scan of the Terraform plan, then conditionally applies it.
+
+The scanner is specified as a positional argument (same pattern as scan).
 
 Behavior:
   - Blocks if any CRITICAL findings are detected
-  - Shows review summary and asks for confirmation (interactive mode)
+  - Shows scan summary and asks for confirmation (interactive mode)
   - Use --non-interactive for CI pipelines (blocks on CRITICAL, auto-approves otherwise)
 
 Examples:
-  terraview apply                     # interactive mode
-  terraview apply --non-interactive   # CI mode
-  terraview apply --ai                # review with AI, interactive`,
+  terraview apply checkov                     # scan + interactive apply
+  terraview apply checkov --ai                # scan + AI + interactive apply
+  terraview apply checkov --non-interactive   # CI mode
+  terraview apply checkov --all               # everything enabled + apply`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runApply,
 }
 
 func init() {
 	applyCmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip confirmation prompt (for CI)")
-	applyCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	applyCmd.Flags().StringVar(&promptDir, "prompts", "", "Path to prompts directory")
-	applyCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for review files")
-	applyCmd.Flags().StringVar(&ollamaURL, "ollama-url", "", "Ollama server URL (legacy, prefer --provider)")
-	applyCmd.Flags().StringVar(&ollamaModel, "model", "", "AI model to use")
-	applyCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
-	applyCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
-	applyCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
 	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
-	applyCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
-	applyCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced resources")
+	applyCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
 	applyCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
 	applyCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
-	applyCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
+	applyCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	applyCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
+	applyCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
-	// 1. Run review
-	_, exitCode, err := executeReview()
+	// Resolve scanner from positional arg
+	scannerName := ""
+	if len(args) > 0 {
+		scannerName = args[0]
+	}
+
+	// --all enables all features
+	if allFlag {
+		explainFlag = true
+		diagramFlag = true
+		impactFlag = true
+		aiEnabled = true
+	}
+
+	// Validate: must specify a scanner or --ai (or both)
+	if scannerName == "" && !aiEnabled && !explainFlag && !diagramFlag && findingsFile == "" {
+		return fmt.Errorf("specify a scanner or --ai\n\nUsage:\n  terraview apply checkov          # scan + apply\n  terraview apply checkov --ai     # scan + AI + apply\n\nAvailable scanners: checkov, tfsec, terrascan")
+	}
+
+	// 1. Run scan
+	_, exitCode, err := executeReview(scannerName)
 	if err != nil {
 		return err
 	}

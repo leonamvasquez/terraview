@@ -14,8 +14,7 @@ import (
 )
 
 var providerCmd = &cobra.Command{
-	Use:     "provider",
-	Aliases: []string{"ai"},
+	Use: "provider",
 	Short:   "Manage AI providers and LLM runtimes",
 	Long: `Manage the AI providers and runtimes used by terraview.
 

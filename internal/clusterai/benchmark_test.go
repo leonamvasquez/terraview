@@ -18,9 +18,10 @@ func BenchmarkController_10kFindings(b *testing.B) {
 	var allFindings []rules.Finding
 	for i := 0; i < 200; i++ {
 		resType := "aws_security_group"
-		if i%3 == 1 {
+		switch i % 3 {
+		case 1:
 			resType = "aws_s3_bucket"
-		} else if i%3 == 2 {
+		case 2:
 			resType = "aws_instance"
 		}
 		resource := fmt.Sprintf("%s.resource_%d", resType, i)

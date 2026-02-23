@@ -27,93 +27,82 @@ import (
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
-	"github.com/leonamvasquez/terraview/internal/secondopinion"
-	"github.com/leonamvasquez/terraview/internal/smell"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/leonamvasquez/terraview/internal/trend"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var (
-	planFile          string
-	promptDir         string
-	outputDir         string
-	ollamaURL         string
-	ollamaModel       string
-	aiProvider        string
-	timeout           int
-	temperature       float64
-	aiEnabled         bool
-	outputFormat      string
-	strict            bool
-	safeMode          bool
-	explainFlag       bool
-	diagramFlag       bool
-	blastRadiusFlag   bool
-	findingsFile      string
-	secondOpinionFlag bool
-	trendFlag         bool
-	smellFlag         bool
-	scannerFlag       string
+	// Scan-local flags
+	aiEnabled    bool
+	strict       bool
+	explainFlag  bool
+	diagramFlag  bool
+	impactFlag   bool
+	findingsFile string
+	allFlag      bool
 )
 
-var planCmd = &cobra.Command{
-	Use:     "plan",
-	Aliases: []string{"review"},
-	Short:   "Analyze a Terraform plan for security, architecture, and best practices",
-	Long: `Analyzes a Terraform plan using a security scanner and optional AI review.
+var scanCmd = &cobra.Command{
+	Use:   "scan [scanner]",
+	Short: "Security scan and optional AI analysis of a Terraform plan",
+	Long: `Analyzes a Terraform plan using a security scanner and/or AI review.
 
-A scanner must be explicitly specified via --scanner.
+The scanner is specified as a positional argument.
 If --plan is not specified, terraview will automatically run:
   terraform init   (if needed)
   terraform plan   (generates plan)
   terraform show   (exports JSON)
 
 Examples:
-  terraview plan --scanner checkov            # use checkov
-  terraview plan --scanner tfsec              # use tfsec
-  terraview plan --scanner checkov --ai       # scanner + AI analysis
-  terraview plan --scanner checkov --plan p.json  # use existing plan
-  terraview plan --scanner checkov --ai --provider gemini  # Gemini AI
-  terraview plan --scanner checkov --ai --explain  # AI + explanation
-  terraview plan --scanner checkov --diagram  # scanner + diagram
-  terraview plan --diagram                    # diagram only (no scanner)
-  terraview plan --scanner checkov --blast-radius  # blast radius
-  terraview plan --scanner checkov --format compact  # minimal output
-  terraview plan --scanner checkov --format sarif    # SARIF for CI
-  terraview plan --scanner checkov --strict   # HIGH returns exit code 2
-  terraview plan --scanner checkov --safe     # safe mode
-  terraview plan --findings checkov.json      # import external findings`,
-	RunE: runPlan,
+  terraview scan checkov                       # security scanner only
+  terraview scan checkov --ai                  # scanner + AI analysis
+  terraview scan --ai                          # AI-only analysis (no scanner)
+  terraview scan checkov --all                 # everything enabled
+  terraview scan checkov --ai --provider gemini  # Gemini AI
+  terraview scan checkov --explain             # scanner + AI explanation
+  terraview scan checkov --diagram             # scanner + diagram
+  terraview scan checkov --impact              # impact analysis
+  terraview scan checkov --format compact      # minimal output
+  terraview scan checkov --format sarif        # SARIF for CI
+  terraview scan checkov --strict              # HIGH returns exit code 2
+  terraview scan checkov --findings ext.json   # import external findings`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runScan,
 }
 
 func init() {
-	planCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	planCmd.Flags().StringVar(&promptDir, "prompts", "", "Path to prompts directory")
-	planCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for review files")
-	planCmd.Flags().StringVar(&ollamaURL, "ollama-url", "", "Ollama server URL (legacy, prefer --provider)")
-	planCmd.Flags().StringVar(&ollamaModel, "model", "", "AI model to use")
-	planCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
-	planCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
-	planCmd.Flags().Float64Var(&temperature, "temperature", -1, "AI temperature (0.0-1.0)")
-	planCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
-	planCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json, sarif (default pretty)")
-	planCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
-	planCmd.Flags().BoolVar(&safeMode, "safe", false, "Safe mode: light model, reduced threads, stricter resource limits")
-	planCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
-	planCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
-	planCmd.Flags().BoolVar(&blastRadiusFlag, "blast-radius", false, "Analyze dependency blast radius of changes")
-	planCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
-	planCmd.Flags().BoolVar(&secondOpinionFlag, "second-opinion", false, "AI validates scanner findings (implies --ai)")
-	planCmd.Flags().BoolVar(&trendFlag, "trend", false, "Track and display score trends over time")
-	planCmd.Flags().BoolVar(&smellFlag, "smell", false, "Detect infrastructure design smells")
-	planCmd.Flags().StringVar(&scannerFlag, "scanner", "", "Scanner to use: checkov, tfsec, or terrascan")
+	scanCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	scanCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
+	scanCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	scanCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
+	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
+	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
+	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
 }
 
-func runPlan(cmd *cobra.Command, args []string) error {
-	_, exitCode, err := executeReview()
+func runScan(cmd *cobra.Command, args []string) error {
+	// Resolve scanner from positional arg
+	scannerName := ""
+	if len(args) > 0 {
+		scannerName = args[0]
+	}
+
+	// --all enables all features
+	if allFlag {
+		explainFlag = true
+		diagramFlag = true
+		impactFlag = true
+		aiEnabled = true
+	}
+
+	// Validate: must specify a scanner or --ai (or both)
+	if scannerName == "" && !aiEnabled && !explainFlag && !diagramFlag && findingsFile == "" {
+		return fmt.Errorf("specify a scanner or --ai\n\nUsage:\n  terraview scan checkov          # security scanner\n  terraview scan checkov --ai     # scanner + AI\n  terraview scan --ai             # AI-only analysis\n\nAvailable scanners: checkov, tfsec, terrascan")
+	}
+
+	_, exitCode, err := executeReview(scannerName)
 	if err != nil {
 		return err
 	}
@@ -126,7 +115,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 }
 
 // executeReview runs the full review pipeline and returns the plan path, exit code, and any error.
-func executeReview() (string, int, error) {
+func executeReview(scannerName string) (string, int, error) {
 	// Load workspace config (.terraview.yaml)
 	cfg, err := config.Load(workDir)
 	if err != nil {
@@ -170,24 +159,15 @@ func executeReview() (string, int, error) {
 		effectiveModel = ollamaModel
 	}
 	effectiveURL := cfg.LLM.URL
-	if ollamaURL != "" {
-		effectiveURL = ollamaURL
-	}
-	// When the provider is not ollama and no explicit URL was given via flag,
-	// clear the URL so each provider falls back to its own default base URL.
-	if ollamaURL == "" && effectiveProvider != "ollama" {
+	// When the provider is not ollama, clear the URL so each provider
+	// falls back to its own default base URL.
+	if effectiveProvider != "ollama" {
 		effectiveURL = ""
 	}
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
-	if timeout > 0 {
-		effectiveTimeout = timeout
-	}
 	effectiveTemperature := cfg.LLM.Temperature
-	if temperature >= 0 {
-		effectiveTemperature = temperature
-	}
 	// --provider or --model implies --ai
-	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag || secondOpinionFlag
+	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag
 
 	// If AI is configured but not active, show info
 	if cfg.LLM.Enabled && !effectiveAI {
@@ -201,23 +181,6 @@ func executeReview() (string, int, error) {
 	}
 	if outputFormat != "" {
 		effectiveFormat = outputFormat
-	}
-
-	// Safe mode overrides
-	if safeMode {
-		logVerbose("Safe mode enabled: using light model and reduced resources")
-		if effectiveProvider == "ollama" && ollamaModel == "" {
-			effectiveModel = "llama3.2:3b"
-		}
-		if timeout == 0 {
-			effectiveTimeout = 60
-		}
-	}
-
-	// Resolve prompts directory
-	resolvedPrompts := promptDir
-	if resolvedPrompts == "" {
-		resolvedPrompts = findBundledDir("prompts")
 	}
 
 	// Resolve output directory
@@ -244,9 +207,9 @@ func executeReview() (string, int, error) {
 	var hardFindings []rules.Finding
 	var scannerResult *scanner.AggregatedResult
 
-	if scannerFlag != "" {
+	if scannerName != "" {
 		// Run the specified scanner
-		resolvedScanner, err := scanner.Resolve(scannerFlag)
+		resolvedScanner, err := scanner.Resolve(scannerName)
 		if err != nil {
 			return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
 		}
@@ -300,8 +263,8 @@ func executeReview() (string, int, error) {
 	}
 
 	if effectiveAI {
-		// Build resource limits from config + safe mode
-		limits := buildResourceLimits(cfg, safeMode)
+		// Build resource limits from config
+		limits := buildResourceLimits(cfg, false)
 
 		// Inject topology context into summary for AI
 		topoSummary := make(map[string]interface{})
@@ -324,36 +287,7 @@ func executeReview() (string, int, error) {
 		logVerbose("%s", i18n.T().AISkipped)
 	}
 
-	// 3b. Second opinion: AI validates scanner findings
-	if secondOpinionFlag && effectiveAI && len(hardFindings) > 0 {
-		soCtx, soCancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
-		defer soCancel()
-
-		providerCfg := ai.ProviderConfig{
-			Model:       effectiveModel,
-			APIKey:      cfg.LLM.APIKey,
-			BaseURL:     effectiveURL,
-			Temperature: effectiveTemperature,
-			TimeoutSecs: effectiveTimeout,
-			MaxTokens:   4096,
-			MaxRetries:  2,
-		}
-
-		soProvider, err := ai.NewProvider(soCtx, effectiveProvider, providerCfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIProviderUnavail+"\n", output.Prefix(), "--second-opinion", err)
-		} else {
-			reviewer := secondopinion.NewReviewer(soProvider)
-			soResult, err := reviewer.Review(soCtx, hardFindings, resources, topoGraph.FormatContext())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnSecondOpinionFailed+"\n", output.Prefix(), err)
-			} else {
-				hardFindings = secondopinion.EnrichFindings(hardFindings, soResult)
-				logVerbose("Second opinion: %d agree, %d disputed", soResult.AgreeCount, soResult.DisputeCount)
-			}
-		}
-	}
-
+	// 3b. (second-opinion removed)
 	// 3c. Deduplicate: merge scanner + AI findings (replaces normalizer + resolver)
 	if effectiveAI && (len(hardFindings) > 0 || len(aiFindings) > 0) {
 		dr := normalizer.Deduplicate(hardFindings, aiFindings)
@@ -390,21 +324,12 @@ func executeReview() (string, int, error) {
 		logVerbose("Infrastructure diagram generated")
 	}
 
-	// 4d. Analyze blast radius if requested (deterministic, no AI)
-	if blastRadiusFlag {
+	// 4d. Analyze impact if requested (deterministic, no AI)
+	if impactFlag {
 		analyzer := blast.NewAnalyzer()
 		blastResult := analyzer.AnalyzeWithGraph(resources, topoGraph)
 		result.BlastRadius = blastResult
-		logVerbose("Blast radius analysis: %s", blastResult.Summary)
-	}
-
-	// 4d2. Detect design smells if requested
-	if smellFlag {
-		detector := smell.NewDetector()
-		smellResult := detector.Detect(resources)
-		logVerbose("Design smells: %d detected, quality %.1f/10", len(smellResult.Smells), smellResult.QualityScore)
-		fmt.Println()
-		fmt.Println(smell.FormatSmells(smellResult))
+		logVerbose("Impact analysis: %s", blastResult.Summary)
 	}
 
 	// 4e. Generate AI explanation if requested (reuses cluster cache — NO additional AI invocation)
@@ -420,19 +345,6 @@ func executeReview() (string, int, error) {
 			}
 		} else {
 			logVerbose("No cluster cache available for --explain")
-		}
-	}
-
-	// 4f. Record score trend if requested
-	if trendFlag {
-		tracker := trend.NewTracker(workDir)
-		trendResult, err := tracker.Record(result.Score, len(result.Findings), result.TotalResources, result.SeverityCounts, "")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnTrendFailed+"\n", output.Prefix(), err)
-		} else {
-			logVerbose("Trend recorded: %s", trendResult.Narrative)
-			fmt.Println()
-			fmt.Println(trend.FormatTrend(trendResult))
 		}
 	}
 
@@ -488,8 +400,8 @@ func executeReview() (string, int, error) {
 		fmt.Print(cluster.FormatClusters(clusterResult))
 	}
 
-	// 6d. Print blast radius if generated
-	if blastRadiusFlag && result.BlastRadius != nil {
+	// 6d. Print impact analysis if generated
+	if impactFlag && result.BlastRadius != nil {
 		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
 			fmt.Println()
 			fmt.Print(br.FormatPretty())
@@ -621,31 +533,6 @@ func runClusterAIReview(clusters []cluster.RiskCluster,
 
 	logVerbose("AI (%s/%s): %d cluster findings", providerName, model, len(findings))
 	return findings, aiSummary, cache
-}
-
-// findBundledDir looks for a directory relative to the executable, then relative to cwd.
-func findBundledDir(dir string) string {
-	if exe, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exe), dir)
-		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
-			return candidate
-		}
-	}
-
-	homeDir, _ := os.UserHomeDir()
-	if homeDir != "" {
-		candidate := filepath.Join(homeDir, ".terraview", dir)
-		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
-			return candidate
-		}
-	}
-
-	candidate := dir
-	if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
-		return candidate
-	}
-
-	return ""
 }
 
 // filterDisabledRules removes findings whose RuleID matches any disabled rule pattern.

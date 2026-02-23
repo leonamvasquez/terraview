@@ -36,14 +36,8 @@ Examples:
 	RunE: runExplainCmd,
 }
 
-func init() {
-	explainCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	explainCmd.Flags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek)")
-	explainCmd.Flags().StringVar(&ollamaModel, "model", "", "AI model to use")
-	explainCmd.Flags().IntVar(&timeout, "timeout", 0, "AI request timeout in seconds")
-	explainCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory")
-	explainCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, json (default pretty)")
-}
+// No local init needed — all flags are inherited from root (persistent):
+// --plan, --provider, --model, --output, --format
 
 // InfraExplanation is the structured explanation of the full infrastructure.
 type InfraExplanation struct {
@@ -122,9 +116,6 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
-	if timeout > 0 {
-		effectiveTimeout = timeout
-	}
 	if effectiveTimeout == 0 {
 		effectiveTimeout = 120
 	}

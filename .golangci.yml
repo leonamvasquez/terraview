@@ -1,0 +1,50 @@
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - gosec
+    - gocritic
+    - ineffassign
+    - govet
+    - unused
+    - typecheck
+    - misspell
+    - prealloc
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  gosec:
+    excludes:
+      - G104  # unhandled errors on deferred Close()
+      - G304  # file path from variable (expected for CLI tool)
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - ifElseChain
+      - hugeParam
+  misspell:
+    locale: US
+  prealloc:
+    simple: true
+
+issues:
+  exclude-rules:
+    # Test files can have longer functions and unchecked errors
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - gocritic
+    # Generated or vendor code
+    - path: vendor/
+      linters:
+        - all
+  max-issues-per-linter: 50
+  max-same-issues: 5
+
+run:
+  timeout: 5m
+  tests: true

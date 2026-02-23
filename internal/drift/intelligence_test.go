@@ -1,6 +1,7 @@
 package drift
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/parser"
@@ -102,5 +103,127 @@ func TestIsSensitiveField(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("isSensitiveField(%q) = %v, want %v", tt.field, got, tt.expected)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// allFieldsAreCosmetic
+// ---------------------------------------------------------------------------
+
+func TestAllFieldsAreCosmetic_AllCosmetic(t *testing.T) {
+	if !allFieldsAreCosmetic([]string{"tags", "description"}) {
+		t.Error("expected true for all cosmetic fields")
+	}
+}
+
+func TestAllFieldsAreCosmetic_MixedFields(t *testing.T) {
+	if allFieldsAreCosmetic([]string{"tags", "cidr_blocks"}) {
+		t.Error("expected false for mixed fields")
+	}
+}
+
+func TestAllFieldsAreCosmetic_Empty(t *testing.T) {
+	if allFieldsAreCosmetic(nil) {
+		t.Error("expected false for nil fields")
+	}
+	if allFieldsAreCosmetic([]string{}) {
+		t.Error("expected false for empty fields")
+	}
+}
+
+func TestAllFieldsAreCosmetic_AllKnown(t *testing.T) {
+	fields := []string{"tags", "tags_all", "description", "name_prefix"}
+	if !allFieldsAreCosmetic(fields) {
+		t.Error("expected true for all known cosmetic fields")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// riskLevelLabel
+// ---------------------------------------------------------------------------
+
+func TestRiskLevelLabel(t *testing.T) {
+	tests := []struct {
+		risk float64
+		want string
+	}{
+		{8.0, "CRITICAL"},
+		{7.0, "CRITICAL"},
+		{6.0, "HIGH"},
+		{5.0, "HIGH"},
+		{4.0, "MEDIUM"},
+		{3.0, "MEDIUM"},
+		{2.0, "LOW"},
+		{1.0, "LOW"},
+		{0.5, "NONE"},
+		{0.0, "NONE"},
+	}
+	for _, tt := range tests {
+		if got := riskLevelLabel(tt.risk); got != tt.want {
+			t.Errorf("riskLevelLabel(%.1f) = %q, want %q", tt.risk, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FormatNarrative — with actual data
+// ---------------------------------------------------------------------------
+
+func TestFormatNarrative_WithItems(t *testing.T) {
+	result := &IntelligenceResult{
+		Items: []DriftItem{
+			{Resource: "aws_instance.web", Action: "delete", Classification: ClassSuspicious, RiskScore: 8.0, RiskFactors: []string{"critical-resource"}},
+			{Resource: "aws_s3_bucket.logs", Action: "update", Classification: ClassIntentional, RiskScore: 2.0},
+			{Resource: "aws_lb.main", Action: "create", Classification: ClassUnknown, RiskScore: 4.0, RiskFactors: []string{"new-resource"}},
+		},
+		OverallRisk:      5.5,
+		RiskLevel:        "HIGH",
+		SuspiciousCount:  1,
+		IntentionalCount: 1,
+		Recommendations:  []string{"Investigate suspicious changes"},
+	}
+	narrative := FormatNarrative(result)
+
+	if !strings.Contains(narrative, "3 changes detected") {
+		t.Error("expected item count in narrative")
+	}
+	if !strings.Contains(narrative, "SUSPICIOUS CHANGES:") {
+		t.Error("expected suspicious section")
+	}
+	if !strings.Contains(narrative, "INTENTIONAL CHANGES:") {
+		t.Error("expected intentional section")
+	}
+	if !strings.Contains(narrative, "UNCLASSIFIED CHANGES:") {
+		t.Error("expected unclassified section")
+	}
+	if !strings.Contains(narrative, "RECOMMENDATIONS:") {
+		t.Error("expected recommendations section")
+	}
+	if !strings.Contains(narrative, "aws_instance.web") {
+		t.Error("expected resource name")
+	}
+	if !strings.Contains(narrative, "WARNING") {
+		t.Error("expected warning for suspicious changes")
+	}
+}
+
+func TestFormatNarrative_OnlySuspicious(t *testing.T) {
+	result := &IntelligenceResult{
+		Items: []DriftItem{
+			{Resource: "aws_db.main", Action: "delete", Classification: ClassSuspicious, RiskScore: 9.0, RiskFactors: []string{"data-loss"}},
+		},
+		OverallRisk:     9.0,
+		RiskLevel:       "CRITICAL",
+		SuspiciousCount: 1,
+		Recommendations: []string{"Stop and investigate"},
+	}
+	narrative := FormatNarrative(result)
+
+	if !strings.Contains(narrative, "SUSPICIOUS CHANGES:") {
+		t.Error("expected suspicious section")
+	}
+	// Should NOT contain INTENTIONAL section
+	if strings.Contains(narrative, "INTENTIONAL CHANGES:") {
+		t.Error("expected no intentional section when there are none")
 	}
 }

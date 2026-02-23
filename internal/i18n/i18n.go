@@ -9,17 +9,15 @@ import "sync/atomic"
 // Messages holds all user-facing strings for a single language.
 type Messages struct {
 	// Warnings
-	WarnImportFailed        string
-	WarnAIProviderUnavail   string
-	WarnSecondOpinionFailed string
-	WarnExplainUnavail      string
-	WarnExplainFailed       string
-	WarnTrendFailed         string
-	WarnPromptsNotFound     string
-	WarnPromptsLoadFailed   string
-	WarnOllamaUnavail       string
-	WarnAIProviderFailed    string
-	WarnAIReviewFailed      string
+	WarnImportFailed      string
+	WarnAIProviderUnavail string
+	WarnExplainUnavail    string
+	WarnExplainFailed     string
+	WarnPromptsNotFound   string
+	WarnPromptsLoadFailed string
+	WarnOllamaUnavail     string
+	WarnAIProviderFailed  string
+	WarnAIReviewFailed    string
 
 	// Pipeline
 	AnalyzingAI string
@@ -44,17 +42,15 @@ type Messages struct {
 var active atomic.Int32
 
 var en = Messages{
-	WarnImportFailed:        "WARNING: Failed to import findings from %s: %v",
-	WarnAIProviderUnavail:   "WARNING: AI provider for %s not available: %v",
-	WarnSecondOpinionFailed: "WARNING: Second opinion failed: %v",
-	WarnExplainUnavail:      "WARNING: AI provider for --explain not available: %v",
-	WarnExplainFailed:       "WARNING: AI explanation failed: %v",
-	WarnTrendFailed:         "WARNING: trend tracking failed: %v",
-	WarnPromptsNotFound:     "WARNING: Prompts directory not found. Skipping AI analysis.",
-	WarnPromptsLoadFailed:   "WARNING: Failed to load prompts (%v). Skipping AI analysis.",
-	WarnOllamaUnavail:       "WARNING: Ollama not available (%v). Skipping AI analysis.",
-	WarnAIProviderFailed:    "WARNING: AI provider %q not available (%v). Skipping AI analysis.",
-	WarnAIReviewFailed:      "WARNING: AI review failed (%v). Continuing with scanner findings only.",
+	WarnImportFailed:      "WARNING: Failed to import findings from %s: %v",
+	WarnAIProviderUnavail: "WARNING: AI provider for %s not available: %v",
+	WarnExplainUnavail:    "WARNING: AI provider for --explain not available: %v",
+	WarnExplainFailed:     "WARNING: AI explanation failed: %v",
+	WarnPromptsNotFound:   "WARNING: Prompts directory not found. Skipping AI analysis.",
+	WarnPromptsLoadFailed: "WARNING: Failed to load prompts (%v). Skipping AI analysis.",
+	WarnOllamaUnavail:     "WARNING: Ollama not available (%v). Skipping AI analysis.",
+	WarnAIProviderFailed:  "WARNING: AI provider %q not available (%v). Skipping AI analysis.",
+	WarnAIReviewFailed:    "WARNING: AI review failed (%v). Continuing with scanner findings only.",
 
 	AnalyzingAI: "Analyzing infrastructure with AI...",
 	AISkipped:   "AI analysis skipped",
@@ -73,17 +69,15 @@ var en = Messages{
 }
 
 var br = Messages{
-	WarnImportFailed:        "AVISO: Falha ao importar achados de %s: %v",
-	WarnAIProviderUnavail:   "AVISO: Provider de IA para %s não disponível: %v",
-	WarnSecondOpinionFailed: "AVISO: Segunda opinião falhou: %v",
-	WarnExplainUnavail:      "AVISO: Provider de IA para --explain não disponível: %v",
-	WarnExplainFailed:       "AVISO: Explicação IA falhou: %v",
-	WarnTrendFailed:         "AVISO: Rastreamento de tendência falhou: %v",
-	WarnPromptsNotFound:     "AVISO: Diretório de prompts não encontrado. Ignorando análise IA.",
-	WarnPromptsLoadFailed:   "AVISO: Falha ao carregar prompts (%v). Ignorando análise IA.",
-	WarnOllamaUnavail:       "AVISO: Ollama não disponível (%v). Ignorando análise IA.",
-	WarnAIProviderFailed:    "AVISO: Provider de IA %q não disponível (%v). Ignorando análise IA.",
-	WarnAIReviewFailed:      "AVISO: Revisão IA falhou (%v). Continuando apenas com achados do scanner.",
+	WarnImportFailed:      "AVISO: Falha ao importar achados de %s: %v",
+	WarnAIProviderUnavail: "AVISO: Provider de IA para %s não disponível: %v",
+	WarnExplainUnavail:    "AVISO: Provider de IA para --explain não disponível: %v",
+	WarnExplainFailed:     "AVISO: Explicação IA falhou: %v",
+	WarnPromptsNotFound:   "AVISO: Diretório de prompts não encontrado. Ignorando análise IA.",
+	WarnPromptsLoadFailed: "AVISO: Falha ao carregar prompts (%v). Ignorando análise IA.",
+	WarnOllamaUnavail:     "AVISO: Ollama não disponível (%v). Ignorando análise IA.",
+	WarnAIProviderFailed:  "AVISO: Provider de IA %q não disponível (%v). Ignorando análise IA.",
+	WarnAIReviewFailed:    "AVISO: Revisão IA falhou (%v). Continuando apenas com achados do scanner.",
 
 	AnalyzingAI: "Analisando infraestrutura com IA...",
 	AISkipped:   "Análise IA ignorada",

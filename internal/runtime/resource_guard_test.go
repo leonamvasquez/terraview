@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"runtime"
 	"testing"
 )
@@ -112,4 +113,117 @@ func TestParseLoadAvg(t *testing.T) {
 			t.Errorf("parseLoadAvg(%q) = %f, want %f", tt.input, got, tt.expected)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// parseLinuxMeminfo
+// ---------------------------------------------------------------------------
+
+func TestParseLinuxMeminfo(t *testing.T) {
+	meminfo := `MemTotal:       16384000 kB
+MemFree:         2048000 kB
+MemAvailable:    8192000 kB
+Buffers:          512000 kB
+Cached:          4096000 kB
+SwapCached:            0 kB
+`
+	var res SystemResources
+	parseLinuxMeminfo(meminfo, &res)
+
+	// 16384000 kB / 1024 = 16000 MB
+	if res.TotalMemoryMB != 16000 {
+		t.Errorf("TotalMemoryMB = %d, want 16000", res.TotalMemoryMB)
+	}
+	// 8192000 kB / 1024 = 8000 MB
+	if res.AvailableMemoryMB != 8000 {
+		t.Errorf("AvailableMemoryMB = %d, want 8000", res.AvailableMemoryMB)
+	}
+}
+
+func TestParseLinuxMeminfo_Empty(t *testing.T) {
+	var res SystemResources
+	parseLinuxMeminfo("", &res)
+
+	if res.TotalMemoryMB != 0 || res.AvailableMemoryMB != 0 {
+		t.Errorf("expected zeros for empty input, got total=%d avail=%d", res.TotalMemoryMB, res.AvailableMemoryMB)
+	}
+}
+
+func TestParseLinuxMeminfo_MalformedLines(t *testing.T) {
+	meminfo := `MemTotal: notanumber kB
+InvalidLine
+MemAvailable:    4096000 kB
+`
+	var res SystemResources
+	parseLinuxMeminfo(meminfo, &res)
+
+	// MemTotal should be 0 due to parsing error, MemAvailable should work
+	if res.TotalMemoryMB != 0 {
+		t.Errorf("TotalMemoryMB = %d, want 0 (parse error)", res.TotalMemoryMB)
+	}
+	if res.AvailableMemoryMB != 4000 {
+		t.Errorf("AvailableMemoryMB = %d, want 4000", res.AvailableMemoryMB)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NewMonitor
+// ---------------------------------------------------------------------------
+
+func TestNewMonitor(t *testing.T) {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := NewMonitor(ResourceLimits{MinFreeMemoryMB: 100}, cancel)
+	if m == nil {
+		t.Fatal("expected non-nil Monitor")
+	}
+}
+
+func TestMonitor_StartStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := NewMonitor(ResourceLimits{MinFreeMemoryMB: 1}, cancel)
+	m.Start(ctx)
+	m.Stop()
+	// Double-stop should not panic
+	m.Stop()
+}
+
+// ---------------------------------------------------------------------------
+// NewOllamaLifecycle
+// ---------------------------------------------------------------------------
+
+func TestNewOllamaLifecycle_DefaultURL(t *testing.T) {
+	lc := NewOllamaLifecycle(DefaultResourceLimits(), "")
+	if lc == nil {
+		t.Fatal("expected non-nil lifecycle")
+	}
+	if lc.baseURL != "http://localhost:11434" {
+		t.Errorf("baseURL = %q, want default", lc.baseURL)
+	}
+}
+
+func TestNewOllamaLifecycle_CustomURL(t *testing.T) {
+	lc := NewOllamaLifecycle(DefaultResourceLimits(), "http://custom:1234")
+	if lc.baseURL != "http://custom:1234" {
+		t.Errorf("baseURL = %q, want custom", lc.baseURL)
+	}
+}
+
+func TestNewOllamaLifecycle_Limits(t *testing.T) {
+	limits := ResourceLimits{MaxThreads: 4, MinFreeMemoryMB: 2048}
+	lc := NewOllamaLifecycle(limits, "")
+	if lc.limits.MaxThreads != 4 {
+		t.Errorf("MaxThreads = %d, want 4", lc.limits.MaxThreads)
+	}
+	if lc.limits.MinFreeMemoryMB != 2048 {
+		t.Errorf("MinFreeMemoryMB = %d, want 2048", lc.limits.MinFreeMemoryMB)
+	}
+}
+
+func TestNoop(t *testing.T) {
+	// noop should not panic
+	noop()
 }

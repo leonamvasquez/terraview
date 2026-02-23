@@ -82,7 +82,7 @@ func Install(installer BinaryInstaller, p platform.PlatformInfo, installDir stri
 	isArchive := installer.IsArchive() || strings.HasSuffix(url, ".tar.gz")
 
 	if isArchive {
-		return installFromArchive(installer, p, url, installDir, destPath, name, version)
+		return installFromArchive(installer, p, url, destPath, name, version)
 	}
 	return installDirect(url, destPath, name, version, p)
 }
@@ -111,7 +111,7 @@ func installDirect(url, destPath, name, version string, p platform.PlatformInfo)
 	}
 }
 
-func installFromArchive(installer BinaryInstaller, p platform.PlatformInfo, url, installDir, destPath, name, version string) InstallResult {
+func installFromArchive(installer BinaryInstaller, p platform.PlatformInfo, url, destPath, name, version string) InstallResult {
 	// Download to temp file
 	tmpFile, err := os.CreateTemp("", name+"-*.tar.gz")
 	if err != nil {

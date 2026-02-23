@@ -25,8 +25,7 @@ const (
 var forceUpdate bool
 
 var upgradeCmd = &cobra.Command{
-	Use:     "upgrade",
-	Aliases: []string{"update"},
+	Use: "upgrade",
 	Short:   "Upgrade terraview to the latest version",
 	Long: `Downloads and installs the latest version of terraview from GitHub Releases.
 

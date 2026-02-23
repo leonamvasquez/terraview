@@ -12,11 +12,16 @@ import (
 )
 
 var (
-	// Global flags
-	verbose bool
-	workDir string
-	brFlag  bool
-	noColor bool
+	// Global flags (persistent, inherited by all subcommands)
+	verbose      bool
+	workDir      string
+	brFlag       bool
+	noColor      bool
+	planFile     string
+	outputDir    string
+	outputFormat string
+	aiProvider   string
+	ollamaModel  string
 )
 
 // Version is set at build time via ldflags.
@@ -30,16 +35,20 @@ var rootCmd = &cobra.Command{
 Security scanning and AI review for Terraform plans.
 
 Core Commands:
-  plan        Analyze a Terraform plan (scanner + AI)
-  apply       Review and conditionally apply the plan
-  validate    Run scanner checks (no AI)
+  scan        Security scan + optional AI analysis
+  apply       Scan and conditionally apply the plan
+  diagram     Generate ASCII infrastructure diagram
+  explain     AI-powered infrastructure explanation
   drift       Detect and classify infrastructure drift
-  explain     Explain infrastructure in natural language
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
               provider install | uninstall
+
+Scanner Management:
+  scanners    Manage security scanners
+              scanners list | install
 
 Utilities:
   version     Show version information
@@ -48,12 +57,14 @@ Utilities:
 
 Get started:
   cd my-terraform-project
-  terraview plan --scanner checkov          # run security scanner
-  terraview plan --scanner checkov --ai     # review with AI analysis
-  terraview plan --scanner checkov --diagram # show infrastructure diagram
-  terraview validate                # scanner checks
-  terraview drift                   # detect drift
-  terraview provider list           # manage AI providers`,
+  terraview scan checkov                    # security scanner
+  terraview scan checkov --ai               # scanner + AI analysis
+  terraview scan --ai                       # AI-only analysis
+  terraview scan checkov --all              # everything enabled
+  terraview diagram                         # infrastructure diagram
+  terraview explain                         # AI explanation
+  terraview drift                           # detect drift
+  terraview provider list                   # manage AI providers`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -63,13 +74,18 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Terraform workspace directory")
 	rootCmd.PersistentFlags().BoolVar(&brFlag, "br", false, "Output in Brazilian Portuguese (pt-BR)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
+	rootCmd.PersistentFlags().StringVarP(&outputDir, "output", "o", "", "Output directory for generated files")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif (default pretty)")
+	rootCmd.PersistentFlags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
+	rootCmd.PersistentFlags().StringVar(&ollamaModel, "model", "", "AI model to use")
 
 	// Core commands
-	rootCmd.AddCommand(planCmd)
+	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(applyCmd)
-	rootCmd.AddCommand(validateCmd)
-	rootCmd.AddCommand(driftCmd)
+	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
+	rootCmd.AddCommand(driftCmd)
 
 	// Provider management (includes install/uninstall as subcommands)
 	rootCmd.AddCommand(providerCmd)
@@ -79,6 +95,14 @@ func init() {
 	rootCmd.AddCommand(upgradeCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(scannersCmd)
+
+	// Hide the completion command from help output
+	rootCmd.InitDefaultCompletionCmd()
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "completion" {
+			c.Hidden = true
+		}
+	}
 
 	// Apply pt-BR translations early so --help can use them.
 	// Cobra doesn't call PersistentPreRun on --help, so we check os.Args directly.
@@ -104,16 +128,20 @@ func applyBRTranslations() {
 Escaneamento de segurança e revisão com IA para planos Terraform.
 
 Comandos Principais:
-  plan        Analisar um plano Terraform (regras + IA)
-  apply       Revisar e aplicar condicionalmente o plano
-  validate    Executar verificações de scanner (sem IA)
+  scan        Escaneamento de segurança + análise IA opcional
+  apply       Escanear e aplicar condicionalmente o plano
+  diagram     Gerar diagrama ASCII de infraestrutura
+  explain     Explicação de infraestrutura com IA
   drift       Detectar e classificar drift de infraestrutura
-  explain     Explicar infraestrutura em linguagem natural
 
 Gerenciamento de Providers:
   provider    Gerenciar providers de IA e runtimes LLM
               provider list | use | current | test
               provider install | uninstall
+
+Gerenciamento de Scanners:
+  scanners    Gerenciar scanners de segurança
+              scanners list | install
 
 Utilitários:
   version     Exibir informações de versão
@@ -122,68 +150,67 @@ Utilitários:
 
 Primeiros passos:
   cd meu-projeto-terraform
-  terraview plan --scanner checkov          # executar scanner de segurança
-  terraview plan --scanner checkov --ai     # revisão com análise de IA
-  terraview plan --scanner checkov --diagram # diagrama de infraestrutura
-  terraview validate                # verificações de scanner
-  terraview drift                   # detectar drift
-  terraview provider list           # gerenciar providers de IA`
+  terraview scan checkov                    # scanner de segurança
+  terraview scan checkov --ai               # scanner + análise IA
+  terraview scan --ai                       # apenas análise IA
+  terraview scan checkov --all              # tudo habilitado
+  terraview diagram                         # diagrama de infraestrutura
+  terraview explain                         # explicação com IA
+  terraview drift                           # detectar drift
+  terraview provider list                   # gerenciar providers de IA`
 
-	// plan
-	planCmd.Short = "Analisar um plano Terraform para segurança, arquitetura e boas práticas"
-	planCmd.Long = `Analisa um plano Terraform usando um scanner de segurança e revisão opcional com IA.
+	// scan
+	scanCmd.Short = "Escaneamento de segurança e análise IA opcional de um plano Terraform"
+	scanCmd.Long = `Analisa um plano Terraform usando um scanner de segurança e/ou revisão com IA.
 
-O scanner deve ser especificado explicitamente via --scanner.
+O scanner é especificado como argumento posicional.
 Se --plan não for especificado, o terraview executará automaticamente:
   terraform init   (se necessário)
   terraform plan   (gera o plano)
   terraform show   (exporta JSON)
 
 Exemplos:
-  terraview plan --scanner checkov            # usar checkov
-  terraview plan --scanner tfsec              # usar tfsec
-  terraview plan --scanner checkov --ai       # scanner + análise com IA
-  terraview plan --scanner checkov --ai --provider gemini  # Gemini AI
-  terraview plan --scanner checkov --ai --explain  # IA + explicação
-  terraview plan --scanner checkov --diagram  # diagrama de infraestrutura
-  terraview plan --scanner checkov --blast-radius  # raio de impacto
-  terraview plan --scanner checkov --format compact  # saída mínima
-  terraview plan --scanner checkov --format sarif    # SARIF para CI
-  terraview plan --scanner checkov --strict   # HIGH retorna código de saída 2
-  terraview plan --scanner checkov --safe     # modo seguro
-  terraview plan --findings checkov.json      # importar achados externos`
+  terraview scan checkov                       # apenas scanner de segurança
+  terraview scan checkov --ai                  # scanner + análise IA
+  terraview scan --ai                          # apenas análise IA (sem scanner)
+  terraview scan checkov --all                 # tudo habilitado
+  terraview scan checkov --ai --provider gemini  # Gemini AI
+  terraview scan checkov --explain             # scanner + explicação IA
+  terraview scan checkov --diagram             # scanner + diagrama
+  terraview scan checkov --impact             # análise de impacto
+  terraview scan checkov --format compact      # saída mínima
+  terraview scan checkov --format sarif        # SARIF para CI
+  terraview scan checkov --strict              # HIGH retorna código de saída 2
+  terraview scan checkov --findings ext.json   # importar achados externos`
 
 	// apply
-	applyCmd.Short = "Revisar o plano e aplicar se seguro"
-	applyCmd.Long = `Executa uma revisão completa do plano Terraform e aplica condicionalmente.
+	applyCmd.Short = "Escanear e aplicar condicionalmente o plano Terraform"
+	applyCmd.Long = `Executa um escaneamento completo do plano Terraform e aplica condicionalmente.
+
+O scanner é especificado como argumento posicional (mesmo padrão do scan).
 
 Comportamento:
   - Bloqueia se achados CRÍTICOS forem detectados
-  - Exibe resumo da revisão e pede confirmação (modo interativo)
+  - Exibe resumo do escaneamento e pede confirmação (modo interativo)
   - Use --non-interactive para pipelines CI (bloqueia em CRÍTICO, aprova automaticamente caso contrário)
 
 Exemplos:
-  terraview apply                     # modo interativo
-  terraview apply --non-interactive   # modo CI
-  terraview apply --ai                # revisão com IA, interativo`
+  terraview apply checkov                     # escanear + aplicar interativo
+  terraview apply checkov --ai                # escanear + IA + aplicar
+  terraview apply checkov --non-interactive   # modo CI
+  terraview apply checkov --all               # tudo habilitado + aplicar`
 
-	// validate
-	validateCmd.Short = "Validar configuração Terraform e executar scanners de segurança (sem IA)"
-	validateCmd.Long = `Executa uma suíte de validação com scanners — sem dependência de LLM:
+	// diagram
+	diagramCmd.Short = "Gerar diagrama ASCII de infraestrutura"
+	diagramCmd.Long = `Gera um diagrama ASCII de infraestrutura a partir de um plano Terraform.
 
-  1. terraform fmt -check  — verificação de formatação
-  2. terraform validate    — verificações de sintaxe e configuração
-  3. terraform test        — testes nativos (Terraform 1.6+, se disponível)
-  4. Scanners de segurança — avaliação via scanners externos (checkov, tfsec, etc.)
-
-Códigos de saída:
-  0 — todas as verificações passaram
-  1 — erro de execução (fmt, validate, geração do plano)
-  2 — violações de scanner (achados CRÍTICOS ou ALTOS)
+Este comando é determinístico e não requer IA.
+Se --plan não for especificado, o terraview gera o plano automaticamente.
 
 Exemplos:
-  terraview validate
-  terraview validate -v`
+  terraview diagram
+  terraview diagram --plan plan.json
+  terraview diagram --output ./relatorios`
 
 	// drift
 	driftCmd.Short = "Detectar e classificar drift de infraestrutura"
@@ -294,62 +321,34 @@ Exemplos:
 	rootCmd.PersistentFlags().Lookup("dir").Usage = "Diretório do workspace Terraform"
 	rootCmd.PersistentFlags().Lookup("br").Usage = "Saída em Português Brasileiro (pt-BR)"
 	rootCmd.PersistentFlags().Lookup("no-color").Usage = "Desabilitar saída colorida"
+	rootCmd.PersistentFlags().Lookup("plan").Usage = "Caminho para JSON do plano Terraform (gera automaticamente se omitido)"
+	rootCmd.PersistentFlags().Lookup("output").Usage = "Diretório de saída para arquivos gerados"
+	rootCmd.PersistentFlags().Lookup("format").Usage = "Formato de saída: pretty, compact, json, sarif (padrão pretty)"
+	rootCmd.PersistentFlags().Lookup("provider").Usage = "Provider de IA (ollama, gemini, claude, deepseek, openrouter)"
+	rootCmd.PersistentFlags().Lookup("model").Usage = "Modelo de IA a ser usado"
 
 	// Translate local flags for each command
-	translateFlags(planCmd, map[string]string{
-		"plan":           "Caminho para JSON do plano Terraform (gera automaticamente se omitido)",
-		"prompts":        "Caminho para diretório de prompts",
-		"output":         "Diretório de saída para arquivos de revisão",
-		"ollama-url":     "URL do servidor Ollama (legado, prefira --provider)",
-		"model":          "Modelo de IA a ser usado",
-		"provider":       "Provider de IA (ollama, gemini, claude, deepseek)",
-		"timeout":        "Timeout da requisição de IA em segundos",
-		"temperature":    "Temperatura da IA (0.0-1.0)",
-		"ai":             "Habilitar revisão semântica com IA",
-		"format":         "Formato de saída: pretty, compact, json, sarif (padrão pretty)",
-		"strict":         "Modo estrito: achados HIGH também retornam código de saída 2",
-		"safe":           "Modo seguro: modelo leve, threads reduzidos, limites mais rígidos",
-		"explain":        "Gerar explicação em linguagem natural com IA (implica --ai)",
-		"diagram":        "Exibir diagrama ASCII de infraestrutura",
-		"blast-radius":   "Analisar raio de impacto das mudanças",
-		"findings":       "Importar achados externos de Checkov/tfsec/Trivy JSON",
-		"second-opinion": "IA valida achados dos scanners (implica --ai)",
-		"trend":          "Rastrear e exibir tendências de score ao longo do tempo",
-		"smell":          "Detectar design smells de infraestrutura",
-		"scanner":        "Scanner a usar: checkov, tfsec ou terrascan (obrigatório)",
+	translateFlags(scanCmd, map[string]string{
+		"ai":       "Habilitar revisão semântica com IA",
+		"strict":   "Modo estrito: achados HIGH também retornam código de saída 2",
+		"explain":  "Gerar explicação em linguagem natural com IA (implica --ai)",
+		"diagram":  "Exibir diagrama ASCII de infraestrutura",
+		"impact":   "Analisar impacto de dependências das mudanças",
+		"findings": "Importar achados externos de Checkov/tfsec/Trivy JSON",
+		"all":      "Habilitar tudo: explain + diagram + impact",
 	})
 	translateFlags(applyCmd, map[string]string{
 		"non-interactive": "Pular prompt de confirmação (para CI)",
-		"plan":            "Caminho para JSON do plano Terraform (gera automaticamente se omitido)",
-		"prompts":         "Caminho para diretório de prompts",
-		"output":          "Diretório de saída para arquivos de revisão",
-		"ollama-url":      "URL do servidor Ollama (legado, prefira --provider)",
-		"model":           "Modelo de IA a ser usado",
-		"provider":        "Provider de IA (ollama, gemini, claude, deepseek)",
-		"timeout":         "Timeout da requisição de IA em segundos",
-		"temperature":     "Temperatura da IA (0.0-1.0)",
 		"ai":              "Habilitar revisão semântica com IA",
-		"format":          "Formato de saída: pretty, compact, json, sarif (padrão pretty)",
-		"safe":            "Modo seguro: modelo leve, recursos reduzidos",
+		"strict":          "Modo estrito: achados HIGH também retornam código de saída 2",
 		"explain":         "Gerar explicação em linguagem natural com IA (implica --ai)",
 		"diagram":         "Exibir diagrama ASCII de infraestrutura",
-		"blast-radius":    "Analisar raio de impacto das mudanças",
+		"impact":          "Analisar impacto de dependências das mudanças",
 		"findings":        "Importar achados externos de Checkov/tfsec/Trivy JSON",
+		"all":             "Habilitar tudo: explain + diagram + impact",
 	})
-	translateFlags(validateCmd, map[string]string{})
 	translateFlags(driftCmd, map[string]string{
-		"plan":         "Caminho para JSON do plano Terraform (gera automaticamente se omitido)",
-		"output":       "Diretório de saída para relatório de drift",
-		"format":       "Formato de saída: pretty, compact, json (padrão pretty)",
 		"intelligence": "Classificação avançada de drift e scoring de risco",
-	})
-	translateFlags(explainCmd, map[string]string{
-		"plan":     "Caminho para JSON do plano Terraform (gera automaticamente se omitido)",
-		"provider": "Provider de IA (ollama, gemini, claude, deepseek)",
-		"model":    "Modelo de IA a ser usado",
-		"timeout":  "Timeout da requisição de IA em segundos",
-		"output":   "Diretório de saída",
-		"format":   "Formato de saída: pretty, json (padrão pretty)",
 	})
 	translateFlags(installLLMCmd, map[string]string{
 		"model": "Modelo a baixar (padrão da config ou llama3.1:8b)",
@@ -398,7 +397,7 @@ Use "{{.CommandPath}} [comando] --help" para mais informações sobre um comando
 			c.Short = "Ajuda sobre qualquer comando"
 			c.Long = "Ajuda sobre qualquer comando da aplicação."
 		case "completion":
-			c.Short = "Gerar script de autocompletar para o shell especificado"
+			c.Hidden = true
 		}
 	}
 	// Apply to all subcommands recursively

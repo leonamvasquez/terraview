@@ -43,12 +43,11 @@ jobs:
       - name: Terraview Review
         id: review
         run: |
-          terraview review \
+          terraview scan checkov \
             --plan plan.json \
             --format json \
             --diagram \
-            --blast-radius \
-            --profile prod \
+            --impact \
             --output review-output
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
@@ -76,7 +75,8 @@ jobs:
               const verdict = json.verdict;
               if (verdict) {
                 const emoji = verdict.safe ? ':white_check_mark:' : ':x:';
-                body = `## ${emoji} Terraview: ${verdict.label}\n\n` + body;
+                const label = verdict.label || (verdict.safe ? 'Safe' : 'Unsafe');
+                body = `## ${emoji} Terraview: ${label}\n\n` + body;
               }
             } catch (e) {
               // ignore

@@ -39,9 +39,7 @@ Examples:
 var driftIntelligenceFlag bool
 
 func init() {
-	driftCmd.Flags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
-	driftCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory for drift report")
-	driftCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: pretty, compact, json (default pretty)")
+	// Only local flag — global flags (--plan, --output, --format) are inherited from root
 	driftCmd.Flags().BoolVar(&driftIntelligenceFlag, "intelligence", false, "Advanced drift classification and risk scoring")
 }
 

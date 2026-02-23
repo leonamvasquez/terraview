@@ -162,7 +162,7 @@ func (e *Extractor) scoreIdentity(resType string, vals map[string]interface{}) i
 	return score
 }
 
-func (e *Extractor) scoreGovernance(resType string, vals map[string]interface{}) int {
+func (e *Extractor) scoreGovernance(_ string, vals map[string]interface{}) int {
 	score := 0
 
 	if !hasNonEmptyKey(vals, "tags") && !hasNonEmptyKey(vals, "labels") {

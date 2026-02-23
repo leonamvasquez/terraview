@@ -736,3 +736,160 @@ func TestGenerateExplainSummary(t *testing.T) {
 func isSkipped(r ClusterResult) bool {
 	return r.Mode == ModeSkip
 }
+
+// ---------------------------------------------------------------------------
+// SetLang / Cache
+// ---------------------------------------------------------------------------
+
+func TestSetLang(t *testing.T) {
+	c := NewController(nil, nil, 1)
+	c.SetLang("pt-BR")
+	if c.lang != "pt-BR" {
+		t.Errorf("lang = %q, want pt-BR", c.lang)
+	}
+}
+
+func TestCache(t *testing.T) {
+	cache := NewClusterCache()
+	c := NewController(nil, cache, 1)
+	if c.Cache() != cache {
+		t.Error("expected Cache() to return the same cache")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// minInt
+// ---------------------------------------------------------------------------
+
+func TestMinInt(t *testing.T) {
+	tests := []struct{ a, b, want int }{
+		{1, 2, 1},
+		{5, 3, 3},
+		{0, 0, 0},
+		{-1, 1, -1},
+		{10, 10, 10},
+	}
+	for _, tt := range tests {
+		if got := minInt(tt.a, tt.b); got != tt.want {
+			t.Errorf("minInt(%d, %d) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// sevWeight
+// ---------------------------------------------------------------------------
+
+func TestSevWeight(t *testing.T) {
+	tests := []struct {
+		sev  string
+		want int
+	}{
+		{"CRITICAL", 3},
+		{"HIGH", 2},
+		{"MEDIUM", 1},
+		{"LOW", 1},
+		{"INFO", 1},
+		{"UNKNOWN", 1},
+	}
+	for _, tt := range tests {
+		if got := sevWeight(tt.sev); got != tt.want {
+			t.Errorf("sevWeight(%q) = %d, want %d", tt.sev, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// clamp
+// ---------------------------------------------------------------------------
+
+func TestClamp(t *testing.T) {
+	tests := []struct{ v, lo, hi, want int }{
+		{5, 0, 10, 5},   // within range
+		{-1, 0, 10, 0},  // below
+		{15, 0, 10, 10}, // above
+		{0, 0, 3, 0},    // at lower bound
+		{3, 0, 3, 3},    // at upper bound
+	}
+	for _, tt := range tests {
+		if got := clamp(tt.v, tt.lo, tt.hi); got != tt.want {
+			t.Errorf("clamp(%d, %d, %d) = %d, want %d", tt.v, tt.lo, tt.hi, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// collectFlags
+// ---------------------------------------------------------------------------
+
+func TestCollectFlags(t *testing.T) {
+	rc := &cluster.RiskCluster{
+		Findings: []rules.Finding{
+			{Message: "Wildcard 0.0.0.0/0 CIDR", Category: "security"},
+			{Message: "Public access enabled", Category: "networking"},
+			{Message: "No encryption at rest", Category: "security"},
+			{Message: "Missing tags", Category: "compliance"},
+			{Message: "No logging enabled", Category: "observability"},
+		},
+	}
+	flags := collectFlags(rc)
+
+	expected := map[string]bool{
+		"wildcard-cidr": true,
+		"public-access": true,
+		"unencrypted":   true,
+		"no-tags":       true,
+		"no-logging":    true,
+		"security-risk": true,
+	}
+	for _, f := range flags {
+		if !expected[f] {
+			t.Errorf("unexpected flag: %q", f)
+		}
+	}
+	if len(flags) != len(expected) {
+		t.Errorf("expected %d flags, got %d: %v", len(expected), len(flags), flags)
+	}
+}
+
+func TestCollectFlags_Empty(t *testing.T) {
+	rc := &cluster.RiskCluster{}
+	flags := collectFlags(rc)
+	if len(flags) != 0 {
+		t.Errorf("expected 0 flags for empty cluster, got %d", len(flags))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// normalizeSeverity / normalizeCategory (clusterai)
+// ---------------------------------------------------------------------------
+
+func TestClusterAINormalizeSeverity(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"critical", "CRITICAL"},
+		{"HIGH", "HIGH"},
+		{" medium ", "MEDIUM"},
+		{"unknown", "INFO"},
+		{"", "INFO"},
+	}
+	for _, tt := range tests {
+		if got := normalizeSeverity(tt.in); got != tt.want {
+			t.Errorf("normalizeSeverity(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestClusterAINormalizeCategory(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"Security", "security"},
+		{"COMPLIANCE", "compliance"},
+		{" best-practice ", "best-practice"},
+		{"unknown", "best-practice"},
+		{"", "best-practice"},
+	}
+	for _, tt := range tests {
+		if got := normalizeCategory(tt.in); got != tt.want {
+			t.Errorf("normalizeCategory(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

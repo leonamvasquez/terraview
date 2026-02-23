@@ -2,59 +2,95 @@
 
 **Escolha seu idioma:** [Português](README.md) | [English](README.en.md)
 
-# terraview: Escaneamento de Segurança e Revisão com IA para Planos Terraform
+# terraview
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
+[![GitHub release](https://img.shields.io/github/v/release/leonamvasquez/terraview)](https://github.com/leonamvasquez/terraview/releases/latest)
 
-## Visão Geral
+Análise de segurança de planos Terraform combinando scanners estáticos (Checkov, tfsec, Terrascan) com revisão inteligente por IA. Scanners rodam por padrão. IA é opt-in. Binário único sem dependências.
 
-O **terraview** é uma ferramenta de linha de comando open-source que realiza **análise de segurança de planos Terraform**, combinando scanners externos (Checkov, tfsec, Terrascan, KICS) com revisão inteligente via múltiplos providers de IA (Ollama, Gemini, Claude, DeepSeek, OpenRouter).
+## Sumário
 
-Scanners rodam por padrão. IA é opt-in. Binário único sem dependências.
+- [Features](#features)
+- [Exemplo de Saída](#exemplo-de-saída)
+- [Quick Start](#quick-start)
+- [Instalação](#instalação)
+- [Uso](#uso)
+- [Configuração](#configuração)
+- [Integração CI/CD](#integração-cicd)
+- [Arquitetura](#arquitetura)
+- [Desenvolvimento](#desenvolvimento)
+- [Licença](#licença)
 
-Ideal para times de DevOps, SRE e Platform Engineering que querem garantir segurança e compliance da infraestrutura antes de qualquer `terraform apply`.
+## Features
 
-## Principais Diferenciais
+- **Security Scanners** — integração automática com Checkov, tfsec e Terrascan; detecta o que está instalado e roda automaticamente
+- **IA Multi-Provider** — Ollama (local), Gemini, Claude, DeepSeek e OpenRouter com seleção interativa
+- **Resolução de Conflitos** — quando scanner e IA divergem, scanner prevalece; concordâncias elevam confiança a 100%
+- **Scorecard** — scores de Segurança, Compliance, Manutenibilidade e Overall em escala 0-10
+- **Risk Clusters** — agrupamento de findings por recurso com score de risco ponderado
+- **Diagrama ASCII** — visualização da infraestrutura direto no terminal
+- **Análise de Impacto** — raio de dependências das mudanças via `--impact`
+- **Zero Configuração** — detecta projetos Terraform e roda `init + plan + show` automaticamente
+- **Drift Detection** — detecta e classifica drift de infraestrutura
+- **CI/CD Nativo** — exit codes semânticos + saída SARIF/JSON para GitHub Actions e GitLab CI
+- **Auto-Atualização** — `terraview upgrade` busca a versão mais recente do GitHub
+- **Alias `tv`** — symlink criado na instalação; `tv scan` = `terraview scan`
 
-- **Security Scanners**: Integração automática com Checkov, tfsec, Terrascan e KICS — detecta o que está instalado e roda automaticamente com precedência formal
-- **Precedência Formal de Ferramentas**: Hierarquia de confiança em 4 tiers — scanners (Tier 1-2) > regras determinísticas (Tier 3) > IA (Tier 4)
-- **Resolução de Conflitos Scanner × IA**: Quando scanner e IA divergem na severidade, a precedência do scanner prevalece automaticamente; concordâncias elevam a confiança a 100%
-- **Risk Clusters**: Agrupamento de findings por recurso com score de risco ponderado por severidade e concordância entre ferramentas
-- **Setup Interativo**: `terraview setup` mostra status dos scanners, precedência, providers de IA disponíveis e instruções de instalação
-- **IA Multi-Provider**: Suporte a Ollama (local), Gemini, Claude, DeepSeek e OpenRouter com seleção interativa
-- **Zero Configuração**: Detecta automaticamente projetos Terraform, roda `init + plan + show` sozinho
-- **Seletor Interativo de Providers**: `terraview provider list` abre um picker com setas do teclado para escolher provider e modelo
-- **Scorecard Detalhado**: Scores de Segurança, Compliance, Manutenibilidade e Overall em escala 0-10
-- **Diagrama de Infraestrutura**: `--diagram` gera um diagrama ASCII da infraestrutura no plano
-- **Blast Radius**: `--blast-radius` analisa o raio de impacto das mudanças
-- **Code Smells**: `--smell` detecta anti-padrões de design na infraestrutura
-- **Score Trends**: `--trend` rastreia e exibe tendências de scores ao longo do tempo
-- **CI/CD Nativo**: Integração pronta com GitHub Actions e GitLab CI via exit codes semânticos
-- **Auto-Atualização**: `terraview upgrade` busca e instala a versão mais recente do GitHub
-- **Alias nativo `tv`**: Instala o symlink `tv` automaticamente — `tv plan` funciona igual a `terraview plan`
+## Exemplo de Saída
 
-## Instalação
+```
+  terraview setup
+  ═══════════════
 
-Um único comando funciona em **Linux, macOS e Windows** (Git Bash / WSL):
+  Security Scanners
+
+  [✓] checkov      3.2.504
+  [✗] tfsec        Install with: brew install tfsec
+  [✗] terrascan    Install with: brew install terrascan
+```
+
+## Quick Start
+
+### 1. Instalar
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 ```
 
-O script detecta automaticamente o sistema operacional e arquitetura, baixa o binário correto, instala e cria o alias `tv`.
+### 2. Escanear
+
+```bash
+cd meu-projeto-terraform
+terraview scan checkov
+```
+
+### 3. Revisar
+
+Os resultados são exibidos em um scorecard com findings agrupados e scores. Adicione `--ai` para revisão inteligente ou `--all` para habilitar tudo: `--explain --diagram --impact`.
+
+```bash
+terraview scan checkov --ai                 # scanner + IA
+terraview scan checkov --all                # tudo habilitado
+```
+
+## Instalação
+
+### Script de instalação (Linux, macOS, Windows WSL)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
+```
+
+O script detecta automaticamente OS e arquitetura, baixa o binário correto e cria o alias `tv`.
 
 <details>
-<summary>Windows — alternativa via PowerShell</summary>
+<summary>Windows — PowerShell</summary>
 
 ```powershell
 irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 | iex
 ```
-
-> Se o PowerShell reclamar de política de execução, rode antes:
-> ```powershell
-> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-> ```
 
 </details>
 
@@ -79,243 +115,88 @@ cd terraview
 make install
 ```
 
-### Instalar o runtime de IA local (Ollama)
+### Instalar runtime de IA local (Ollama)
 
 ```bash
-terraview provider install
+terraview provider install llm
 ```
 
-Após a instalação:
+## Uso
+
+```
+$ terraview
+
+Usage:
+  terraview [command]
+
+Available Commands:
+  scan        Security scan + optional AI analysis
+  apply       Scan and conditionally apply the plan
+  diagram     Generate ASCII infrastructure diagram
+  explain     AI-powered infrastructure explanation
+  drift       Detect and classify infrastructure drift
+  provider    Manage AI providers & LLM runtimes
+  scanners    Manage security scanners
+  setup       Interactive environment setup
+  version     Show version information
+  upgrade     Upgrade to the latest version
+
+Flags:
+  -d, --dir string        Terraform workspace directory (default ".")
+  -p, --plan string       Path to terraform plan JSON (auto-generates if omitted)
+  -f, --format string     Output format: pretty, compact, json, sarif
+  -o, --output string     Output directory for generated files
+      --provider string   AI provider (ollama, gemini, claude, deepseek, openrouter)
+      --model string      AI model to use
+      --br                Output in Brazilian Portuguese (pt-BR)
+      --no-color          Disable colored output
+  -v, --verbose           Enable verbose output
+```
+
+### Scan
 
 ```bash
-terraview version   # ou: tv version
-terraview --help
+terraview scan checkov                      # scan com Checkov
+terraview scan tfsec                        # scan com tfsec
+terraview scan checkov --ai                 # scanner + IA
+terraview scan --ai                         # apenas IA (sem scanner)
+terraview scan checkov --all                # explain + diagram + impact
+terraview scan checkov --plan plan.json     # usar plan.json existente
+terraview scan checkov -f sarif             # saída SARIF para CI
+terraview scan checkov --strict             # HIGH retorna exit code 2
 ```
 
-## Primeiros Passos
+### Apply
+
+Roda scan + aplica o plano condicionalmente. Bloqueia se houver findings CRITICAL.
 
 ```bash
-# Verificar ambiente: scanners, precedência, providers de IA
-terraview setup
-
-# Navegue para qualquer projeto Terraform
-cd meu-projeto-terraform
-
-# Analisar o plano (roda terraform init + plan + scanners automaticamente)
-terraview plan
-
-# Usar o alias curto
-tv plan
-
-# Analisar um plan.json existente
-terraview plan --plan plan.json
-
-# Scanners + revisão com IA
-terraview plan --ai
-
-# Escolher provider de IA
-terraview plan --ai --provider gemini
-terraview plan --ai --provider claude
-terraview plan --ai --provider openrouter
-
-# Rodar scanners específicos
-terraview plan --scanners checkov,tfsec
-
-# Diagrama de infraestrutura
-terraview plan --diagram
-
-# Blast radius das mudanças
-terraview plan --blast-radius
-
-# Modo estrito (findings HIGH também retornam exit code 2)
-terraview plan --strict
-
-# Verificar e aplicar o plano
-terraview apply
+terraview apply checkov                     # interativo
+terraview apply checkov --non-interactive   # modo CI
+terraview apply checkov --ai                # com IA
 ```
 
-## Comandos
-
-### Flags Globais
-
-As flags abaixo estão disponíveis em **todos** os subcomandos:
-
-| Flag | Atalho | Descrição |
-|------|--------|-----------|
-| `--dir` | `-d` | Diretório do workspace Terraform (padrão: `.`) |
-| `--verbose` | `-v` | Habilitar saída detalhada |
-| `--br` | | Saída em Português Brasileiro (pt-BR) |
-| `--no-color` | | Desabilitar saída colorida |
+### Outros comandos
 
 ```bash
-terraview plan --dir ./infraestrutura/prod    # analisar diretório específico
-terraview drift -d ./modules/vpc              # atalho -d
-terraview plan --no-color --format json        # saída sem cores para pipelines
-terraview plan --br                           # forçar saída em pt-BR
+terraview diagram                           # diagrama ASCII da infraestrutura
+terraview explain                           # explicação IA da infraestrutura
+terraview drift                             # detectar drift
+terraview provider list                     # seletor interativo de provider/modelo
+terraview scanners install                  # instalar scanners faltantes
+terraview setup                             # diagnóstico do ambiente
+terraview upgrade                           # auto-atualização
 ```
 
-### `terraview plan`
+### Exit Codes
 
-Analisa um plano Terraform com scanners de segurança e revisão opcional de IA.
+| Código | Significado |
+|--------|-------------|
+| 0 | Sem issues ou apenas MEDIUM/LOW/INFO |
+| 1 | Findings de severidade HIGH |
+| 2 | Findings CRITICAL (bloqueia apply) |
 
-Se `--plan` não for especificado, o terraview automaticamente:
-1. Detecta arquivos `.tf` no diretório atual
-2. Executa `terraform init` (se necessário)
-3. Executa `terraform plan -out=tfplan`
-4. Exporta `terraform show -json tfplan > plan.json`
-5. Roda os scanners e o pipeline de revisão
-
-```bash
-terraview plan                                # detecção automática + scanners
-terraview plan --plan plan.json               # usar plan.json existente
-terraview plan --ai                           # scanners + revisão com IA
-terraview plan --ai --provider gemini         # usar Gemini
-terraview plan --ai --model mistral:7b        # modelo específico
-terraview plan --scanners checkov,tfsec       # scanners específicos
-terraview plan --diagram                      # diagrama de infraestrutura
-terraview plan --blast-radius                 # raio de impacto
-terraview plan --smell                        # detectar code smells
-terraview plan --trend                        # tendências de scores
-terraview plan --explain                      # explicação em linguagem natural (implica --ai)
-terraview plan --second-opinion               # IA valida os findings dos scanners (implica --ai)
-terraview plan --format compact               # saída minimalista
-terraview plan --format json                  # apenas review.json
-terraview plan --format sarif                 # saída SARIF para CI
-terraview plan --output ./reports             # diretório de saída para review.json/.md
-terraview plan --strict                       # HIGH retorna exit code 2
-terraview plan --safe                         # modo seguro (modelo leve)
-terraview plan --profile prod                 # perfil de revisão produção
-terraview plan --findings checkov.json        # importar findings externos
-terraview plan --timeout 180                  # timeout do request de IA (segundos)
-terraview plan --temperature 0.1              # temperatura do modelo de IA (0.0–1.0)
-```
-
-> **Alias:** `terraview review` funciona como alias para `terraview plan`.
-
-### `terraview apply`
-
-Roda a revisão completa e aplica o plano condicionalmente.
-
-- **Bloqueia** se qualquer finding CRITICAL for detectado
-- Exibe resumo e pede confirmação
-- Use `--non-interactive` em pipelines CI/CD
-
-```bash
-terraview apply                                    # interativo
-terraview apply --non-interactive                  # modo CI (sem confirmação)
-terraview apply --ai                               # revisão com IA + apply
-terraview apply --ai --provider gemini             # usar Gemini
-terraview apply --diagram                          # diagrama de infraestrutura
-terraview apply --blast-radius                     # raio de impacto
-terraview apply --explain                          # explicação em linguagem natural
-terraview apply --profile prod                     # perfil de revisão produção
-terraview apply --findings checkov.json            # importar findings externos
-terraview apply --safe                             # modo seguro (modelo leve)
-terraview apply --format json                      # saída apenas em JSON
-```
-
-### `terraview validate`
-
-Executa uma suíte de validação determinística (sem dependência de IA):
-
-1. `terraform fmt -check` — verificação de formatação
-2. `terraform validate` — validação de sintaxe
-3. `terraform test` — testes nativos (Terraform 1.6+)
-4. Security Scanners — avaliação com scanners externos
-
-```bash
-terraview validate
-terraview validate -v                     # modo verboso
-```
-
-> **Alias:** `terraview test` funciona como alias para `terraview validate`.
-
-### `terraview drift`
-
-Detecta e classifica drift de infraestrutura.
-
-```bash
-terraview drift
-terraview drift --plan plan.json
-terraview drift --intelligence            # classificação avançada + risk score
-terraview drift --format compact
-terraview drift --format json
-```
-
-### `terraview explain`
-
-Gera uma explicação em linguagem natural da infraestrutura usando IA.
-
-```bash
-terraview explain
-terraview explain --plan plan.json
-terraview explain --provider gemini
-terraview explain --format json
-```
-
-### Gerenciamento de Providers
-
-#### `terraview provider list`
-
-Abre um **seletor interativo** com setas do teclado para escolher o provider e modelo padrão. A escolha é salva globalmente em `~/.terraview/.terraview.yaml`.
-
-```bash
-terraview provider list                            # seleção interativa
-terraview provider use gemini gemini-2.0-flash     # definir sem interação (scripts/CI)
-terraview provider current                         # exibir provider atual
-terraview provider test                            # testar conectividade
-```
-
-> **Alias:** `terraview ai` funciona como alias para `terraview provider`.
-
-#### `terraview provider install` / `terraview provider uninstall`
-
-```bash
-terraview provider install      # instalar Ollama + baixar modelo padrão
-terraview provider uninstall    # remover Ollama e dados
-```
-
-### `terraview setup`
-
-Exibe um diagnóstico interativo do ambiente: scanners disponíveis, precedência de ferramentas e providers de IA configurados.
-
-```bash
-terraview setup              # diagnóstico em inglês
-terraview setup --br         # diagnóstico em português
-```
-
-Exemplo de saída:
-
-```
-  terraview setup
-  ═══════════════
-
-  Security Scanners
-
-  [✓] checkov      3.2.504
-  [✗] tfsec        Install with: brew install tfsec
-  [✗] terrascan    Install with: brew install terrascan
-  [✗] kics         Install with: brew install kics
-
-  Tool Precedence
-  (lower number = higher priority)
-
-  ● 1. Checkov
-  ○ 2. tfsec/Trivy
-  ○ 3. Terrascan
-  ○ 4. KICS
-  ● 5. Deterministic rules
-  ● 6. AI analysis
-```
-
-### Utilitários
-
-```bash
-terraview version          # informações de versão
-terraview upgrade          # auto-atualização pelo GitHub
-```
-
-## Configuração (.terraview.yaml)
+## Configuração
 
 Arquivo local no projeto (override) ou global em `~/.terraview/.terraview.yaml`:
 
@@ -342,221 +223,113 @@ output:
 
 ## Security Scanners
 
-O terraview integra automaticamente com os seguintes scanners externos. Basta tê-los instalados — o terraview detecta e roda automaticamente (`--scanners all`, padrão).
-
 | Scanner | Descrição | Instalação |
 |---------|-----------|------------|
 | [Checkov](https://www.checkov.io/) | Scanner de segurança e compliance para IaC | `pip install checkov` |
 | [tfsec](https://aquasecurity.github.io/tfsec/) | Análise estática de segurança para Terraform | `brew install tfsec` |
 | [Terrascan](https://runterrascan.io/) | Detector de violations e compliance | `brew install terrascan` |
-| [KICS](https://kics.io/) | Keeping Infrastructure as Code Secure | `brew install kics` |
 
-Os findings de todos os scanners são normalizados, agregados e exibidos em um scorecard unificado.
-
-```bash
-terraview plan                              # roda todos os scanners disponíveis (--scanners=all)
-terraview plan --scanners checkov,tfsec     # roda apenas os especificados
-terraview plan --findings checkov.json      # importa findings de execução externa
-```
-
-### Precedência de Ferramentas
-
-Quando múltiplas fontes detectam o mesmo recurso, o terraview aplica uma hierarquia de confiança formal:
-
-| Tier | Rank | Fonte | Peso de Confiança |
-|------|------|-------|-------------------|
-| Tier 1 | 1 | Checkov | 1.00 |
-| Tier 1 | 2 | tfsec / Trivy | 0.95 |
-| Tier 2 | 3 | Terrascan | 0.85 |
-| Tier 2 | 4 | KICS | 0.80 |
-| Tier 3 | 5 | Regras determinísticas | 0.70 |
-| Tier 4 | 6 | IA (LLM) | 0.50 |
+Os findings de todos os scanners são normalizados, agregados e exibidos em um scorecard unificado. Use `terraview scanners install` para instalar os que estiverem faltando.
 
 ### Resolução de Conflitos (Scanner × IA)
 
-Quando `--ai` está ativo, o pipeline resolve conflitos automaticamente:
-
 | Cenário | Ação | Confiança |
 |---------|------|-----------|
-| Scanner e IA concordam (mesma severidade ±1 nível) | **Confirmado** — boost de confiança | 1.00 |
-| Scanner e IA divergem na severidade | **Scanner prevalece** — precedência formal | Peso do scanner |
-| Apenas scanner detectou | **Scanner-only** — mantido como está | Peso do scanner |
-| Apenas IA detectou | **AI-only** — mantido com confiança menor | 0.50 |
-
-### Risk Clusters
-
-Findings são agrupados por recurso em clusters de risco. Recursos com múltiplos findings de alta severidade e concordância entre ferramentas recebem um score de risco maior (0-100), facilitando a priorização.
-
-## Scores e Exit Codes
-
-Os scores são calculados em escala 0-10 com penalidades ponderadas por severidade.
-
-**Pesos de severidade:** CRITICAL=5.0, HIGH=3.0, MEDIUM=1.0, LOW=0.5, INFO=0.0
-
-**Categorias:** Segurança (peso 3×), Compliance (2×), Manutenibilidade (1.5×), Confiabilidade (1×)
-
-### Exit Codes
-
-| Código | Significado |
-|--------|-------------|
-| 0 | Sem issues ou apenas MEDIUM/LOW/INFO |
-| 1 | Findings de severidade HIGH |
-| 2 | Findings CRITICAL (bloqueia o apply) |
+| Scanner e IA concordam (±1 nível) | **Confirmado** — boost de confiança | 1.00 |
+| Scanner e IA divergem | **Scanner prevalece** | 0.80 |
+| Apenas scanner detectou | **Scanner-only** | 0.80 |
+| Apenas IA detectou | **AI-only** | 0.50 |
 
 ## Integração CI/CD
 
 ### GitHub Actions
 
 ```yaml
-name: Terraform Review
+name: Terraform Security Scan
 on:
   pull_request:
     paths: ['**.tf']
 
 jobs:
-  review:
+  scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Instalar Checkov
+      - name: Install Checkov
         run: pip install checkov
 
-      - name: Instalar terraview
+      - name: Install terraview
         run: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
 
-      - name: Revisar plano
-        run: terraview plan
+      - name: Security scan
+        run: terraview scan checkov -f sarif -o ./reports
 
-      - name: Comentar no PR
+      - name: Comment on PR
         if: always()
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          path: review.md
+          path: reports/review.md
 ```
 
 ### GitLab CI
 
 ```yaml
-terraform-review:
+terraform-scan:
   stage: validate
   script:
     - pip install checkov
     - curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-    - terraview plan
+    - terraview scan checkov -f json -o ./reports
   artifacts:
-    paths: [review.json, review.md]
+    paths: [reports/review.json, reports/review.md]
     when: always
 ```
 
 ## Arquitetura
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        terraview CLI                         │
-│  plan │ apply │ validate │ drift │ explain │ provider │ setup│
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-              ┌────────────┴─────────────┐
-              ▼                          ▼
-    ┌──────────────────────┐   ┌──────────────────────┐
-    │  Security Scanners   │   │    AI Providers       │
-    │  Checkov │ tfsec     │   │  Ollama │ Gemini      │
-    │  Terrascan │ KICS    │   │  Claude │ DeepSeek    │
-    └──────────┬───────────┘   │  OpenRouter           │
-               │               └──────────┬────────────┘
-               ▼                          ▼
-    ┌──────────────────────────────────────────────┐
-    │          Precedence Sort (by tier)            │
-    └──────────────────────┬───────────────────────┘
-                           ▼
-    ┌──────────────────────────────────────────────┐
-    │       Conflict Resolver (scanner × AI)        │
-    │  confirmed │ scanner-priority │ ai-only        │
-    └──────────────────────┬───────────────────────┘
-                           ▼
-    ┌──────────────────────────────────────────────┐
-    │        Risk Cluster Builder (by resource)     │
-    └──────────────────────┬───────────────────────┘
-                           ▼
-    ┌──────────────────────────────────────────────┐
-    │          Aggregator + Scorer + Meta           │
-    │           review.json / .md / .sarif          │
-    └──────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                            terraview CLI                              │
+│  scan │ apply │ diagram │ explain │ drift │ provider │ ...            │
+└──────────────────────────────┬────────────────────────────────────────┘
+                               │
+                  ┌────────────┴─────────────┐
+                  ▼                          ▼
+        ┌──────────────────────┐   ┌──────────────────────┐
+        │  Security Scanners   │   │    AI Providers       │
+        │  Checkov │ tfsec     │   │  Ollama │ Gemini      │
+        │  Terrascan           │   │  Claude │ DeepSeek    │
+        └──────────┬───────────┘   │  OpenRouter           │
+                   │               └──────────┬────────────┘
+                   ▼                          ▼
+        ┌──────────────────────────────────────────────┐
+        │       Conflict Resolver (scanner × AI)        │
+        │  confirmed │ scanner-priority │ ai-only        │
+        └──────────────────────┬───────────────────────┘
+                               ▼
+        ┌──────────────────────────────────────────────┐
+        │          Aggregator + Scorer + Meta           │
+        │           review.json / .md / .sarif          │
+        └──────────────────────────────────────────────┘
 ```
 
 ## Desenvolvimento
 
 ```bash
+git clone https://github.com/leonamvasquez/terraview.git
+cd terraview
 make build        # compilar para a plataforma atual
 make test         # executar testes com race detection
-make test-short   # testes rápidos
 make coverage     # relatório de cobertura
 make dist         # build para todas as plataformas
 make install      # instalar localmente (~/.local/bin)
-make help         # listar todos os targets
 ```
 
-## Roadmap
-
-- [x] Formato de saída SARIF
-- [x] Histórico e tendências de scores
-- [x] Perfis de scoring customizáveis
-- [x] Integração com scanners externos (Checkov, tfsec, Terrascan, KICS)
-- [x] Diagrama ASCII de infraestrutura
-- [x] Análise de blast radius
-- [x] Detecção de code smells
-- [x] Setup interativo (`terraview setup`)
-- [x] Precedência formal de ferramentas (4 tiers)
-- [x] Resolução de conflitos Scanner × IA
-- [x] Risk Clusters por recurso
-- [x] Pipeline AI-centric com Precedence → Resolver → Cluster → Aggregator
-- [ ] Suporte a Azure e GCP
-- [ ] Análise com consciência de módulos Terraform
-- [ ] Integração com políticas OPA/Rego
-
-## Suporte e Contato
-
-- **GitHub Issues**: [github.com/leonamvasquez/terraview/issues](https://github.com/leonamvasquez/terraview/issues)
-- **GitHub Discussions**: [github.com/leonamvasquez/terraview/discussions](https://github.com/leonamvasquez/terraview/discussions)
+Contribuições são bem-vindas! Abra uma [issue](https://github.com/leonamvasquez/terraview/issues) ou envie um pull request.
 
 ## Licença
 
-Este projeto é distribuído sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
----
-
-## FAQ
-
-**Q: O terraview funciona sem conexão com a internet?**
-A: Sim. Os scanners rodam localmente e, usando Ollama como provider de IA, toda a análise é feita sem enviar dados para fora.
-
-**Q: Preciso ter o Terraform instalado?**
-A: Sim, se quiser usar a geração automática de planos (`terraview plan` sem `--plan`). Se já tiver um `plan.json`, o Terraform não é necessário.
-
-**Q: Preciso ter algum scanner instalado?**
-A: Recomendado, mas não obrigatório. O terraview detecta automaticamente quais scanners estão disponíveis (`--scanners=all`, padrão). Use `terraview setup` para ver o status. Sem nenhum scanner, apenas o pipeline de IA pode ser usado com `--ai`.
-
-**Q: Como configuro um provider cloud (Gemini, Claude, etc.)?**
-A: Execute `terraview provider list`, selecione o provider com as setas e confirme. O terraview mostrará qual variável de ambiente configurar (ex: `GEMINI_API_KEY`).
-
-**Q: Posso usar o terraview em monorepos com múltiplos workspaces?**
-A: Sim. Use `--dir` para especificar o workspace ou `--plan` com o `plan.json` gerado previamente.
-
-**Q: Como atualizo para a versão mais recente?**
-A: Execute `terraview upgrade`. O comando verifica, baixa e instala automaticamente.
-
-**Q: O que é o alias `tv`?**
-A: Durante a instalação, é criado um symlink `tv -> terraview`. Você pode usar `tv plan`, `tv provider list`, etc. como atalho.
-
-**Q: Qual a diferença entre `terraview plan` e `terraview validate`?**
-A: `plan` roda scanners e opcionalmente IA para uma análise completa. `validate` roda verificações determinísticas rápidas (fmt, validate, test, scanners) sem suporte a IA — ideal para pré-commit ou CI rápido.
-
-**Q: O que acontece quando scanner e IA discordam?**
-A: O terraview aplica resolução automática de conflitos. Scanners têm precedência formal (Tier 1-2) sobre a IA (Tier 4). Quando ambos detectam o mesmo problema e concordam, a confiança é elevada a 100%. Quando divergem na severidade, a severidade do scanner prevalece.
-
-**Q: O que é `terraview setup`?**
-A: É um comando de diagnóstico que mostra quais scanners estão instalados, a hierarquia de precedência das ferramentas e quais providers de IA estão disponíveis — útil para verificar o ambiente antes de rodar análises.
-
+Distribuído sob a licença [MIT](LICENSE).
