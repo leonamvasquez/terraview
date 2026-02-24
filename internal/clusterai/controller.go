@@ -304,7 +304,7 @@ func (c *Controller) Run(ctx context.Context, clusters []cluster.RiskCluster) ([
 	stats := ControllerStats{TotalClusters: len(clusters)}
 
 	// Phase 1: Classify clusters and check cache
-	var pending []pendingCluster
+	var pending []pendingCluster //nolint:prealloc
 	for i := range clusters {
 		rc := &clusters[i]
 		mode := DetermineMode(rc)

@@ -3,7 +3,6 @@ package scanner
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -54,13 +53,6 @@ func (s *TerrascanScanner) Scan(ctx ScanContext) ([]rules.Finding, error) {
 	if scanDir == "" {
 		return nil, fmt.Errorf("terrascan: no source directory provided")
 	}
-
-	tmpFile, err := os.CreateTemp("", "terrascan-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("terrascan: failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
 
 	cmd := exec.Command("terrascan", "scan",
 		"-i", "terraform",

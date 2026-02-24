@@ -133,7 +133,7 @@ func buildSARIF(result aggregator.ReviewResult) SARIFReport {
 		}
 	}
 
-	var results []SARIFResult
+	var results []SARIFResult //nolint:prealloc
 	for _, f := range result.Findings {
 		ruleIndex := rulesMap[f.RuleID]
 

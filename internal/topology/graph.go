@@ -104,9 +104,7 @@ func resolveReference(val interface{}, field string, typeIndex map[string][]stri
 		}
 		inferredType := inferTypeFromField(field)
 		if addrs, ok := typeIndex[inferredType]; ok {
-			for _, addr := range addrs {
-				results = append(results, addr)
-			}
+			results = append(results, addrs...)
 		}
 	case []interface{}:
 		for _, item := range v {

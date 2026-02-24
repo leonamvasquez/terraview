@@ -7,6 +7,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/bininstaller"
 	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/platform"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/spf13/cobra"
@@ -145,17 +146,7 @@ Examples:
 			for _, name := range args {
 				spec := bininstaller.SpecFor(name)
 				if spec == nil {
-					avail := scanner.DefaultManager.Available()
-					if len(avail) > 0 {
-						names := make([]string, 0, len(avail))
-						for _, a := range avail {
-							names = append(names, a.Name())
-						}
-						sort.Strings(names)
-						fmt.Printf("  [!] Unknown scanner: %s. Valid: %s\n", name, strings.Join(scanner.ValidScanners, ", "))
-					} else {
-						fmt.Printf("  [!] Unknown scanner: %s. Valid: %s\n", name, strings.Join(scanner.ValidScanners, ", "))
-					}
+					fmt.Printf("  [!] Unknown scanner: %s. Valid: %s\n", name, strings.Join(scanner.ValidScanners, ", "))
 					continue
 				}
 				specs = append(specs, spec)
@@ -185,13 +176,15 @@ Examples:
 				}
 			}
 
+			installingMsg := fmt.Sprintf("Installing %s...", name)
 			if brFlag {
-				fmt.Printf("  [↓]   %-12s instalando...\n", name)
-			} else {
-				fmt.Printf("  [↓]   %-12s installing...\n", name)
+				installingMsg = fmt.Sprintf("Instalando %s...", name)
 			}
 
+			installSpinner := output.NewSpinner(installingMsg)
+			installSpinner.Start()
 			result := bininstaller.SmartInstall(spec, p, "")
+			installSpinner.Stop(result.Installed)
 
 			switch {
 			case result.Installed:
@@ -343,12 +336,6 @@ func sortedScannerNames(m map[string]scanner.Scanner) []string {
 	for k := range m {
 		names = append(names, k)
 	}
-	for i := 0; i < len(names); i++ {
-		for j := i + 1; j < len(names); j++ {
-			if names[i] > names[j] {
-				names[i], names[j] = names[j], names[i]
-			}
-		}
-	}
+	sort.Strings(names)
 	return names
 }

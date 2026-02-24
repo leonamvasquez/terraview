@@ -87,7 +87,7 @@ func importCheckov(data []byte) ([]rules.Finding, error) {
 		return nil, fmt.Errorf("failed to parse checkov output: %w", err)
 	}
 
-	var findings []rules.Finding
+	var findings []rules.Finding //nolint:prealloc
 	for _, check := range report.Results.FailedChecks {
 		findings = append(findings, rules.Finding{
 			RuleID:   check.CheckID,
@@ -118,7 +118,7 @@ func importTfsec(data []byte) ([]rules.Finding, error) {
 		return nil, fmt.Errorf("failed to parse tfsec output: %w", err)
 	}
 
-	var findings []rules.Finding
+	var findings []rules.Finding //nolint:prealloc
 	for _, result := range report.Results {
 		findings = append(findings, rules.Finding{
 			RuleID:   result.RuleID,

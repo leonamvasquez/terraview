@@ -601,11 +601,6 @@ func (g *Generator) renderSingleLayerBox(sb *strings.Builder, title string, reso
 }
 
 func (g *Generator) renderDualColumnBox(sb *strings.Builder, title string, left, right []ResourceEntry) {
-	colWidth := (diagramWidth - 6) / 2
-	if colWidth < boxMinWidth {
-		colWidth = boxMinWidth
-	}
-
 	// Title spanning both columns
 	totalWidth := diagramWidth - 4
 	titlePad := totalWidth - runeLen(title) - 1

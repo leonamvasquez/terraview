@@ -109,7 +109,7 @@ func (p *Pipeline) Run(ctx context.Context, scored []riskvec.ScoredResource,
 		sr    riskvec.ScoredResource
 	}
 
-	var work []workItem
+	var work []workItem //nolint:prealloc
 	for i := range scored {
 		sr := scored[i]
 
@@ -261,7 +261,7 @@ func ToFindings(results []Result, scored []riskvec.ScoredResource, providerName 
 func buildCriticalSet(findings []rules.Finding) map[string]bool {
 	set := make(map[string]bool)
 	for _, f := range findings {
-		if strings.ToUpper(f.Severity) == "CRITICAL" {
+		if strings.EqualFold(f.Severity, "CRITICAL") {
 			set[f.Resource] = true
 		}
 	}

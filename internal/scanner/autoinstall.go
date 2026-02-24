@@ -65,7 +65,7 @@ func AutoInstallScanner(name string) bininstaller.InstallResult {
 		// Update cache
 		cache := bininstaller.LoadCache()
 		cache.Set(result)
-		cache.Save()
+		_ = cache.Save()
 		// Ensure the install dir is in PATH for subsequent commands
 		EnsureBinDirInPath()
 	}
@@ -78,7 +78,13 @@ func AutoInstallScanner(name string) bininstaller.InstallResult {
 func (m *ScannerManager) InstallMissing(force bool) []bininstaller.InstallResult {
 	EnsureBinDirInPath()
 	cache := bininstaller.LoadCache()
-	p, _ := platform.Detect()
+	p, err := platform.Detect()
+	if err != nil {
+		return []bininstaller.InstallResult{{
+			Scanner: "all",
+			Error:   "platform detection failed: " + err.Error(),
+		}}
+	}
 	results := make([]bininstaller.InstallResult, 0, len(bininstaller.AllSpecs()))
 
 	for _, spec := range bininstaller.AllSpecs() {
@@ -102,6 +108,6 @@ func (m *ScannerManager) InstallMissing(force bool) []bininstaller.InstallResult
 		results = append(results, result)
 	}
 
-	cache.Save()
+	_ = cache.Save()
 	return results
 }

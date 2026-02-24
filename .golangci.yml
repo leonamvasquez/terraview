@@ -17,7 +17,13 @@ linters-settings:
   gosec:
     excludes:
       - G104  # unhandled errors on deferred Close()
+      - G204  # subprocess from variable (expected — CLI wraps terraform/scanner binaries)
       - G304  # file path from variable (expected for CLI tool)
+      - G306  # WriteFile 0644 (output reports should be user-readable)
+      - G110  # decompression bomb (downloads from trusted GitHub releases only)
+      - G115  # integer overflow int64→uint32 (tar header Mode, standard Go pattern)
+      - G305  # file traversal in tar (extracting from trusted GitHub release archives)
+      - G404  # weak random (used for retry jitter, not security)
   gocritic:
     enabled-tags:
       - diagnostic
@@ -25,6 +31,10 @@ linters-settings:
     disabled-checks:
       - ifElseChain
       - hugeParam
+      - rangeValCopy
+      - exitAfterDefer
+      - preferFprint
+      - appendCombine
   misspell:
     locale: US
     ignore-words:
@@ -32,6 +42,12 @@ linters-settings:
       - comandos
       - posicional
       - intencional
+      - componentes
+      - problemas
+      - cancelamento
+      - cancelling
+      - cancelled
+      - penalise
   prealloc:
     simple: true
 

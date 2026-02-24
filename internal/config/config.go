@@ -12,7 +12,10 @@ const configFileName = ".terraview.yaml"
 
 // GlobalConfigDir returns the ~/.terraview directory.
 func GlobalConfigDir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.TempDir()
+	}
 	return filepath.Join(home, ".terraview")
 }
 
@@ -52,7 +55,7 @@ func SaveGlobalLLMProvider(provider, model string) error {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // Config represents the full .terraview.yaml configuration.
@@ -398,5 +401,5 @@ func SaveDefaultScanner(name string) error {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }

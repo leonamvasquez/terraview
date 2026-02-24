@@ -59,7 +59,19 @@ func SevColor(severity string) string {
 	if !ColorEnabled {
 		return severity
 	}
+	// Map Portuguese labels back to English for color matching
+	sevKey := severity
 	switch severity {
+	case "CRÍTICO":
+		sevKey = rules.SeverityCritical
+	case "ALTO":
+		sevKey = rules.SeverityHigh
+	case "MÉDIO":
+		sevKey = rules.SeverityMedium
+	case "BAIXO":
+		sevKey = rules.SeverityLow
+	}
+	switch sevKey {
 	case rules.SeverityCritical:
 		return bold + red + severity + reset
 	case rules.SeverityHigh:

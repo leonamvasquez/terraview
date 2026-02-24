@@ -37,7 +37,7 @@ func LoadCache() *Cache {
 	if err != nil {
 		return c
 	}
-	json.Unmarshal(data, c)
+	_ = json.Unmarshal(data, c)
 	if c.Scanners == nil {
 		c.Scanners = make(map[string]CacheEntry)
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leonamvasquez/terraview/internal/output"
 	"golang.org/x/term"
 )
 
@@ -12,8 +13,8 @@ func strContainsFold(s, sub string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(sub))
 }
 
-// ANSI escape codes
-const (
+// ANSI escape codes — use via the package-level vars which respect --no-color.
+var (
 	ansiReset  = "\033[0m"
 	ansiBold   = "\033[1m"
 	ansiDim    = "\033[2m"
@@ -22,6 +23,19 @@ const (
 	ansiYellow = "\033[33m"
 	ansiRed    = "\033[31m"
 )
+
+// disableCmdColors clears ANSI codes used by cmd package when --no-color is set.
+func disableCmdColors() {
+	if !output.ColorEnabled {
+		ansiReset = ""
+		ansiBold = ""
+		ansiDim = ""
+		ansiCyan = ""
+		ansiGreen = ""
+		ansiYellow = ""
+		ansiRed = ""
+	}
+}
 
 // selectItem represents a single item in a selector list.
 type selectItem struct {

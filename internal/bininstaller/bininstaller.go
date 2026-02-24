@@ -99,7 +99,7 @@ func installDirect(url, destPath, name, version string, p platform.PlatformInfo)
 
 	// Set executable permission on Unix
 	if p.OS != "windows" {
-		os.Chmod(destPath, 0755)
+		_ = os.Chmod(destPath, 0755)
 	}
 
 	return InstallResult{
@@ -147,7 +147,7 @@ func installFromArchive(installer BinaryInstaller, p platform.PlatformInfo, url,
 
 	// Set executable permission on Unix
 	if p.OS != "windows" {
-		os.Chmod(destPath, 0755)
+		_ = os.Chmod(destPath, 0755)
 	}
 
 	return InstallResult{
@@ -190,9 +190,10 @@ func extractFromTarGz(archivePath, targetName, destPath string) error {
 			if err != nil {
 				return fmt.Errorf("create dest: %w", err)
 			}
-			defer out.Close()
-			if _, err := io.Copy(out, tr); err != nil {
-				return fmt.Errorf("copy: %w", err)
+			_, copyErr := io.Copy(out, tr)
+			out.Close()
+			if copyErr != nil {
+				return fmt.Errorf("copy: %w", copyErr)
 			}
 			return nil
 		}

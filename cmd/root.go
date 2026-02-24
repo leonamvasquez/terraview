@@ -25,7 +25,7 @@ var (
 )
 
 // Version is set at build time via ldflags.
-var Version = "v0.4.1"
+var Version = "v0.5.3"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
@@ -115,6 +115,7 @@ func init() {
 		if arg == "--no-color" {
 			noColor = true
 			output.DisableColor()
+			disableCmdColors()
 		}
 	}
 }

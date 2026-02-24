@@ -14,8 +14,8 @@ import (
 )
 
 var providerCmd = &cobra.Command{
-	Use: "provider",
-	Short:   "Manage AI providers and LLM runtimes",
+	Use:   "provider",
+	Short: "Manage AI providers and LLM runtimes",
 	Long: `Manage the AI providers and runtimes used by terraview.
 
 Subcommands:
@@ -29,32 +29,32 @@ Subcommands:
 
 var aiListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "Listar providers disponíveis e escolher o padrão interativamente",
+	Short: "List available providers and choose the default interactively",
 	RunE:  runAIList,
 }
 
 var aiUseCmd = &cobra.Command{
 	Use:   "use <provider> [model]",
-	Short: "Definir provider padrão (sem interação, útil em scripts)",
-	Long: `Define o provider padrão globalmente sem modo interativo.
+	Short: "Set default provider non-interactively (useful in scripts)",
+	Long: `Set the default provider globally without interactive mode.
 
-Exemplos:
-  terraview ai use gemini
-  terraview ai use openrouter google/gemini-2.0-flash-001
-  terraview ai use ollama llama3.1:8b`,
+Examples:
+  terraview provider use gemini
+  terraview provider use openrouter google/gemini-2.0-flash-001
+  terraview provider use ollama llama3.1:8b`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runAIUse,
 }
 
 var aiCurrentCmd = &cobra.Command{
 	Use:   "current",
-	Short: "Exibir o provider de IA atualmente configurado",
+	Short: "Show the currently configured AI provider",
 	RunE:  runAICurrent,
 }
 
 var aiTestCmd = &cobra.Command{
 	Use:   "test",
-	Short: "Testar conectividade com o provider de IA configurado",
+	Short: "Test connectivity with the configured AI provider",
 	RunE:  runAITest,
 }
 

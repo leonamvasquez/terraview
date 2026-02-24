@@ -47,7 +47,7 @@ func (a *Analyzer) AnalyzeWithGraph(resources []parser.NormalizedResource, g *to
 		}
 	}
 
-	var impacts []Impact
+	var impacts []Impact //nolint:prealloc
 	maxRadius := 0
 
 	for _, r := range resources {

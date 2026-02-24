@@ -14,16 +14,14 @@ import (
 // BenchmarkPipeline_10kResources verifies O(n) behavior with 10k resources.
 func BenchmarkPipeline_10kResources(b *testing.B) {
 	client := newMockClient()
-	cache := aicache.NewCache()
-	pipeline := NewPipeline(client, cache, DefaultPolicy(), 8)
 
 	scored := generate10kResources()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Reset cache for each iteration to measure worst case
-		cache = aicache.NewCache()
-		pipeline = NewPipeline(client, cache, DefaultPolicy(), 8)
+		cache := aicache.NewCache()
+		pipeline := NewPipeline(client, cache, DefaultPolicy(), 8)
 		pipeline.Run(context.Background(), scored, nil)
 	}
 }

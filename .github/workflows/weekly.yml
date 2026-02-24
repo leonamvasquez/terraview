@@ -1,0 +1,115 @@
+name: Weekly Security
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Domingo 03:00 UTC
+  workflow_dispatch: # disparo manual pela UI do GitHub
+
+permissions:
+  contents: read
+  security-events: write # upload SARIF ao Security tab
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # GOVULNCHECK — base de dados oficial Go (golang.org/x/vuln)
+  # Captura CVEs publicados após o último commit/release
+  # ──────────────────────────────────────────────────────────────────
+  vuln-go:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  # ──────────────────────────────────────────────────────────────────
+  # OSV SCANNER — base de dados OSV (Google)
+  # Cobre Go + sistema operacional da imagem base
+  # ──────────────────────────────────────────────────────────────────
+  vuln-osv:
+    name: OSV Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action@v2
+        with:
+          scan-args: |-
+            --lockfile=go.mod
+            --format=table
+            ./
+
+  # ──────────────────────────────────────────────────────────────────
+  # SAST — re-executa análise estática de segurança semanalmente
+  # Captura novas regras Semgrep publicadas após o último push
+  # ──────────────────────────────────────────────────────────────────
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >
+            p/golang
+            p/security-audit
+            p/secrets
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────
+  # FUZZ EXTENDED — 2 minutos por target para explorar mais inputs
+  # Flags o CI diário cobre apenas 30s; essa sessão vai mais fundo
+  # ──────────────────────────────────────────────────────────────────
+  fuzz:
+    name: Fuzz Extended (2min)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Fuzz Parse
+        run: go test ./internal/parser/ -fuzz=FuzzParse -fuzztime=2m
+      - name: Fuzz NormalizeAction
+        run: go test ./internal/parser/ -fuzz=FuzzNormalizeAction -fuzztime=2m
+
+  # ──────────────────────────────────────────────────────────────────
+  # CONTAINER SCOUT — Docker Scout escaneia a imagem :latest em GHCR
+  # Falha hard se encontrar CRITICAL/HIGH (novos CVEs na imagem em prod)
+  # ──────────────────────────────────────────────────────────────────
+  container-scout:
+    name: Container Scan (Docker Scout)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub (para Docker Scout)
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Scout — CVE scan na imagem em prod
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ghcr.io/leonamvasquez/terraview:latest
+          only-severities: critical,high
+          exit-code: true
+          summary: true

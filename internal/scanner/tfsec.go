@@ -89,7 +89,7 @@ func (s *TfsecScanner) runTfsec(dir string) ([]rules.Finding, error) {
 	)
 
 	// tfsec exits non-zero when findings exist
-	cmd.Run()
+	_ = cmd.Run()
 
 	data, err := os.ReadFile(tmpFile.Name())
 	if err != nil || len(data) == 0 {
@@ -114,7 +114,7 @@ func (s *TfsecScanner) runTrivy(dir string) ([]rules.Finding, error) {
 		dir,
 	)
 
-	cmd.Run()
+	_ = cmd.Run()
 
 	data, err := os.ReadFile(tmpFile.Name())
 	if err != nil || len(data) == 0 {

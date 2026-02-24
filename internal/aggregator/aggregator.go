@@ -93,17 +93,13 @@ func (a *Aggregator) Aggregate(planFile string, totalResources int, hardRuleFind
 func computeVerdict(findings []rules.Finding, strict bool) Verdict {
 	criticalCount := 0
 	highCount := 0
-	var criticalIDs []string
-	var highIDs []string
 
 	for _, f := range findings {
 		switch f.Severity {
 		case rules.SeverityCritical:
 			criticalCount++
-			criticalIDs = append(criticalIDs, f.RuleID)
 		case rules.SeverityHigh:
 			highCount++
-			highIDs = append(highIDs, f.RuleID)
 		}
 	}
 

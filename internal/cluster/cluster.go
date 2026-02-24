@@ -58,7 +58,7 @@ func (b *Builder) Build(findings []rules.Finding) *ClusterResult {
 		byResource[key] = append(byResource[key], f)
 	}
 
-	var clusters []RiskCluster
+	var clusters []RiskCluster //nolint:prealloc
 	highRiskCount := 0
 
 	for key, group := range byResource {

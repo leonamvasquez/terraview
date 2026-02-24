@@ -12,6 +12,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/topology"
@@ -131,11 +132,16 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		explainURL = ""
 	}
 
+	effectiveTemp := cfg.LLM.Temperature
+	if effectiveTemp == 0 {
+		effectiveTemp = 0.3
+	}
+
 	providerCfg := ai.ProviderConfig{
 		Model:       effectiveModel,
 		APIKey:      cfg.LLM.APIKey,
 		BaseURL:     explainURL,
-		Temperature: 0.3,
+		Temperature: effectiveTemp,
 		TimeoutSecs: effectiveTimeout,
 		MaxTokens:   8192,
 		MaxRetries:  2,
@@ -165,8 +171,10 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	fmt.Println("Analyzing infrastructure with AI...")
+	explainSpinner := output.NewSpinner("Analyzing infrastructure with AI...")
+	explainSpinner.Start()
 	completion, err := provider.Analyze(ctx, req)
+	explainSpinner.Stop(err == nil)
 	if err != nil {
 		return fmt.Errorf("AI analysis failed: %w", err)
 	}

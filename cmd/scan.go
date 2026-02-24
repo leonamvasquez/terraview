@@ -235,16 +235,18 @@ func executeReview(scannerName string) (string, int, error) {
 			return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
 		}
 
-		logVerbose("Running scanner: %s", resolvedScanner.Name())
-
 		scanCtx := scanner.ScanContext{
 			PlanPath:  resolvedPlan,
 			SourceDir: workDir,
 			WorkDir:   workDir,
 		}
 
+		scanSpinner := output.NewSpinner(fmt.Sprintf("Running scanner: %s...", resolvedScanner.Name()))
+		scanSpinner.Start()
 		rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
 		aggResult := scanner.Aggregate(rawResults)
+		scanSpinner.Stop(true)
+
 		scannerResult = &aggResult
 
 		hardFindings = append(hardFindings, aggResult.Findings...)
@@ -295,7 +297,7 @@ func executeReview(scannerName string) (string, int, error) {
 		topoSummary["topology_context"] = topoGraph.FormatContext()
 		topoSummary["topology_layers"] = topoGraph.Layers()
 
-		// Cluster-level adaptive AI invocation (v0.4.1)
+		// Cluster-level adaptive AI invocation
 		if clusterResult != nil && len(clusterResult.Clusters) > 0 {
 			aiFindings, aiSummary, clusterCache = runClusterAIReview(
 				clusterResult.Clusters, effectiveProvider, effectiveURL,
@@ -459,7 +461,7 @@ func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
 	return limits
 }
 
-// runClusterAIReview runs cluster-level adaptive AI invocation (v0.4.1).
+// runClusterAIReview runs cluster-level adaptive AI invocation.
 // Instead of running AI per-resource, groups findings into clusters and runs
 // AI per-cluster with adaptive depth (enrichment_only, full_analysis, or skip).
 // Returns findings, summary, and the cluster cache for --explain reuse.
@@ -532,7 +534,10 @@ func runClusterAIReview(clusters []cluster.RiskCluster,
 	logVerbose("Cluster AI: %d clusters → adaptive invocation (workers=%d)", len(clusters), workers)
 
 	// Run cluster-level AI analysis
+	aiSpinner := output.NewSpinner(fmt.Sprintf("AI analyzing %d clusters (%s/%s)...", len(clusters), providerName, model))
+	aiSpinner.Start()
 	results, stats := ctrl.Run(ctx, clusters)
+	aiSpinner.Stop(stats.Errors == 0)
 
 	// Stop monitor and cleanup Ollama process
 	if monitor != nil {

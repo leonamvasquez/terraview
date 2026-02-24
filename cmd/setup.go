@@ -65,7 +65,7 @@ func runSetupEN() error {
 		})
 	}
 	for _, m := range missing {
-		s, _ := allScanners[m.Name]
+		s := allScanners[m.Name]
 		pri := 99
 		if s != nil {
 			pri = s.Priority()
@@ -207,7 +207,7 @@ func runSetupBR() error {
 		})
 	}
 	for _, m := range missing {
-		s, _ := allScanners[m.Name]
+		s := allScanners[m.Name]
 		pri := 99
 		if s != nil {
 			pri = s.Priority()

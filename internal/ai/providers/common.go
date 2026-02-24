@@ -181,7 +181,7 @@ func parseResponse(response, providerName string) ([]rules.Finding, string, erro
 		category := normalizeCategory(f.Category)
 
 		findings = append(findings, rules.Finding{
-			RuleID:      fmt.Sprintf("AI-%s-%s", strings.ToUpper(providerName[:3]), strings.ToUpper(category[:3])),
+			RuleID:      fmt.Sprintf("AI-%s-%s", strings.ToUpper(safePrefix(providerName, 3)), strings.ToUpper(safePrefix(category, 3))),
 			Severity:    severity,
 			Category:    category,
 			Resource:    f.Resource,
@@ -219,4 +219,12 @@ func truncateJSON(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "\n  ... (truncated)"
+}
+
+// safePrefix returns the first n characters of s, or s itself if shorter.
+func safePrefix(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

@@ -1,4 +1,8 @@
-![terraview](terraview.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/terraview-logo-dark-theme.png">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/terraview-logo-white-theme.png">
+  <img alt="terraview" src=".github/assets/terraview-logo-white-theme.png">
+</picture>
 
 **Choose your language:** [Português](README.md) | [English](README.en.md)
 

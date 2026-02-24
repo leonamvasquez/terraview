@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -25,8 +26,8 @@ const (
 var forceUpdate bool
 
 var upgradeCmd = &cobra.Command{
-	Use: "upgrade",
-	Short:   "Upgrade terraview to the latest version",
+	Use:   "upgrade",
+	Short: "Upgrade terraview to the latest version",
 	Long: `Downloads and installs the latest version of terraview from GitHub Releases.
 
 Detects your OS and architecture automatically.
@@ -103,11 +104,14 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	defer os.RemoveAll(tmpDir)
 
 	// Download binary
-	fmt.Printf("  Downloading %s ...\n", binaryAssetName)
+	downloadSpinner := output.NewSpinner(fmt.Sprintf("Downloading %s...", binaryAssetName))
+	downloadSpinner.Start()
 	binaryTarPath := filepath.Join(tmpDir, "binary.tar.gz")
 	if err := downloadFile(binaryURL, binaryTarPath); err != nil {
+		downloadSpinner.Stop(false)
 		return fmt.Errorf("failed to download binary: %w", err)
 	}
+	downloadSpinner.Stop(true)
 
 	// Extract binary from tarball
 	extractedBinary, err := extractBinaryFromTar(binaryTarPath, tmpDir)
@@ -118,11 +122,14 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// 5. Download and update assets
 	assetsURL := findAssetURL(release, assetsAssetName)
 	if assetsURL != "" {
-		fmt.Printf("  Downloading %s ...\n", assetsAssetName)
+		assetsSpinner := output.NewSpinner(fmt.Sprintf("Downloading %s...", assetsAssetName))
+		assetsSpinner.Start()
 		assetsTarPath := filepath.Join(tmpDir, "assets.tar.gz")
 		if err := downloadFile(assetsURL, assetsTarPath); err != nil {
+			assetsSpinner.Stop(false)
 			fmt.Fprintf(os.Stderr, "  WARNING: failed to download assets: %v\n", err)
 		} else {
+			assetsSpinner.Stop(true)
 			assetsDir := getAssetsDir()
 			if err := extractTarGz(assetsTarPath, assetsDir); err != nil {
 				fmt.Fprintf(os.Stderr, "  WARNING: failed to extract assets: %v\n", err)
@@ -144,7 +151,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("  Replacing %s ...\n", currentBinary)
 	if err := replaceBinary(extractedBinary, currentBinary); err != nil {
-		hint := "\n\n  Try: sudo terraview update"
+		hint := "\n\n  Try: sudo terraview upgrade"
 		if runtime.GOOS == "windows" {
 			hint = "\n\n  Try running from an elevated (Administrator) terminal"
 		}
@@ -353,7 +360,7 @@ func replaceBinary(newBinary, currentBinary string) error {
 	src, err := os.Open(newBinary)
 	if err != nil {
 		// Restore backup
-		os.Rename(backupPath, currentBinary)
+		_ = os.Rename(backupPath, currentBinary)
 		return err
 	}
 	defer src.Close()
@@ -361,20 +368,20 @@ func replaceBinary(newBinary, currentBinary string) error {
 	dst, err := os.OpenFile(currentBinary, os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
 		// Restore backup
-		os.Rename(backupPath, currentBinary)
+		_ = os.Rename(backupPath, currentBinary)
 		return err
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		dst.Close()
-		os.Remove(currentBinary)
-		os.Rename(backupPath, currentBinary)
+		_ = os.Remove(currentBinary)
+		_ = os.Rename(backupPath, currentBinary)
 		return err
 	}
 
 	// Remove backup
-	os.Remove(backupPath)
+	_ = os.Remove(backupPath)
 	return nil
 }
 

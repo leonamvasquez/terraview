@@ -53,12 +53,12 @@ func (e *Executor) Init() error {
 		return nil // already initialized
 	}
 
-	fmt.Fprintf(os.Stderr, "%s Running terraform init...\n", output.Prefix())
-	_, err := e.runSilent("init", "-input=false")
+	_, err := output.SpinWhile("Running terraform init...", func() (string, error) {
+		return e.runSilent("init", "-input=false")
+	})
 	if err != nil {
 		return fmt.Errorf("terraform init failed: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "%s terraform init ✓\n", output.Prefix())
 	return nil
 }
 
@@ -81,7 +81,8 @@ func (e *Executor) Plan() (string, error) {
 	planBinary := filepath.Join(e.workDir, "tfplan")
 	planJSON := filepath.Join(e.workDir, "plan.json")
 
-	fmt.Fprintf(os.Stderr, "%s Running terraform plan...\n", output.Prefix())
+	planSpinner := output.NewSpinner("Running terraform plan...")
+	planSpinner.Start()
 	stderr, err := e.runSilent("plan", "-out=tfplan", "-input=false", "-detailed-exitcode")
 	// Exit code 2 from terraform plan means changes detected — that's expected
 	if err != nil {
@@ -89,13 +90,14 @@ func (e *Executor) Plan() (string, error) {
 			if exitErr.ExitCode() == 2 {
 				// Changes present — this is normal
 			} else {
-				// Show stderr on failure so user can debug
+				planSpinner.Stop(false)
 				if stderr != "" {
 					fmt.Fprintf(os.Stderr, "%s\n", stderr)
 				}
 				return "", fmt.Errorf("terraform plan failed: %w", err)
 			}
 		} else {
+			planSpinner.Stop(false)
 			if stderr != "" {
 				fmt.Fprintf(os.Stderr, "%s\n", stderr)
 			}
@@ -104,12 +106,14 @@ func (e *Executor) Plan() (string, error) {
 	}
 
 	if _, err := os.Stat(planBinary); err != nil {
+		planSpinner.Stop(false)
 		return "", fmt.Errorf("terraform plan did not produce tfplan file: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "%s terraform plan ✓\n", output.Prefix())
+	planSpinner.Stop(true)
 
-	fmt.Fprintf(os.Stderr, "%s Exporting plan to JSON...\n", output.Prefix())
-	out, err := e.run("show", "-json", "tfplan")
+	out, err := output.SpinWhile("Exporting plan to JSON...", func() (string, error) {
+		return e.run("show", "-json", "tfplan")
+	})
 	if err != nil {
 		return "", fmt.Errorf("terraform show -json failed: %w", err)
 	}
@@ -117,15 +121,15 @@ func (e *Executor) Plan() (string, error) {
 	if err := os.WriteFile(planJSON, []byte(out), 0644); err != nil {
 		return "", fmt.Errorf("failed to write plan.json: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "%s plan.json ✓\n", output.Prefix())
 
 	return planJSON, nil
 }
 
 // FmtCheck runs terraform fmt -check and returns whether files are formatted.
 func (e *Executor) FmtCheck() (string, error) {
-	fmt.Printf("%s Running terraform fmt -check...\n", output.Prefix())
-	out, err := e.run("fmt", "-check", "-recursive")
+	out, err := output.SpinWhile("Running terraform fmt -check...", func() (string, error) {
+		return e.run("fmt", "-check", "-recursive")
+	})
 	if err != nil {
 		return out, fmt.Errorf("terraform fmt check failed (unformatted files detected): %w", err)
 	}
@@ -134,8 +138,9 @@ func (e *Executor) FmtCheck() (string, error) {
 
 // Validate runs terraform validate and returns the output.
 func (e *Executor) Validate() (string, error) {
-	fmt.Printf("%s Running terraform validate...\n", output.Prefix())
-	out, err := e.runPassthrough("validate")
+	out, err := output.SpinWhile("Running terraform validate...", func() (string, error) {
+		return e.runPassthrough("validate")
+	})
 	if err != nil {
 		return out, fmt.Errorf("terraform validate failed: %w", err)
 	}
@@ -145,15 +150,19 @@ func (e *Executor) Validate() (string, error) {
 // Test runs terraform test (available in Terraform 1.6+).
 // Returns output and a boolean indicating if the command is available.
 func (e *Executor) Test() (string, bool, error) {
-	fmt.Printf("%s Running terraform test...\n", output.Prefix())
+	s := output.NewSpinner("Running terraform test...")
+	s.Start()
 	out, err := e.runPassthrough("test")
 	if err != nil {
 		// Check if it's an "unknown command" error
 		if strings.Contains(out, "unknown command") || strings.Contains(out, "Unknown command") {
+			s.Stop(true)
 			return "", false, nil
 		}
+		s.Stop(false)
 		return out, true, fmt.Errorf("terraform test failed: %w", err)
 	}
+	s.Stop(true)
 	return out, true, nil
 }
 
@@ -164,7 +173,9 @@ func (e *Executor) Apply() error {
 		return fmt.Errorf("no tfplan file found — run 'terraview review' first")
 	}
 
-	fmt.Printf("%s Running terraform apply...\n", output.Prefix())
+	// Apply uses runPassthrough (terminal-attached), so we show the spinner
+	// briefly and stop before the command streams output to the terminal.
+	fmt.Fprintf(os.Stderr, "%s Running terraform apply...\n", output.Prefix())
 	_, err := e.runPassthrough("apply", "tfplan")
 	if err != nil {
 		return fmt.Errorf("terraform apply failed: %w", err)
@@ -239,7 +250,7 @@ func acquireLock(dir string) (func(), error) {
 		}
 		return nil, fmt.Errorf("failed to create lock file: %w", err)
 	}
-	f.WriteString(fmt.Sprintf("pid=%d\n", os.Getpid()))
+	_, _ = f.WriteString(fmt.Sprintf("pid=%d\n", os.Getpid()))
 	f.Close()
 
 	return func() {

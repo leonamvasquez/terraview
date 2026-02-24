@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
@@ -60,6 +62,16 @@ func runApply(cmd *cobra.Command, args []string) error {
 		diagramFlag = true
 		impactFlag = true
 		aiEnabled = true
+	}
+
+	// If no scanner specified, try auto-select (same as scan command)
+	if scannerName == "" {
+		cfg, _ := config.Load(workDir)
+		resolved, _ := scanner.ResolveDefault(cfg.Scanner.Default)
+		if resolved != nil {
+			scannerName = resolved.Name()
+			logVerbose("Auto-selected scanner: %s", scannerName)
+		}
 	}
 
 	// Validate: must specify a scanner or --ai (or both)
