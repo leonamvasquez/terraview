@@ -48,7 +48,7 @@ Provider Management:
 
 Scanner Management:
   scanners    Manage security scanners
-              scanners list | install
+              scanners list | install | default
 
 Utilities:
   version     Show version information
@@ -141,7 +141,7 @@ Gerenciamento de Providers:
 
 Gerenciamento de Scanners:
   scanners    Gerenciar scanners de segurança
-              scanners list | install
+              scanners list | install | default
 
 Utilitários:
   version     Exibir informações de versão
@@ -299,11 +299,11 @@ Exemplos:
 	versionCmd.Short = "Exibir a versão do terraview"
 	upgradeCmd.Short = "Atualizar terraview para a versão mais recente"
 	setupCmd.Short = "Configuração interativa do ambiente"
-	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe status
-e sugere comandos de instalação para ferramentas ausentes.
+	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe o status 
+do ambiente, scanner padrão configurado e providers disponíveis.
 
 Este comando é informacional e não-destrutivo — apenas verifica o que
-está disponível e oferece dicas de instalação.
+está disponível. Para instalar scanners, use 'terraview scanners install'.
 
 Exemplos:
   terraview setup`
@@ -355,6 +355,17 @@ Exemplos:
 	})
 	translateFlags(upgradeCmd, map[string]string{
 		"force": "Forçar atualização mesmo se já estiver na versão mais recente",
+	})
+
+	// Scanners subcommands
+	scannersCmd.Short = "Gerenciar scanners de segurança"
+	scannersCmd.Long = "Listar, instalar e gerenciar binários de scanners de segurança."
+	scannersListCmd.Short = "Listar todos os scanners com status de instalação"
+	scannersInstallCmd.Short = "Instalar um ou mais binários de scanner"
+	scannersDefaultCmd.Short = "Definir ou exibir o scanner padrão"
+	translateFlags(scannersInstallCmd, map[string]string{
+		"force": "Forçar reinstalação mesmo se já instalado",
+		"all":   "Instalar todos os scanners faltantes",
 	})
 
 	// Translate Cobra built-in template labels

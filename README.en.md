@@ -47,8 +47,12 @@ Security analysis for Terraform plans combining static scanners (Checkov, tfsec,
   Security Scanners
 
   [✓] checkov      3.2.504
-  [✗] tfsec        Install with: brew install tfsec
-  [✗] terrascan    Install with: brew install terrascan
+  [✗] tfsec        not installed
+  [✗] terrascan    not installed
+
+  Default: checkov
+
+  Install missing: terraview scanners install --all
 ```
 
 ## Quick Start
@@ -156,6 +160,7 @@ Flags:
 ### Scan
 
 ```bash
+terraview scan                              # auto-select (default or priority)
 terraview scan checkov                      # scan with Checkov
 terraview scan tfsec                        # scan with tfsec
 terraview scan checkov --ai                 # scanner + AI review
@@ -183,7 +188,10 @@ terraview diagram                           # ASCII infrastructure diagram
 terraview explain                           # AI explanation of infrastructure
 terraview drift                             # detect drift
 terraview provider list                     # interactive provider/model picker
-terraview scanners install                  # install missing scanners
+terraview scanners install checkov          # install specific scanner
+terraview scanners install --all            # install all scanners
+terraview scanners default checkov          # set default scanner
+terraview scanners list                     # show scanner status
 terraview setup                             # environment diagnostic
 terraview upgrade                           # self-update
 ```
@@ -217,6 +225,9 @@ scoring:
     medium: 1
     low: 0.5
 
+scanner:
+  default: checkov              # default scanner for "terraview scan"
+
 output:
   format: pretty                # pretty, compact, json, sarif
 ```
@@ -225,11 +236,18 @@ output:
 
 | Scanner | Description | Install |
 |---------|-------------|---------|
-| [Checkov](https://www.checkov.io/) | Security and compliance scanner for IaC | `pip install checkov` |
-| [tfsec](https://aquasecurity.github.io/tfsec/) | Static security analysis for Terraform | `brew install tfsec` |
-| [Terrascan](https://runterrascan.io/) | Compliance violation detector | `brew install terrascan` |
+| [Checkov](https://www.checkov.io/) | Security and compliance scanner for IaC | `terraview scanners install checkov` |
+| [tfsec](https://aquasecurity.github.io/tfsec/) | Static security analysis for Terraform | `terraview scanners install tfsec` |
+| [Terrascan](https://runterrascan.io/) | Compliance violation detector | `terraview scanners install terrascan` |
 
-Findings from all scanners are normalized, aggregated, and presented in a unified scorecard. Use `terraview scanners install` to install any that are missing.
+Findings from all scanners are normalized, aggregated, and presented in a unified scorecard.
+
+```bash
+terraview scanners install --all            # install all
+terraview scanners install checkov          # install specific
+terraview scanners default checkov          # set as default
+terraview scanners list                     # check status
+```
 
 ### Conflict Resolution (Scanner × AI)
 

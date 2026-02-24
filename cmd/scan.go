@@ -97,9 +97,30 @@ func runScan(cmd *cobra.Command, args []string) error {
 		aiEnabled = true
 	}
 
+	// If no scanner specified, try auto-select
+	if scannerName == "" {
+		// Load config to check for default scanner
+		cfg, _ := config.Load(workDir)
+		resolved, _ := scanner.ResolveDefault(cfg.Scanner.Default)
+		if resolved != nil {
+			scannerName = resolved.Name()
+			logVerbose("Auto-selected scanner: %s", scannerName)
+		}
+	}
+
 	// Validate: must specify a scanner or --ai (or both)
 	if scannerName == "" && !aiEnabled && !explainFlag && !diagramFlag && findingsFile == "" {
-		return fmt.Errorf("specify a scanner or --ai\n\nUsage:\n  terraview scan checkov          # security scanner\n  terraview scan checkov --ai     # scanner + AI\n  terraview scan --ai             # AI-only analysis\n\nAvailable scanners: checkov, tfsec, terrascan")
+		// Show helpful error with installed scanners
+		avail := scanner.DefaultManager.Available()
+		if len(avail) == 0 {
+			return fmt.Errorf("no scanners installed.\n\nInstall a scanner first:\n  terraview scanners install checkov\n  terraview scanners install tfsec\n  terraview scanners install terrascan\n  terraview scanners install --all\n\nOr use AI-only mode:\n  terraview scan --ai")
+		}
+		names := make([]string, 0, len(avail))
+		for _, s := range avail {
+			names = append(names, s.Name())
+		}
+		return fmt.Errorf("specify a scanner or --ai\n\nInstalled scanners:\n  %s\n\nUsage:\n  terraview scan %s          # security scanner\n  terraview scan %s --ai     # scanner + AI\n  terraview scan --ai             # AI-only\n\nSet a default: terraview scanners default %s",
+			strings.Join(names, "\n  "), names[0], names[0], names[0])
 	}
 
 	_, exitCode, err := executeReview(scannerName)

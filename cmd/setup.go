@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/spf13/cobra"
 )
@@ -13,10 +14,10 @@ var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Interactive environment setup",
 	Long: `Detects installed security scanners and AI providers, shows their status,
-and guides you through installing missing tools.
+default scanner configuration, and available providers.
 
 This command is informational and non-destructive — it only checks what
-is available and offers install hints for anything missing.
+is available. To install scanners, use 'terraview scanners install'.
 
 Examples:
   terraview setup`,
@@ -100,18 +101,17 @@ func runSetupEN() error {
 	fmt.Println()
 	fmt.Printf("  Available: %d/%d scanners\n", len(available), len(allScanners))
 
+	// Show default scanner
+	cfg, _ := config.Load(workDir)
+	if cfg.Scanner.Default != "" {
+		fmt.Printf("  Default:   %s%s%s\n", ansiBold, cfg.Scanner.Default, ansiReset)
+	} else if len(available) > 0 {
+		fmt.Printf("  Default:   %s(auto — highest priority installed)%s\n", ansiDim, ansiReset)
+	}
+
 	if len(missing) > 0 {
 		fmt.Println()
-		fmt.Println(ansiBold + "  Install Commands:" + ansiReset)
-		for _, m := range missing {
-			if m.Hint.Brew != "" {
-				fmt.Printf("    %s$ %s%s\n", ansiDim, m.Hint.Brew, ansiReset)
-			} else if m.Hint.Pip != "" {
-				fmt.Printf("    %s$ %s%s\n", ansiDim, m.Hint.Pip, ansiReset)
-			} else if m.Hint.Default != "" {
-				fmt.Printf("    %s%s%s\n", ansiDim, m.Hint.Default, ansiReset)
-			}
-		}
+		fmt.Printf("  %sInstall missing: terraview scanners install --all%s\n", ansiDim, ansiReset)
 	}
 
 	// ── Section 2: AI Provider ────────────────────────────────────
@@ -242,18 +242,17 @@ func runSetupBR() error {
 	fmt.Println()
 	fmt.Printf("  Disponíveis: %d/%d scanners\n", len(available), len(allScanners))
 
+	// Mostrar scanner padrão
+	cfg, _ := config.Load(workDir)
+	if cfg.Scanner.Default != "" {
+		fmt.Printf("  Padrão:     %s%s%s\n", ansiBold, cfg.Scanner.Default, ansiReset)
+	} else if len(available) > 0 {
+		fmt.Printf("  Padrão:     %s(automático — maior prioridade instalado)%s\n", ansiDim, ansiReset)
+	}
+
 	if len(missing) > 0 {
 		fmt.Println()
-		fmt.Println(ansiBold + "  Comandos de Instalação:" + ansiReset)
-		for _, m := range missing {
-			if m.Hint.Brew != "" {
-				fmt.Printf("    %s$ %s%s\n", ansiDim, m.Hint.Brew, ansiReset)
-			} else if m.Hint.Pip != "" {
-				fmt.Printf("    %s$ %s%s\n", ansiDim, m.Hint.Pip, ansiReset)
-			} else if m.Hint.Default != "" {
-				fmt.Printf("    %s%s%s\n", ansiDim, m.Hint.Default, ansiReset)
-			}
-		}
+		fmt.Printf("  %sInstalar faltantes: terraview scanners install --all%s\n", ansiDim, ansiReset)
 	}
 
 	// ── Seção 2: Provider de IA ──────────────────────────────────

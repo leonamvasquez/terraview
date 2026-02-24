@@ -61,6 +61,12 @@ type Config struct {
 	Scoring ScoringConfig `yaml:"scoring"`
 	Rules   RulesConfig   `yaml:"rules"`
 	Output  OutputConfig  `yaml:"output"`
+	Scanner ScannerConfig `yaml:"scanner"`
+}
+
+// ScannerConfig holds scanner preferences.
+type ScannerConfig struct {
+	Default string `yaml:"default"` // default scanner name (checkov, tfsec, terrascan)
 }
 
 // LLMConfig configures LLM behavior.
@@ -140,6 +146,9 @@ func DefaultConfig() Config {
 		Output: OutputConfig{
 			Format: "pretty",
 		},
+		Scanner: ScannerConfig{
+			Default: "",
+		},
 	}
 }
 
@@ -188,6 +197,7 @@ type fileConfig struct {
 	Scoring *fileScoringConfig `yaml:"scoring"`
 	Rules   *fileRulesConfig   `yaml:"rules"`
 	Output  *fileOutputConfig  `yaml:"output"`
+	Scanner *fileScannerConfig `yaml:"scanner"`
 }
 
 type fileLLMConfig struct {
@@ -225,6 +235,10 @@ type fileRulesConfig struct {
 
 type fileOutputConfig struct {
 	Format *string `yaml:"format"`
+}
+
+type fileScannerConfig struct {
+	Default *string `yaml:"default"`
 }
 
 // validate checks constraints on the parsed config.
@@ -350,5 +364,39 @@ func (f *fileConfig) merge(defaults Config) Config {
 		}
 	}
 
+	if f.Scanner != nil {
+		if f.Scanner.Default != nil && *f.Scanner.Default != "" {
+			cfg.Scanner.Default = *f.Scanner.Default
+		}
+	}
+
 	return cfg
+}
+
+// SaveDefaultScanner persists the default scanner to the global config file.
+func SaveDefaultScanner(name string) error {
+	path := GlobalConfigPath()
+
+	existing := make(map[string]interface{})
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+
+	sc, _ := existing["scanner"].(map[string]interface{})
+	if sc == nil {
+		sc = make(map[string]interface{})
+	}
+	sc["default"] = name
+	existing["scanner"] = sc
+
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.MkdirAll(GlobalConfigDir(), 0755); err != nil {
+		return fmt.Errorf("failed to create config dir: %w", err)
+	}
+
+	return os.WriteFile(path, data, 0644)
 }

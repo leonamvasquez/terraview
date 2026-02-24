@@ -212,12 +212,12 @@ func TestResolveUnavailableScanner(t *testing.T) {
 
 func TestResolveEmpty(t *testing.T) {
 	mgr := NewManager()
-	_, err := mgr.Resolve("")
-	if err == nil {
-		t.Fatal("Resolve(\"\") should return error")
+	s, err := mgr.Resolve("")
+	if err != nil {
+		t.Fatalf("Resolve(\"\") should return nil error, got: %v", err)
 	}
-	if !stringContains(err.Error(), "must be explicitly specified") {
-		t.Errorf("expected 'must be explicitly specified' in error, got: %s", err.Error())
+	if s != nil {
+		t.Fatal("Resolve(\"\") should return nil scanner")
 	}
 }
 
@@ -394,10 +394,13 @@ func TestGlobalResolve(t *testing.T) {
 			t.Errorf("Resolve(%q) should return error", input)
 		}
 	}
-	// empty should return error
-	_, err := Resolve("")
-	if err == nil {
-		t.Error("Resolve(\"\") should return error")
+	// empty should return nil scanner and nil error (auto-select)
+	s, err := Resolve("")
+	if err != nil {
+		t.Errorf("Resolve(\"\") should return nil error, got: %v", err)
+	}
+	if s != nil {
+		t.Error("Resolve(\"\") should return nil scanner")
 	}
 }
 

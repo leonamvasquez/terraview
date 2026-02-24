@@ -146,17 +146,17 @@ func (m *ScannerManager) Missing() []struct {
 // Resolve validates and returns exactly one scanner.
 //
 // Accepts a single scanner name (checkov, tfsec, terrascan).
-// Returns an error if input is empty, contains commas, or is "auto"/"all".
+// Returns an error if input contains commas, or is "auto"/"all".
+// If input is empty, returns nil (caller should use ResolveDefault instead).
 func (m *ScannerManager) Resolve(input string) (Scanner, error) {
 	input = strings.TrimSpace(input)
 
 	if input == "" {
-		return nil, fmt.Errorf("a scanner must be explicitly specified. Use --scanner=<name>. Allowed values: %s",
-			strings.Join(ValidScanners, ", "))
+		return nil, nil
 	}
 
 	if strings.Contains(input, ",") {
-		return nil, fmt.Errorf("only one scanner is allowed per execution. Use --scanner=<name>. Allowed values: %s",
+		return nil, fmt.Errorf("only one scanner is allowed per execution. Allowed values: %s",
 			strings.Join(ValidScanners, ", "))
 	}
 
@@ -167,16 +167,52 @@ func (m *ScannerManager) Resolve(input string) (Scanner, error) {
 
 	s, ok := m.Get(input)
 	if !ok {
-		return nil, fmt.Errorf("unknown scanner %q. Allowed values: %s",
-			input, strings.Join(ValidScanners, ", "))
+		// Unknown scanner name — show only installed scanners as suggestions
+		avail := m.Available()
+		if len(avail) == 0 {
+			return nil, fmt.Errorf("unknown scanner %q. No scanners installed.\nInstall with: terraview scanners install checkov", input)
+		}
+		names := make([]string, 0, len(avail))
+		for _, a := range avail {
+			names = append(names, a.Name())
+		}
+		sort.Strings(names)
+		return nil, fmt.Errorf("unknown scanner %q. Available scanners:\n  %s", input, strings.Join(names, "\n  "))
 	}
 
 	if !s.Available() {
 		_, hint := s.EnsureInstalled()
-		return nil, fmt.Errorf("scanner %q is not installed. %s", input, hint.Default)
+		return nil, fmt.Errorf("scanner %q is not installed.\nInstall with: terraview scanners install %s\n%s", input, input, hint.Default)
 	}
 
 	return s, nil
+}
+
+// ResolveDefault returns the best scanner to use when none is specified.
+// Priority: 1) configured default, 2) highest-priority installed scanner.
+// Returns ("", nil) if no scanner is available.
+func (m *ScannerManager) ResolveDefault(configDefault string) (Scanner, error) {
+	// 1. Try configured default
+	if configDefault != "" {
+		s, ok := m.Get(configDefault)
+		if ok && s.Available() {
+			return s, nil
+		}
+		// Default is set but not available — warn but fall through
+	}
+
+	// 2. Pick by priority (lower number = higher priority): checkov(1) > tfsec(2) > terrascan(3)
+	avail := m.Available()
+	if len(avail) == 0 {
+		return nil, nil
+	}
+
+	// Sort by priority
+	sort.Slice(avail, func(i, j int) bool {
+		return avail[i].Priority() < avail[j].Priority()
+	})
+
+	return avail[0], nil
 }
 
 // RunAll executes multiple scanners concurrently and returns all results.
@@ -250,6 +286,11 @@ func All() map[string]Scanner {
 // Resolve validates and returns exactly one scanner using DefaultManager.
 func Resolve(input string) (Scanner, error) {
 	return DefaultManager.Resolve(input)
+}
+
+// ResolveDefault returns the best scanner when none is specified using DefaultManager.
+func ResolveDefault(configDefault string) (Scanner, error) {
+	return DefaultManager.ResolveDefault(configDefault)
 }
 
 // RunAll executes multiple scanners concurrently using DefaultManager.
