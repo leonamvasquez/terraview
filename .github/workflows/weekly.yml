@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   security-events: write # upload SARIF ao Security tab
+  actions: read          # required by osv-scanner reusable workflow
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
@@ -34,16 +35,11 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   vuln-osv:
     name: OSV Scanner
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run OSV Scanner
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --lockfile=go.mod
-            --format=table
-            ./
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.3
+    with:
+      scan-args: |-
+        --lockfile=go.mod
+        ./
 
   # ──────────────────────────────────────────────────────────────────
   # SAST — re-executa análise estática de segurança semanalmente

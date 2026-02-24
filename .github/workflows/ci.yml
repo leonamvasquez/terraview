@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   security-events: write  # upload SARIF to GitHub Security tab
+  actions: read           # required by osv-scanner reusable workflow
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
@@ -106,13 +107,14 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      - name: OSV Scanner (Google OSV)
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --lockfile=go.mod
-            --format=table
-            ./
+
+  osv-scan:
+    name: OSV Scanner
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.3
+    with:
+      scan-args: |-
+        --lockfile=go.mod
+        ./
 
   # ──────────────────────────────────────────────────────────────────
   # LICENSE AUDIT — bloqueia dependências com licenças restritivas
