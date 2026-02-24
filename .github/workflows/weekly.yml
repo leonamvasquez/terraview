@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run OSV Scanner
-        uses: google/osv-scanner-action@v2
+        uses: google/osv-scanner-action@v1
         with:
           scan-args: |-
             --lockfile=go.mod

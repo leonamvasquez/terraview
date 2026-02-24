@@ -107,7 +107,7 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
       - name: OSV Scanner (Google OSV)
-        uses: google/osv-scanner-action@v2
+        uses: google/osv-scanner-action@v1
         with:
           scan-args: |-
             --lockfile=go.mod
