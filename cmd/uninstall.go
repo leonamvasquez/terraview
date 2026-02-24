@@ -54,7 +54,7 @@ func runUninstallLLM(cmd *cobra.Command, args []string) error {
 		var confirm string
 		fmt.Scanln(&confirm)
 		if confirm != "y" && confirm != "Y" {
-			fmt.Println("Cancelled.")
+			fmt.Println("Canceled.")
 			return nil
 		}
 		fmt.Println()

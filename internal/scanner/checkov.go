@@ -164,7 +164,7 @@ func parseCheckovOutput(data []byte) ([]rules.Finding, error) {
 }
 
 func convertCheckovFindings(checks []checkovCheck) []rules.Finding {
-	var findings []rules.Finding
+	findings := make([]rules.Finding, 0, len(checks))
 	for _, check := range checks {
 		severity := mapCheckovSeverity(check.Severity, check.CheckID)
 		category := inferCheckovCategory(check.CheckID)

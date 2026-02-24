@@ -112,7 +112,7 @@ func parseTerrascanOutput(data []byte) ([]rules.Finding, error) {
 		return nil, fmt.Errorf("terrascan: failed to parse output: %w", err)
 	}
 
-	var findings []rules.Finding
+	findings := make([]rules.Finding, 0, len(report.Results.Violations))
 	for _, v := range report.Results.Violations {
 		resource := v.ResourceName
 		if resource == "" && v.File != "" {

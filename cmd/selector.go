@@ -37,7 +37,7 @@ func rawPrint(s string) {
 }
 
 // runSelector displays an interactive arrow-key selector and returns the
-// chosen item's Value, or ("", false) if cancelled (ESC / Ctrl+C).
+// chosen item's Value, or ("", false) if canceled (ESC / Ctrl+C).
 // Falls back to a numbered prompt if stdin is not a terminal.
 func runSelector(title string, items []selectItem, defaultIndex int) (string, bool) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {

@@ -29,7 +29,7 @@ type ScannerStat struct {
 // Aggregate combines results from multiple scanners, deduplicates, and normalizes.
 func Aggregate(results []ScanResult) AggregatedResult {
 	var allFindings []rules.Finding
-	var stats []ScannerStat
+	stats := make([]ScannerStat, 0, len(results))
 	var used, errored []string
 
 	for _, r := range results {

@@ -152,7 +152,7 @@ func parseTfsecOutput(data []byte) ([]rules.Finding, error) {
 		return nil, fmt.Errorf("tfsec: failed to parse output: %w", err)
 	}
 
-	var findings []rules.Finding
+	findings := make([]rules.Finding, 0, len(report.Results))
 	for _, r := range report.Results {
 		resource := r.Resource
 		if resource == "" {

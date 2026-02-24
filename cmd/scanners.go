@@ -88,10 +88,6 @@ var scannersListCmd = &cobra.Command{
 		missing := scanner.DefaultManager.Missing()
 		fmt.Printf("\n  %d/%d scanners installed", len(available), len(all))
 		if len(missing) > 0 {
-			names := make([]string, 0, len(missing))
-			for _, m := range missing {
-				names = append(names, m.Name)
-			}
 			if brFlag {
 				fmt.Printf(" — instale com 'tv scanners install <nome>' ou '--all'")
 			} else {

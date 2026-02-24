@@ -57,7 +57,7 @@ func runSetupEN() error {
 		ok       bool
 		hint     scanner.InstallHint
 	}
-	var entries []entry
+	entries := make([]entry, 0, len(available)+len(missing))
 	for _, s := range available {
 		entries = append(entries, entry{
 			name: s.Name(), version: s.Version(),
@@ -199,7 +199,7 @@ func runSetupBR() error {
 		ok       bool
 		hint     scanner.InstallHint
 	}
-	var entries []entry
+	entries := make([]entry, 0, len(available)+len(missing))
 	for _, s := range available {
 		entries = append(entries, entry{
 			name: s.Name(), version: s.Version(),

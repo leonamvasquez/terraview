@@ -79,7 +79,7 @@ func (m *ScannerManager) InstallMissing(force bool) []bininstaller.InstallResult
 	EnsureBinDirInPath()
 	cache := bininstaller.LoadCache()
 	p, _ := platform.Detect()
-	var results []bininstaller.InstallResult
+	results := make([]bininstaller.InstallResult, 0, len(bininstaller.AllSpecs()))
 
 	for _, spec := range bininstaller.AllSpecs() {
 		name := spec.Name

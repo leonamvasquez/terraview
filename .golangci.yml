@@ -27,6 +27,11 @@ linters-settings:
       - hugeParam
   misspell:
     locale: US
+    ignore-words:
+      - comando
+      - comandos
+      - posicional
+      - intencional
   prealloc:
     simple: true
 
