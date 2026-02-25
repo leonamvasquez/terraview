@@ -12,10 +12,6 @@
 
 **Não abra uma issue pública para vulnerabilidades de segurança.**
 
-### Canal preferido
-
-Envie um e-mail para: **security@leonamvasquez.dev**
-
 Ou use o [GitHub Private Security Advisories](https://github.com/leonamvasquez/terraview/security/advisories/new).
 
 ### O que incluir no report
