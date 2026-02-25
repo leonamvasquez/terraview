@@ -9,8 +9,11 @@
 # terraview
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.26+-blue.svg)](https://golang.org)
 [![GitHub release](https://img.shields.io/github/v/release/leonamvasquez/terraview)](https://github.com/leonamvasquez/terraview/releases/latest)
+[![CI](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml/badge.svg)](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
+[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](https://slsa.dev)
 
 Análise de segurança de planos Terraform combinando scanners estáticos (Checkov, tfsec, Terrascan) com revisão inteligente por IA. Scanners rodam por padrão. IA é opt-in. Binário único sem dependências.
 
@@ -20,11 +23,13 @@ Análise de segurança de planos Terraform combinando scanners estáticos (Check
 - [Exemplo de Saída](#exemplo-de-saída)
 - [Quick Start](#quick-start)
 - [Instalação](#instalação)
+- [Shell Completions](#shell-completions)
 - [Uso](#uso)
 - [Configuração](#configuração)
 - [Integração CI/CD](#integração-cicd)
 - [Arquitetura](#arquitetura)
 - [Desenvolvimento](#desenvolvimento)
+- [Contribuindo](#contribuindo)
 - [Licença](#licença)
 
 ## Features
@@ -51,8 +56,8 @@ Análise de segurança de planos Terraform combinando scanners estáticos (Check
   Security Scanners
 
   [✓] checkov      3.2.504
-  [✗] tfsec        Install with: brew install tfsec
-  [✗] terrascan    Install with: brew install terrascan
+  [✗] tfsec        Install with: terraview scanners install tfsec
+  [✗] terrascan    Install with: terraview scanners install terrascan
 ```
 
 ## Quick Start
@@ -90,6 +95,15 @@ curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install
 O script detecta automaticamente OS e arquitetura, baixa o binário correto e cria o alias `tv`.
 
 <details>
+<summary>Homebrew (macOS / Linux)</summary>
+
+```bash
+brew install leonamvasquez/terraview/terraview
+```
+
+</details>
+
+<details>
 <summary>Windows — PowerShell</summary>
 
 ```powershell
@@ -122,8 +136,27 @@ make install
 ### Instalar runtime de IA local (Ollama)
 
 ```bash
-terraview provider install llm
+terraview provider install ollama
 ```
+
+### Shell Completions
+
+```bash
+# Bash
+terraview completion bash | sudo tee /etc/bash_completion.d/terraview
+source /etc/bash_completion.d/terraview
+
+# Zsh (adicione ao ~/.zshrc)
+terraview completion zsh | sudo tee "${fpath[1]}/_terraview"
+
+# Fish
+terraview completion fish | source
+
+# PowerShell (adicione ao seu $PROFILE)
+terraview completion powershell | Out-File $PROFILE -Append
+```
+
+Após configurar, reabra o terminal e use `terraview <Tab>` para autocompletar comandos, flags e argumentos.
 
 ## Uso
 
@@ -346,7 +379,12 @@ make dist         # build para todas as plataformas
 make install      # instalar localmente (~/.local/bin)
 ```
 
-Contribuições são bem-vindas! Abra uma [issue](https://github.com/leonamvasquez/terraview/issues) ou envie um pull request.
+## Contribuindo
+
+Contribuições são bem-vindas! Consulte o [CONTRIBUTING.md](CONTRIBUTING.md) para guia completo.
+Abra uma [issue](https://github.com/leonamvasquez/terraview/issues) ou envie um pull request.
+
+Para reportar vulnerabilidades de segurança, consulte [SECURITY.md](SECURITY.md).
 
 ## Licença
 

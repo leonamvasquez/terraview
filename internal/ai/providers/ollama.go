@@ -19,14 +19,13 @@ func init() {
 	ai.Register(ollamaName, NewOllama, ai.ProviderInfo{
 		DisplayName:  "Ollama (Local)",
 		RequiresKey:  false,
-		DefaultModel: "llama3.1:8b",
+		DefaultModel: "qwen3.5",
 		SuggestedModels: []string{
-			"llama3.1:8b",
-			"llama3.1:70b",
-			"llama3.2:3b",
-			"mistral:7b",
-			"qwen2.5:7b",
-			"gemma3:9b",
+			"olmo2:7b",
+			"olmo2:13b",
+			"lfm2:text",
+			"qwen3-coder:next",
+			"qwen3.5",
 		},
 	})
 }
@@ -62,7 +61,7 @@ func NewOllama(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.BaseURL = "http://localhost:11434"
 	}
 	if cfg.Model == "" {
-		cfg.Model = "llama3.1:8b"
+		cfg.Model = "qwen3.5"
 	}
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 2048

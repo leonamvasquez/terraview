@@ -21,14 +21,13 @@ func init() {
 		DisplayName:  "OpenRouter",
 		RequiresKey:  true,
 		EnvVarKey:    "OPENROUTER_API_KEY",
-		DefaultModel: "google/gemini-2.0-flash-001",
+		DefaultModel: "openai/gpt-4o",
 		SuggestedModels: []string{
-			"google/gemini-2.0-flash-001",
-			"google/gemini-2.0-flash-thinking-exp:free",
-			"anthropic/claude-3.5-sonnet",
+			"openai/gpt-5.2",
+			"openai/gpt-5.1",
 			"openai/gpt-4o",
-			"meta-llama/llama-3.3-70b-instruct:free",
-			"deepseek/deepseek-r1:free",
+			"openai/gpt-4-turbo",
+			"openai/o3-mini",
 		},
 	})
 }
@@ -46,7 +45,7 @@ func NewOpenRouter(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("OPENROUTER_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "google/gemini-2.0-flash-001"
+		cfg.Model = "openai/gpt-4o"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://openrouter.ai/api/v1"

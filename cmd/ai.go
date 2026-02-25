@@ -23,7 +23,7 @@ Subcommands:
   use         Set default provider non-interactively (for scripts)
   current     Show the currently configured provider
   test        Test connectivity with the configured provider
-  install     Install LLM runtime (Ollama)
+  install     Install LLM runtime (ollama)
   uninstall   Remove LLM runtime`,
 }
 
@@ -150,7 +150,8 @@ func runAIList(cmd *cobra.Command, args []string) error {
 }
 
 // runModelSelector shows a live-filter model picker for the given provider.
-// Typing filters the list in real-time; Enter confirms or uses the typed text.
+// The user can navigate and filter the suggested list. If the typed text
+// does not match any suggestion, Enter confirms the raw text as a custom model.
 func runModelSelector(p ai.ProviderInfo, currentProvider, currentModel string) (string, bool) {
 	defaultModel := p.DefaultModel
 	if p.Name == currentProvider && currentModel != "" {

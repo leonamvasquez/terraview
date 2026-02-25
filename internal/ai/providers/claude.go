@@ -18,15 +18,16 @@ const claudeName = "claude"
 
 func init() {
 	ai.Register(claudeName, NewClaude, ai.ProviderInfo{
-		DisplayName:     "Anthropic Claude",
-		RequiresKey:     true,
-		EnvVarKey:       "ANTHROPIC_API_KEY",
-		DefaultModel:    "claude-sonnet-4-20250514",
+		DisplayName:  "Anthropic Claude",
+		RequiresKey:  true,
+		EnvVarKey:    "ANTHROPIC_API_KEY",
+		DefaultModel: "claude-sonnet-4-5",
 		SuggestedModels: []string{
+			"claude-sonnet-4-5",
+			"claude-opus-4-6",
+			"claude-opus-4-1",
 			"claude-sonnet-4-20250514",
-			"claude-3-5-sonnet-20241022",
-			"claude-3-haiku-20240307",
-			"claude-opus-4-5",
+			"claude-haiku-4-5",
 		},
 	})
 }
@@ -38,11 +39,11 @@ type claudeProvider struct {
 
 // Claude Messages API types
 type claudeRequest struct {
-	Model       string           `json:"model"`
-	MaxTokens   int              `json:"max_tokens"`
-	System      string           `json:"system,omitempty"`
-	Messages    []claudeMessage  `json:"messages"`
-	Temperature float64          `json:"temperature,omitempty"`
+	Model       string          `json:"model"`
+	MaxTokens   int             `json:"max_tokens"`
+	System      string          `json:"system,omitempty"`
+	Messages    []claudeMessage `json:"messages"`
+	Temperature float64         `json:"temperature,omitempty"`
 }
 
 type claudeMessage struct {
@@ -69,7 +70,7 @@ func NewClaude(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "claude-sonnet-4-20250514"
+		cfg.Model = "claude-sonnet-4-5"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.anthropic.com"

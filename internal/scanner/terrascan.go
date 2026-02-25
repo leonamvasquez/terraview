@@ -34,7 +34,7 @@ func (s *TerrascanScanner) EnsureInstalled() (bool, InstallHint) {
 	return false, InstallHint{
 		Brew:    "brew install terrascan",
 		URL:     "https://runterrascan.io/",
-		Default: "Install with: brew install terrascan",
+		Default: "terraview scanners install terrascan",
 	}
 }
 

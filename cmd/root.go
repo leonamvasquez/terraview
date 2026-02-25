@@ -96,13 +96,11 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(scannersCmd)
 
-	// Hide the completion command from help output
+	// Shell completions (bash, zsh, fish, powershell)
+	// Install: terraview completion bash | sudo tee /etc/bash_completion.d/terraview
+	//          terraview completion zsh  | sudo tee "${fpath[1]}/_terraview"
+	//          terraview completion fish | source (terraview completion fish | psub)
 	rootCmd.InitDefaultCompletionCmd()
-	for _, c := range rootCmd.Commands() {
-		if c.Name() == "completion" {
-			c.Hidden = true
-		}
-	}
 
 	// Apply pt-BR translations early so --help can use them.
 	// Cobra doesn't call PersistentPreRun on --help, so we check os.Args directly.

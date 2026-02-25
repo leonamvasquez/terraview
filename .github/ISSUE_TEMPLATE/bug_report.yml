@@ -1,0 +1,88 @@
+name: 🐛 Bug Report
+description: Reportar um comportamento inesperado ou erro
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar! Preencha com o máximo de detalhes possível.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição do bug
+      description: Uma descrição clara e concisa do que está acontecendo.
+      placeholder: "Ao executar `terraview scan checkov`, recebo..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Passos para reproduzir
+      description: Passos mínimos para reproduzir o comportamento.
+      placeholder: |
+        1. Executar `terraview scan checkov --ai`
+        2. Selecionar provider 'gemini'
+        3. Ver erro
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+      description: O que deveria acontecer?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamento atual
+      description: O que está acontecendo? Inclua a saída completa do terminal.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versão do terraview
+      description: Execute `terraview version` e cole a saída aqui.
+      placeholder: "terraview v0.5.3 (go1.26.0, linux/amd64)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operacional
+      options:
+        - Linux (amd64)
+        - Linux (arm64)
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Windows
+        - WSL2
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuração relevante
+      description: Conteúdo do `.terraview.yaml` (remova dados sensíveis como API keys).
+      render: yaml
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: Pesquisei nas issues existentes e não encontrei duplicata
+          required: true
+        - label: Estou usando a versão mais recente do terraview
+          required: false

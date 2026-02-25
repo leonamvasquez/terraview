@@ -21,10 +21,13 @@ func init() {
 		DisplayName:  "DeepSeek",
 		RequiresKey:  true,
 		EnvVarKey:    "DEEPSEEK_API_KEY",
-		DefaultModel: "deepseek-chat",
+		DefaultModel: "deepseek-v3.2",
 		SuggestedModels: []string{
-			"deepseek-chat",
+			"deepseek-v3.2",
+			"deepseek-v3.1",
 			"deepseek-reasoner",
+			"deepseek-r1-zero",
+			"deepseek-r1-distill",
 		},
 	})
 }
@@ -67,7 +70,7 @@ func NewDeepSeek(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("DEEPSEEK_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "deepseek-chat"
+		cfg.Model = "deepseek-v3.2"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.deepseek.com"

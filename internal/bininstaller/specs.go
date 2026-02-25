@@ -200,8 +200,10 @@ func tfsecSpec() *ScannerSpec {
 		},
 		fallbackFn: func(p platform.PlatformInfo) string {
 			switch p.OS {
-			case "darwin", "linux":
-				return "brew install tfsec  (or: https://github.com/aquasecurity/tfsec/releases)"
+			case "darwin":
+				return "brew install tfsec"
+			case "linux":
+				return "https://github.com/aquasecurity/tfsec/releases (or: terraview scanners install tfsec)"
 			case "windows":
 				return "choco install tfsec  (or: scoop install tfsec)"
 			}

@@ -1,0 +1,17 @@
+# CODEOWNERS — revisores obrigatórios por área do código
+# Formato: <padrão>  <@usuario ou @org/time>
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Revisão padrão para qualquer arquivo não coberto abaixo
+*                           @leonamvasquez
+
+# Core da IA — mudanças de provider exigem revisão especializada
+/internal/ai/               @leonamvasquez
+/internal/ai/providers/     @leonamvasquez
+
+# Pipeline de CI/CD e supply chain — crítico para segurança
+/.github/workflows/         @leonamvasquez
+/.goreleaser.yml            @leonamvasquez
+
+# Segurança
+/SECURITY.md                @leonamvasquez

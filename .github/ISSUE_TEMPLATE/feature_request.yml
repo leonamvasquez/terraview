@@ -1,0 +1,60 @@
+name: 🚀 Feature Request
+description: Sugerir uma nova funcionalidade ou melhoria
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pela sugestão! Descreva o problema que você quer resolver, não apenas a solução.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema isso resolve?
+      description: Uma descrição clara do problema ou limitação atual.
+      placeholder: "Atualmente não consigo... porque..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solução proposta
+      description: Descreva a funcionalidade que gostaria de ver.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: Existem outras formas de resolver o problema?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto adicional
+      description: Screenshots, exemplos de uso, links de referência, etc.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridade para você
+      options:
+        - Baixa — nice to have
+        - Média — melhoraria meu fluxo
+        - Alta — bloqueia meu uso
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: Pesquisei nas issues existentes e não encontrei pedido similar
+          required: true
+        - label: Posso contribuir com a implementação desta feature
+          required: false

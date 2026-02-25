@@ -38,7 +38,7 @@ func (s *TfsecScanner) EnsureInstalled() (bool, InstallHint) {
 	return false, InstallHint{
 		Brew:    "brew install tfsec",
 		URL:     "https://aquasecurity.github.io/tfsec/",
-		Default: "Install with: brew install tfsec (or trivy)",
+		Default: "terraview scanners install tfsec",
 	}
 }
 

@@ -20,7 +20,7 @@ var installCmd = &cobra.Command{
 }
 
 var installLLMCmd = &cobra.Command{
-	Use:   "llm",
+	Use:   "ollama",
 	Short: "Install Ollama and pull the default LLM model",
 	Long: `Automatically installs the Ollama runtime for local LLM inference,
 pulls the configured model, and validates the setup.
@@ -29,8 +29,8 @@ This command is idempotent: running it multiple times will not
 reinstall — it will only validate the existing installation.
 
 Examples:
-  terraview install llm
-  terraview install llm --model codellama:13b`,
+  terraview provider install ollama
+  terraview provider install ollama --model codellama:13b`,
 	RunE: runInstallLLM,
 }
 

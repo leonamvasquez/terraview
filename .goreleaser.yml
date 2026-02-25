@@ -69,8 +69,50 @@ signs:
       - "--output-signature=${signature}"
       - "${artifact}"
 
+# ── Homebrew tap ─────────────────────────────────────────────────────
+brews:
+  - name: terraview
+    repository:
+      owner: leonamvasquez
+      name: homebrew-terraview
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
+    homepage: https://github.com/leonamvasquez/terraview
+    description: |
+      Revisor semântico para planos Terraform. Combina scanners estáticos
+      (Checkov, tfsec, Terrascan) com revisão inteligente por IA.
+    license: MIT
+    skip_upload: auto
+    install: |
+      bin.install "terraview"
+      ln -sf bin/"terraview" libexec/"tv"
+      bin.install_symlink libexec/"tv"
+    test: |
+      system "#{bin}/terraview", "version"
+    extra_install: |
+      generate_completions_from_executable(bin/"terraview", "completion")
+
 changelog:
   sort: asc
+  use: github
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\(.+?\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?fix(\(.+?\))??!?:.+$'
+      order: 1
+    - title: "⚡ Performance"
+      regexp: '^.*?perf(\(.+?\))??!?:.+$'
+      order: 2
+    - title: "♻️  Refactor"
+      regexp: '^.*?refactor(\(.+?\))??!?:.+$'
+      order: 3
+    - title: "Other"
+      order: 999
   filters:
     exclude:
       - "^docs:"

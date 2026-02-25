@@ -37,7 +37,7 @@ func (s *CheckovScanner) EnsureInstalled() (bool, InstallHint) {
 		Pip:     "pip3 install checkov",
 		Brew:    "brew install checkov",
 		URL:     "https://www.checkov.io/",
-		Default: "pip3 install checkov  (or: brew install checkov)",
+		Default: "pip3 install checkov",
 	}
 }
 

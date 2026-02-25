@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Dúvidas e discussões
+    url: https://github.com/leonamvasquez/terraview/discussions
+    about: Para perguntas gerais, use as Discussions em vez de issues.
+  - name: 🔒 Vulnerabilidades de segurança
+    url: https://github.com/leonamvasquez/terraview/security/advisories/new
+    about: Reporte vulnerabilidades de forma privada via Security Advisory.

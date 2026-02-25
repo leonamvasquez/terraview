@@ -220,8 +220,10 @@ func (t *TfsecInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
 }
 func (t *TfsecInstaller) FallbackCommand(p platform.PlatformInfo) string {
 	switch p.OS {
-	case "darwin", "linux":
+	case "darwin":
 		return "brew install tfsec"
+	case "linux":
+		return fmt.Sprintf("curl -Lo tfsec https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec-linux-%s && chmod +x tfsec && sudo mv tfsec /usr/local/bin/", t.LatestVersion(), p.Arch)
 	case "windows":
 		return "choco install tfsec  (or: scoop install tfsec)"
 	}
