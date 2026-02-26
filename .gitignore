@@ -17,9 +17,12 @@ coverage.html
 review.json
 review.md
 drift.json
+drift-intelligence.json
+diagram.txt
 plan.json
 tfplan
 !examples/plan.json
+!examples/github-action.yaml
 
 # Terraform
 .terraform/
