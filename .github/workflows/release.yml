@@ -69,12 +69,13 @@ jobs:
 
   # ──────────────────────────────────────────────────────────────────
   # PACKAGES — publicar .deb e .rpm no Cloudsmith
+  # (desabilitado até configurar conta Cloudsmith + secret CLOUDSMITH_API_KEY)
   # ──────────────────────────────────────────────────────────────────
   packages:
     name: Publish Packages (deb/rpm)
     runs-on: ubuntu-latest
     needs: release
-    if: ${{ !contains(github.ref, '-') }}
+    if: false  # TODO: habilitar quando Cloudsmith estiver configurado
     steps:
       - uses: actions/checkout@v4
 
