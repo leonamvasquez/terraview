@@ -69,6 +69,44 @@ signs:
       - "--output-signature=${signature}"
       - "${artifact}"
 
+# ── Native packages: deb, rpm, apk, archlinux ───────────────────────
+nfpms:
+  - id: terraview
+    package_name: terraview
+    vendor: leonamvasquez
+    homepage: https://github.com/leonamvasquez/terraview
+    maintainer: "Leonam Vasquez <leonamvasquez@users.noreply.github.com>"
+    description: |
+      Semantic reviewer for Terraform plans. Combines static scanners
+      (Checkov, tfsec, Terrascan) with AI-powered contextual analysis.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+      - archlinux
+    bindir: /usr/bin
+    contents:
+      - src: prompts/*
+        dst: /usr/share/terraview/prompts/
+      - src: LICENSE
+        dst: /usr/share/doc/terraview/LICENSE
+    scripts:
+      postinstall: |
+        #!/bin/sh
+        ln -sf /usr/bin/terraview /usr/bin/tv 2>/dev/null || true
+      postremove: |
+        #!/bin/sh
+        rm -f /usr/bin/tv 2>/dev/null || true
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+    rpm:
+      group: Development/Tools
+    archlinux:
+      pkgbase: terraview
+      packager: "Leonam Vasquez <leonamvasquez@users.noreply.github.com>"
+
 # ── Homebrew tap ─────────────────────────────────────────────────────
 brews:
   - name: terraview
@@ -94,6 +132,22 @@ brews:
       system "#{bin}/terraview", "version"
     extra_install: |
       generate_completions_from_executable(bin/"terraview", "completion")
+
+# ── Scoop bucket (Windows) ───────────────────────────────────────────
+scoops:
+  - name: terraview
+    repository:
+      owner: leonamvasquez
+      name: scoop-terraview
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/leonamvasquez/terraview
+    description: "Semantic reviewer for Terraform plans — static scanners + AI analysis"
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
+    skip_upload: auto
 
 changelog:
   sort: asc

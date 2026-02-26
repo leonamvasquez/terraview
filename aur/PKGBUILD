@@ -1,0 +1,33 @@
+# Maintainer: Leonam Vasquez <leonamvasquez@users.noreply.github.com>
+pkgname=terraview-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Semantic reviewer for Terraform plans — static scanners + AI contextual analysis"
+arch=('x86_64' 'aarch64')
+url="https://github.com/leonamvasquez/terraview"
+license=('MIT')
+provides=('terraview')
+conflicts=('terraview')
+depends=('glibc')
+optdepends=(
+  'terraform: Terraform CLI for plan generation'
+  'ollama: Local AI provider for offline analysis'
+)
+source_x86_64=("${url}/releases/download/v${pkgver}/terraview-linux-amd64.tar.gz")
+source_aarch64=("${url}/releases/download/v${pkgver}/terraview-linux-arm64.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  install -Dm755 terraview "${pkgdir}/usr/bin/terraview"
+  ln -sf /usr/bin/terraview "${pkgdir}/usr/bin/tv"
+
+  # Install prompts
+  install -dm755 "${pkgdir}/usr/share/terraview/prompts"
+  if [ -d prompts ]; then
+    install -Dm644 prompts/* "${pkgdir}/usr/share/terraview/prompts/"
+  fi
+
+  # License
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
