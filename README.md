@@ -170,7 +170,44 @@ O script detecta automaticamente OS e arquitetura, baixa o binário correto do G
 brew install leonamvasquez/terraview/terraview
 ```
 
-### Windows — PowerShell
+### Scoop (Windows)
+
+```powershell
+scoop bucket add terraview https://github.com/leonamvasquez/scoop-terraview.git
+scoop install terraview
+```
+
+### APT — Debian / Ubuntu
+
+```bash
+# Adicionar repositório Cloudsmith
+curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.deb.sh' | sudo bash
+
+# Instalar
+sudo apt update
+sudo apt install terraview
+```
+
+### DNF / YUM — Fedora / RHEL / Amazon Linux
+
+```bash
+# Adicionar repositório Cloudsmith
+curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.rpm.sh' | sudo bash
+
+# Instalar
+sudo dnf install terraview
+```
+
+### Docker
+
+```bash
+docker pull leonamvasquez/terraview:latest
+
+# Uso
+docker run --rm -v $(pwd):/workspace leonamvasquez/terraview scan checkov
+```
+
+### Windows — PowerShell (script direto)
 
 ```powershell
 irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 | iex
@@ -209,6 +246,24 @@ Via Homebrew:
 
 ```bash
 brew upgrade leonamvasquez/terraview/terraview
+```
+
+Via Scoop:
+
+```powershell
+scoop update terraview
+```
+
+Via APT:
+
+```bash
+sudo apt update && sudo apt upgrade terraview
+```
+
+Via DNF:
+
+```bash
+sudo dnf upgrade terraview
 ```
 
 ## Autocompletar no shell
