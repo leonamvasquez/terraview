@@ -1,0 +1,47 @@
+# Build artifacts
+build/
+dist/
+*.exe
+*.tar.gz
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+.github/
+
+# Documentation (not needed in image)
+*.md
+!prompts/*.md
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / Coverage
+coverage.out
+coverage.html
+*_test.go
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI
+.goreleaser.yml
+.golangci.yml
+
+# Install scripts (host-only)
+install.sh
+install.ps1
