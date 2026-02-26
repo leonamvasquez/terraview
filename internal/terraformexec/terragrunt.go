@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/output"
@@ -233,8 +234,13 @@ func resolveTerragruntBinary() (string, error) {
 	if statErr != nil {
 		return "", fmt.Errorf("terragrunt binary not accessible: %w", statErr)
 	}
-	if info.Mode()&0111 == 0 {
-		return "", fmt.Errorf("terragrunt binary is not executable: %s", path)
+	// On Windows, executability is determined by file extension (.exe, .bat, etc.),
+	// not by permission bits. os.Stat().Mode() never sets execute bits on Windows,
+	// so this check would always fail there.
+	if runtime.GOOS != "windows" {
+		if info.Mode()&0111 == 0 {
+			return "", fmt.Errorf("terragrunt binary is not executable: %s", path)
+		}
 	}
 
 	return path, nil

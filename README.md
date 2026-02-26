@@ -180,7 +180,7 @@ scoop install terraview
 ### APT — Debian / Ubuntu
 
 ```bash
-# Adicionar repositório Cloudsmith
+# Adicionar repositório 
 curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.deb.sh' | sudo bash
 
 # Instalar
@@ -191,7 +191,7 @@ sudo apt install terraview
 ### DNF / YUM — Fedora / RHEL / Amazon Linux
 
 ```bash
-# Adicionar repositório Cloudsmith
+# Adicionar repositório 
 curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.rpm.sh' | sudo bash
 
 # Instalar
