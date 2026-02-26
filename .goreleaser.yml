@@ -92,12 +92,8 @@ nfpms:
       - src: LICENSE
         dst: /usr/share/doc/terraview/LICENSE
     scripts:
-      postinstall: |
-        #!/bin/sh
-        ln -sf /usr/bin/terraview /usr/bin/tv 2>/dev/null || true
-      postremove: |
-        #!/bin/sh
-        rm -f /usr/bin/tv 2>/dev/null || true
+      postinstall: scripts/postinstall.sh
+      postremove: scripts/postremove.sh
     deb:
       lintian_overrides:
         - statically-linked-binary
