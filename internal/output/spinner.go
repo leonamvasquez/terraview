@@ -166,7 +166,7 @@ func clearLineSeq() string {
 // writeRaw does a single os.Stderr.Write so the kernel sees one write(2)
 // syscall, making the output atomic at the file-descriptor level.
 func writeRaw(s string) {
-	os.Stderr.Write([]byte(s)) //nolint:errcheck
+	os.Stderr.WriteString(s) //nolint:errcheck
 }
 
 // termWidth returns the current terminal width, or 80 as a safe fallback.

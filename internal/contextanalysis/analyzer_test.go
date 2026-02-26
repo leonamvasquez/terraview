@@ -1,6 +1,7 @@
 package contextanalysis
 
 import (
+	"context"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/parser"
@@ -132,7 +133,7 @@ func TestBuildSystemPrompt_FallbackWhenEmpty(t *testing.T) {
 
 func TestAnalyze_NoResources(t *testing.T) {
 	a := NewAnalyzer(nil, "", "")
-	result, err := a.Analyze(nil, nil, nil)
+	result, err := a.Analyze(context.TODO(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

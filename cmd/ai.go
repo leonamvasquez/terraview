@@ -120,7 +120,6 @@ func runAIList(cmd *cobra.Command, args []string) error {
 		// Show connection error from the previous attempt, if any.
 		if connectErrMsg != "" {
 			fmt.Printf("\n%s✗ %s%s\n\n", ansiRed, connectErrMsg, ansiReset)
-			connectErrMsg = ""
 		}
 
 		// ── Step 1: Pick provider ──────────────────────────────────────────
