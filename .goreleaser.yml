@@ -122,12 +122,10 @@ brews:
     skip_upload: auto
     install: |
       bin.install "terraview"
-      ln -sf bin/"terraview" libexec/"tv"
-      bin.install_symlink libexec/"tv"
-    test: |
-      system "#{bin}/terraview", "version"
-    extra_install: |
+      bin.install_symlink "terraview" => "tv"
       generate_completions_from_executable(bin/"terraview", "completion")
+    test: |
+      system bin/"terraview", "version"
 
 # ── Scoop bucket (Windows) ───────────────────────────────────────────
 scoops:
