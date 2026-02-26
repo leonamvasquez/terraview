@@ -69,13 +69,11 @@ jobs:
 
   # ──────────────────────────────────────────────────────────────────
   # PACKAGES — publicar .deb e .rpm no Cloudsmith
-  # (desabilitado até configurar conta Cloudsmith + secret CLOUDSMITH_API_KEY)
   # ──────────────────────────────────────────────────────────────────
   packages:
     name: Publish Packages (deb/rpm)
     runs-on: ubuntu-latest
     needs: release
-    if: false  # TODO: habilitar quando Cloudsmith estiver configurado
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +94,7 @@ jobs:
         run: |
           for pkg in dist/*.deb; do
             echo "Publishing $pkg"
-            cloudsmith push deb leonamvasquez/terraview/any-distro/any-version "$pkg"
+            cloudsmith push deb workspace-for-leonam/terraview/any-distro/any-version "$pkg"
           done
 
       - name: Publish .rpm packages
@@ -106,7 +104,7 @@ jobs:
         run: |
           for pkg in dist/*.rpm; do
             echo "Publishing $pkg"
-            cloudsmith push rpm leonamvasquez/terraview/any-distro/any-version "$pkg"
+            cloudsmith push rpm workspace-for-leonam/terraview/any-distro/any-version "$pkg"
           done
 
   # ──────────────────────────────────────────────────────────────────
