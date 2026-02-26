@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -219,11 +220,11 @@ func runAIList(cmd *cobra.Command, args []string) error {
 		if providerInfo.RequiresKey && os.Getenv(providerInfo.EnvVarKey) == "" {
 			fmt.Printf("\n%s⚠  %s "+pick("is not set.", "não está configurada.")+"%s\n", ansiYellow, providerInfo.EnvVarKey, ansiReset)
 			if runtime.GOOS == "windows" {
-				fmt.Printf("   " + pick("Set it as environment variable:", "Configure via variável de ambiente:") + "\n")
-				fmt.Printf("   %ssetx %s "+pick("your_key_here", "sua_chave_aqui")+"%s\n\n", ansiDim, providerInfo.EnvVarKey, ansiReset)
+				fmt.Println("   " + pick("Set it as environment variable:", "Configure via variável de ambiente:"))
+				fmt.Printf("   %ssetx %s %s%s\n\n", ansiDim, providerInfo.EnvVarKey, pick("your_key_here", "sua_chave_aqui"), ansiReset)
 			} else {
-				fmt.Printf("   " + pick("Add to your shell profile (~/.zshrc or ~/.bashrc):", "Adicione ao seu shell profile (~/.zshrc ou ~/.bashrc):") + "\n")
-				fmt.Printf("   %sexport %s="+pick("your_key_here", "sua_chave_aqui")+"%s\n\n", ansiDim, providerInfo.EnvVarKey, ansiReset)
+				fmt.Println("   " + pick("Add to your shell profile (~/.zshrc or ~/.bashrc):", "Adicione ao seu shell profile (~/.zshrc ou ~/.bashrc):"))
+				fmt.Printf("   %sexport %s=%s%s\n\n", ansiDim, providerInfo.EnvVarKey, pick("your_key_here", "sua_chave_aqui"), ansiReset)
 			}
 		} else {
 			fmt.Printf("\n   "+pick("Ready! Run: %sterraview scan%s", "Pronto! Execute: %sterraview scan%s")+"\n", ansiBold, ansiReset)
@@ -386,7 +387,7 @@ func runAITest(cmd *cobra.Command, args []string) error {
 	if validateErr != nil {
 		errMsg := buildConnectError(providerInfo, providerName, validateErr)
 		fmt.Printf("\n%s✗ %s%s\n", ansiRed, errMsg, ansiReset)
-		return fmt.Errorf(pick("provider test failed", "teste do provider falhou"))
+		return errors.New(pick("provider test failed", "teste do provider falhou"))
 	}
 
 	// Show integration result
