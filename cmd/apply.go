@@ -34,7 +34,11 @@ Examples:
   terraview apply checkov                     # scan + AI + interactive apply
   terraview apply checkov --static            # scan only (no AI) + apply
   terraview apply checkov --non-interactive   # CI mode
-  terraview apply checkov --all               # everything enabled + apply`,
+  terraview apply checkov --all               # everything enabled + apply
+
+Terragrunt:
+  terraview apply checkov --terragrunt         # scan + apply with terragrunt
+  terraview apply checkov --terragrunt -d modules/vpc`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runApply,
 }
@@ -114,11 +118,15 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	// 5. Apply
-	if err := workspace.Validate(workDir); err != nil {
-		return err
+	var executor terraformexec.PlanExecutor
+	if terragruntFlag {
+		executor, err = terraformexec.NewTerragruntExecutor(workDir, tgConfigFile)
+	} else {
+		if err := workspace.Validate(workDir); err != nil {
+			return err
+		}
+		executor, err = terraformexec.NewExecutor(workDir)
 	}
-
-	executor, err := terraformexec.NewExecutor(workDir)
 	if err != nil {
 		return err
 	}

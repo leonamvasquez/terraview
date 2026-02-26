@@ -26,9 +26,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/runtime"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
-	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +73,11 @@ Examples:
   terraview scan checkov --format compact      # minimal output
   terraview scan checkov --format sarif        # SARIF for CI
   terraview scan checkov --strict              # HIGH returns exit code 2
-  terraview scan checkov --findings ext.json   # import external findings`,
+  terraview scan checkov --findings ext.json   # import external findings
+
+Terragrunt:
+  terraview scan checkov --terragrunt           # use terragrunt for plan
+  terraview scan tfsec --terragrunt -d modules/vpc`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runScan,
 }
@@ -175,28 +177,13 @@ func executeReview(scannerName string) (string, int, error) {
 
 	resolvedPlan := planFile
 
-	// If no plan provided, auto-generate from terraform
+	// If no plan provided, auto-generate from terraform/terragrunt
 	if resolvedPlan == "" {
-		if err := workspace.Validate(workDir); err != nil {
-			return "", 0, err
-		}
-
-		executor, err := terraformexec.NewExecutor(workDir)
+		generated, _, err := generatePlan()
 		if err != nil {
 			return "", 0, err
 		}
-
-		if executor.NeedsInit() {
-			if err := executor.Init(); err != nil {
-				return "", 0, err
-			}
-		}
-
-		generatedPlan, err := executor.Plan()
-		if err != nil {
-			return "", 0, err
-		}
-		resolvedPlan = generatedPlan
+		resolvedPlan = generated
 	}
 
 	// Resolve effective AI config: CLI flags > config > defaults

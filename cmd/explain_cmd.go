@@ -14,9 +14,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +31,11 @@ Examples:
   terraview explain
   terraview explain --plan plan.json
   terraview explain --provider gemini
-  terraview explain --format json`,
+  terraview explain --format json
+
+Terragrunt:
+  terraview explain --terragrunt
+  terraview explain --terragrunt -d modules/vpc`,
 	RunE: runExplainCmd,
 }
 
@@ -66,19 +68,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 
 	resolvedPlan := planFile
 	if resolvedPlan == "" {
-		if err := workspace.Validate(workDir); err != nil {
-			return err
-		}
-		executor, err := terraformexec.NewExecutor(workDir)
-		if err != nil {
-			return err
-		}
-		if executor.NeedsInit() {
-			if err := executor.Init(); err != nil {
-				return err
-			}
-		}
-		generated, err := executor.Plan()
+		generated, _, err := generatePlan()
 		if err != nil {
 			return err
 		}

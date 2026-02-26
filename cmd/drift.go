@@ -9,8 +9,6 @@ import (
 	"github.com/leonamvasquez/terraview/internal/drift"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/terraformexec"
-	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +30,11 @@ Examples:
   terraview drift --plan plan.json
   terraview drift --intelligence          # classify + risk score
   terraview drift --format compact
-  terraview drift --format json`,
+  terraview drift --format json
+
+Terragrunt:
+  terraview drift --terragrunt
+  terraview drift --terragrunt -d modules/vpc`,
 	RunE: runDrift,
 }
 
@@ -48,22 +50,7 @@ func runDrift(cmd *cobra.Command, args []string) error {
 
 	// Auto-generate plan if not provided
 	if resolvedPlan == "" {
-		if err := workspace.Validate(workDir); err != nil {
-			return err
-		}
-
-		executor, err := terraformexec.NewExecutor(workDir)
-		if err != nil {
-			return err
-		}
-
-		if executor.NeedsInit() {
-			if err := executor.Init(); err != nil {
-				return err
-			}
-		}
-
-		generated, err := executor.Plan()
+		generated, _, err := generatePlan()
 		if err != nil {
 			return err
 		}

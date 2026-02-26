@@ -8,24 +8,28 @@ import (
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/scanner"
+	"github.com/leonamvasquez/terraview/internal/terraformexec"
+	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Global flags (persistent, inherited by all subcommands)
-	verbose      bool
-	workDir      string
-	brFlag       bool
-	noColor      bool
-	planFile     string
-	outputDir    string
-	outputFormat string
-	aiProvider   string
-	ollamaModel  string
+	verbose        bool
+	workDir        string
+	brFlag         bool
+	noColor        bool
+	planFile       string
+	outputDir      string
+	outputFormat   string
+	aiProvider     string
+	ollamaModel    string
+	terragruntFlag bool   // --terragrunt: use terragrunt instead of terraform
+	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config
 )
 
 // Version is set at build time via ldflags.
-var Version = "v0.5.3"
+var Version = "v0.2.0"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
@@ -80,6 +84,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif (default pretty)")
 	rootCmd.PersistentFlags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
 	rootCmd.PersistentFlags().StringVar(&ollamaModel, "model", "", "AI model to use")
+	rootCmd.PersistentFlags().BoolVar(&terragruntFlag, "terragrunt", false, "Use Terragrunt instead of Terraform for plan generation")
+	rootCmd.PersistentFlags().StringVar(&tgConfigFile, "tg-config", "", "Path to custom terragrunt.hcl config file (implies --terragrunt)")
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
@@ -466,4 +472,53 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 			f.Usage = usage
 		}
 	}
+}
+
+// generatePlan creates the appropriate executor (terraform or terragrunt) and generates
+// the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
+// If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
+func generatePlan() (string, terraformexec.PlanExecutor, error) {
+	var executor terraformexec.PlanExecutor
+	var err error
+
+	// --tg-config implies --terragrunt
+	if tgConfigFile != "" {
+		terragruntFlag = true
+	}
+
+	// Auto-detect terragrunt project when --terragrunt was not explicitly set
+	if !terragruntFlag && terraformexec.IsTerragruntProject(workDir) {
+		terragruntFlag = true
+	}
+
+	if terragruntFlag {
+		// When --tg-config is provided, skip workspace validation (no terragrunt.hcl needed in workDir)
+		if tgConfigFile == "" {
+			if err := terraformexec.ValidateTerragruntWorkspace(workDir); err != nil {
+				return "", nil, err
+			}
+		}
+		executor, err = terraformexec.NewTerragruntExecutor(workDir, tgConfigFile)
+	} else {
+		if err := workspace.Validate(workDir); err != nil {
+			return "", nil, err
+		}
+		executor, err = terraformexec.NewExecutor(workDir)
+	}
+	if err != nil {
+		return "", nil, err
+	}
+
+	if executor.NeedsInit() {
+		if err := executor.Init(); err != nil {
+			return "", nil, err
+		}
+	}
+
+	planPath, err := executor.Plan()
+	if err != nil {
+		return "", nil, err
+	}
+
+	return planPath, executor, nil
 }

@@ -7,9 +7,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/leonamvasquez/terraview/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +22,11 @@ If --plan is not specified, terraview will auto-generate the plan.
 Examples:
   terraview diagram
   terraview diagram --plan plan.json
-  terraview diagram --output ./reports`,
+  terraview diagram --output ./reports
+
+Terragrunt:
+  terraview diagram --terragrunt
+  terraview diagram --terragrunt -d modules/vpc`,
 	RunE: runDiagram,
 }
 
@@ -33,22 +35,7 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 
 	// Auto-generate plan if not provided
 	if resolvedPlan == "" {
-		if err := workspace.Validate(workDir); err != nil {
-			return err
-		}
-
-		executor, err := terraformexec.NewExecutor(workDir)
-		if err != nil {
-			return err
-		}
-
-		if executor.NeedsInit() {
-			if err := executor.Init(); err != nil {
-				return err
-			}
-		}
-
-		generated, err := executor.Plan()
+		generated, _, err := generatePlan()
 		if err != nil {
 			return err
 		}
