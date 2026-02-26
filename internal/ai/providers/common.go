@@ -86,12 +86,24 @@ func buildSystemPrompt(prompts ai.Prompts) string {
 		sb.WriteString("\n\n")
 	}
 
+	if prompts.Cost != "" {
+		sb.WriteString("## Cost Optimization Guidelines\n\n")
+		sb.WriteString(prompts.Cost)
+		sb.WriteString("\n\n")
+	}
+
+	if prompts.Compliance != "" {
+		sb.WriteString("## Compliance Review Guidelines\n\n")
+		sb.WriteString(prompts.Compliance)
+		sb.WriteString("\n\n")
+	}
+
 	sb.WriteString(`You MUST respond ONLY with valid JSON in this exact format:
 {
   "findings": [
     {
       "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
-      "category": "security|compliance|best-practice|maintainability|reliability",
+      "category": "security|compliance|best-practice|cost|architecture|maintainability|reliability",
       "resource": "resource_address",
       "message": "description of the issue",
       "remediation": "how to fix it"
@@ -207,7 +219,7 @@ func normalizeSeverity(s string) string {
 func normalizeCategory(c string) string {
 	c = strings.ToLower(strings.TrimSpace(c))
 	switch c {
-	case "security", "compliance", "best-practice", "maintainability", "reliability":
+	case "security", "compliance", "best-practice", "maintainability", "reliability", "cost", "architecture":
 		return c
 	default:
 		return "best-practice"

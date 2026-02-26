@@ -23,6 +23,7 @@ var applyCmd = &cobra.Command{
 	Long: `Runs a full scan of the Terraform plan, then conditionally applies it.
 
 The scanner is specified as a positional argument (same pattern as scan).
+AI contextual analysis runs by default when a provider is configured.
 
 Behavior:
   - Blocks if any CRITICAL findings are detected
@@ -30,8 +31,8 @@ Behavior:
   - Use --non-interactive for CI pipelines (blocks on CRITICAL, auto-approves otherwise)
 
 Examples:
-  terraview apply checkov                     # scan + interactive apply
-  terraview apply checkov --ai                # scan + AI + interactive apply
+  terraview apply checkov                     # scan + AI + interactive apply
+  terraview apply checkov --static            # scan only (no AI) + apply
   terraview apply checkov --non-interactive   # CI mode
   terraview apply checkov --all               # everything enabled + apply`,
 	Args: cobra.MaximumNArgs(1),
@@ -40,13 +41,15 @@ Examples:
 
 func init() {
 	applyCmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip confirmation prompt (for CI)")
-	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	applyCmd.Flags().BoolVar(&staticOnly, "static", false, "Static analysis only: disable AI contextual analysis")
+	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Deprecated: AI is enabled by default when a provider is configured")
 	applyCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
-	applyCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	applyCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation")
 	applyCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	applyCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	applyCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	applyCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
+	_ = applyCmd.Flags().MarkHidden("ai")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -61,7 +64,6 @@ func runApply(cmd *cobra.Command, args []string) error {
 		explainFlag = true
 		diagramFlag = true
 		impactFlag = true
-		aiEnabled = true
 	}
 
 	// If no scanner specified, try auto-select (same as scan command)
@@ -74,9 +76,9 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate: must specify a scanner or --ai (or both)
-	if scannerName == "" && !aiEnabled && !explainFlag && !diagramFlag && findingsFile == "" {
-		return fmt.Errorf("specify a scanner or --ai\n\nUsage:\n  terraview apply checkov          # scan + apply\n  terraview apply checkov --ai     # scan + AI + apply\n\nAvailable scanners: checkov, tfsec, terrascan")
+	// Validate: need at least a scanner or AI provider
+	if scannerName == "" && staticOnly {
+		return fmt.Errorf("specify a scanner with --static\n\nUsage:\n  terraview apply checkov --static   # scan only + apply\n  terraview apply checkov             # scan + AI + apply")
 	}
 
 	// 1. Run scan

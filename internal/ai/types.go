@@ -14,10 +14,13 @@ type Request struct {
 
 // Prompts holds the assembled prompt templates sent to the provider.
 type Prompts struct {
-	System       string
-	Security     string
-	Architecture string
-	Standards    string
+	System          string
+	Security        string
+	Architecture    string
+	Standards       string
+	Cost            string // FinOps and cost optimization prompt
+	Compliance      string // regulatory framework compliance prompt
+	ContextAnalysis string // cross-resource contextual analysis prompt
 }
 
 // Completion is the structured result returned by a provider.
@@ -36,4 +39,6 @@ type ProviderInfo struct {
 	EnvVarKey       string
 	DefaultModel    string   // default model pre-selected in the picker
 	SuggestedModels []string // popular models shown in the interactive picker
+	CLIBinary       string   // binary name for CLI-based providers (empty for API providers)
+	InstallHint     string   // install command shown when CLIBinary is missing
 }

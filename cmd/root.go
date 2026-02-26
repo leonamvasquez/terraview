@@ -29,13 +29,15 @@ var Version = "v0.5.3"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",
-	Short: "Semantic reviewer for Terraform plans",
-	Long: `terraview — Semantic reviewer for Terraform plans
+	Short: "Security scanner + AI contextual analysis for Terraform plans",
+	Long: `terraview — Security scanner + AI contextual analysis for Terraform plans
 
-Security scanning and AI review for Terraform plans.
+Combines static security scanners (Checkov, tfsec, Terrascan) with AI-powered
+contextual analysis that detects cross-resource risks scanners cannot find.
+Scanner and AI run in parallel by default.
 
 Core Commands:
-  scan        Security scan + optional AI analysis
+  scan        Security scan + AI contextual analysis (parallel)
   apply       Scan and conditionally apply the plan
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
@@ -57,9 +59,8 @@ Utilities:
 
 Get started:
   cd my-terraform-project
-  terraview scan checkov                    # security scanner
-  terraview scan checkov --ai               # scanner + AI analysis
-  terraview scan --ai                       # AI-only analysis
+  terraview scan checkov                    # scanner + AI (default)
+  terraview scan checkov --static           # scanner only
   terraview scan checkov --all              # everything enabled
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation

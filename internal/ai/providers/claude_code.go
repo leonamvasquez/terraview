@@ -17,7 +17,7 @@ const claudeCodeName = "claude-code"
 
 func init() {
 	ai.Register(claudeCodeName, NewClaudeCode, ai.ProviderInfo{
-		DisplayName:  "Claude Code (assinatura)",
+		DisplayName:  "Claude Code (subscription)",
 		RequiresKey:  false,
 		EnvVarKey:    "",
 		DefaultModel: "claude-sonnet-4-5",
@@ -28,6 +28,8 @@ func init() {
 			"claude-sonnet-4-20250514",
 			"claude-haiku-4-5",
 		},
+		CLIBinary:   "claude",
+		InstallHint: "npm install -g @anthropic-ai/claude-code",
 	})
 }
 
@@ -52,25 +54,13 @@ func NewClaudeCode(cfg ai.ProviderConfig) (ai.Provider, error) {
 
 func (c *claudeCodeProvider) Name() string { return claudeCodeName }
 
-// Validate checks that the Claude Code CLI binary is installed and authenticated.
-func (c *claudeCodeProvider) Validate(ctx context.Context) error {
-	path, err := exec.LookPath("claude")
-	if err != nil {
-		return fmt.Errorf("%w: claude CLI não encontrado no PATH — instale via: npm install -g @anthropic-ai/claude-code", ai.ErrProviderValidation)
+// Validate checks that the Claude Code CLI binary is installed.
+// Note: Claude CLI may hang when invoked non-interactively with
+// certain configurations, so we only verify the binary is in PATH.
+func (c *claudeCodeProvider) Validate(_ context.Context) error {
+	if _, err := exec.LookPath("claude"); err != nil {
+		return fmt.Errorf("%w: claude CLI not found in PATH — install via: npm install -g @anthropic-ai/claude-code", ai.ErrProviderValidation)
 	}
-	_ = path
-
-	// Quick check: run claude with a trivial prompt to verify auth
-	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(checkCtx, "claude", "--print", "responda apenas: ok")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%w: claude CLI encontrado mas a autenticação falhou — execute 'claude' interativamente para autenticar. Detalhes: %s", ai.ErrProviderValidation, strings.TrimSpace(stderr.String()))
-	}
-
 	return nil
 }
 
@@ -110,7 +100,7 @@ func (c *claudeCodeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 	}
 
 	return ai.Completion{}, ai.NewProviderError(claudeCodeName, "analyze",
-		fmt.Errorf("falhou após %d tentativas: %w", c.cfg.MaxRetries+1, lastErr))
+		fmt.Errorf("failed after %d attempts: %w", c.cfg.MaxRetries+1, lastErr))
 }
 
 func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules.Finding, string, error) {
@@ -134,14 +124,14 @@ func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules
 
 	if err := cmd.Run(); err != nil {
 		if execCtx.Err() != nil {
-			return nil, "", fmt.Errorf("%w: claude CLI excedeu timeout de %ds", ai.ErrProviderTimeout, c.cfg.TimeoutSecs)
+			return nil, "", fmt.Errorf("%w: claude CLI timed out after %ds", ai.ErrProviderTimeout, c.cfg.TimeoutSecs)
 		}
-		return nil, "", fmt.Errorf("claude CLI falhou: %w — stderr: %s", err, truncate(strings.TrimSpace(stderr.String()), 300))
+		return nil, "", fmt.Errorf("claude CLI failed: %w — stderr: %s", err, truncate(strings.TrimSpace(stderr.String()), 300))
 	}
 
 	output := stdout.String()
 	if output == "" {
-		return nil, "", fmt.Errorf("%w: claude CLI retornou saída vazia", ai.ErrInvalidResponse)
+		return nil, "", fmt.Errorf("%w: claude CLI returned empty output", ai.ErrInvalidResponse)
 	}
 
 	// Claude --output-format json wraps text in a JSON envelope;

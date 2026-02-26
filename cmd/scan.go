@@ -6,17 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/blast"
-	"github.com/leonamvasquez/terraview/internal/cluster"
-	"github.com/leonamvasquez/terraview/internal/clusterai"
 	"github.com/leonamvasquez/terraview/internal/config"
+	"github.com/leonamvasquez/terraview/internal/contextanalysis"
 	"github.com/leonamvasquez/terraview/internal/diagram"
-	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
@@ -35,7 +34,8 @@ import (
 
 var (
 	// Scan-local flags
-	aiEnabled    bool
+	staticOnly   bool // --static: disable AI contextual analysis
+	aiEnabled    bool // deprecated: kept for backward compat, ignored
 	strict       bool
 	explainFlag  bool
 	diagramFlag  bool
@@ -46,8 +46,17 @@ var (
 
 var scanCmd = &cobra.Command{
 	Use:   "scan [scanner]",
-	Short: "Security scan and optional AI analysis of a Terraform plan",
-	Long: `Analyzes a Terraform plan using a security scanner and/or AI review.
+	Short: "Security scan with AI contextual analysis of a Terraform plan",
+	Long: `Analyzes a Terraform plan using security scanners and AI contextual analysis.
+
+By default, terraview runs BOTH the security scanner AND AI-powered contextual
+analysis in parallel. The scanner checks individual resources against policy rules;
+the AI analyzes cross-resource relationships, architectural patterns, and
+dependency risks that static scanners cannot detect.
+
+AI runs automatically when a provider is configured (via .terraview.yaml,
+--provider flag, or 'terraview provider use'). Use --static to disable AI
+and run only the scanner.
 
 The scanner is specified as a positional argument.
 If --plan is not specified, terraview will automatically run:
@@ -56,14 +65,13 @@ If --plan is not specified, terraview will automatically run:
   terraform show   (exports JSON)
 
 Examples:
-  terraview scan checkov                       # security scanner only
-  terraview scan checkov --ai                  # scanner + AI analysis
-  terraview scan --ai                          # AI-only analysis (no scanner)
+  terraview scan checkov                       # scanner + AI (default)
+  terraview scan checkov --static              # scanner only, no AI
   terraview scan checkov --all                 # everything enabled
-  terraview scan checkov --ai --provider gemini  # Gemini AI
-  terraview scan checkov --explain             # scanner + AI explanation
-  terraview scan checkov --diagram             # scanner + diagram
-  terraview scan checkov --impact              # impact analysis
+  terraview scan checkov --provider gemini     # use specific AI provider
+  terraview scan checkov --explain             # scanner + AI + explanation
+  terraview scan checkov --diagram             # scanner + AI + diagram
+  terraview scan checkov --impact              # scanner + AI + impact analysis
   terraview scan checkov --format compact      # minimal output
   terraview scan checkov --format sarif        # SARIF for CI
   terraview scan checkov --strict              # HIGH returns exit code 2
@@ -73,13 +81,16 @@ Examples:
 }
 
 func init() {
-	scanCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Enable AI-powered semantic review")
+	scanCmd.Flags().BoolVar(&staticOnly, "static", false, "Static analysis only: disable AI contextual analysis")
+	scanCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Deprecated: AI is enabled by default when a provider is configured")
 	scanCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
-	scanCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation (implies --ai)")
+	scanCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation")
 	scanCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
+	// Hide deprecated --ai flag from help
+	_ = scanCmd.Flags().MarkHidden("ai")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -94,7 +105,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		explainFlag = true
 		diagramFlag = true
 		impactFlag = true
-		aiEnabled = true
 	}
 
 	// If no scanner specified, try auto-select
@@ -108,19 +118,37 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate: must specify a scanner or --ai (or both)
-	if scannerName == "" && !aiEnabled && !explainFlag && !diagramFlag && findingsFile == "" {
+	// Validate: must specify at least a scanner or have AI configured
+	if scannerName == "" && staticOnly && findingsFile == "" {
 		// Show helpful error with installed scanners
 		avail := scanner.DefaultManager.Available()
 		if len(avail) == 0 {
-			return fmt.Errorf("no scanners installed.\n\nInstall a scanner first:\n  terraview scanners install checkov\n  terraview scanners install tfsec\n  terraview scanners install terrascan\n  terraview scanners install --all\n\nOr use AI-only mode:\n  terraview scan --ai")
+			return fmt.Errorf("no scanners installed and --static disables AI.\n\nInstall a scanner first:\n  terraview scanners install checkov\n  terraview scanners install --all\n\nOr remove --static to use AI contextual analysis")
 		}
 		names := make([]string, 0, len(avail))
 		for _, s := range avail {
 			names = append(names, s.Name())
 		}
-		return fmt.Errorf("specify a scanner or --ai\n\nInstalled scanners:\n  %s\n\nUsage:\n  terraview scan %s          # security scanner\n  terraview scan %s --ai     # scanner + AI\n  terraview scan --ai             # AI-only\n\nSet a default: terraview scanners default %s",
+		return fmt.Errorf("specify a scanner with --static\n\nInstalled scanners:\n  %s\n\nUsage:\n  terraview scan %s --static     # scanner only\n  terraview scan %s               # scanner + AI\n\nSet a default: terraview scanners default %s",
 			strings.Join(names, "\n  "), names[0], names[0], names[0])
+	}
+
+	// If no scanner and no --static, AI-only mode is valid (if provider available)
+	if scannerName == "" && !staticOnly && findingsFile == "" {
+		cfg, _ := config.Load(workDir)
+		providerAvailable := canResolveAIProvider(cfg)
+		if !providerAvailable {
+			avail := scanner.DefaultManager.Available()
+			if len(avail) == 0 {
+				return fmt.Errorf("no scanners installed and no AI provider configured.\n\nGet started:\n  terraview scanners install checkov    # install a scanner\n  terraview provider install ollama     # install local AI\n\nOr configure an AI provider in .terraview.yaml")
+			}
+			names := make([]string, 0, len(avail))
+			for _, s := range avail {
+				names = append(names, s.Name())
+			}
+			return fmt.Errorf("specify a scanner or configure an AI provider\n\nInstalled scanners:\n  %s\n\nUsage:\n  terraview scan %s               # scanner + AI\n  terraview scan %s --static      # scanner only",
+				strings.Join(names, "\n  "), names[0], names[0])
+		}
 	}
 
 	_, exitCode, err := executeReview(scannerName)
@@ -136,6 +164,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 }
 
 // executeReview runs the full review pipeline and returns the plan path, exit code, and any error.
+// Pipeline: Parse → [Scanner ‖ AI Context] → Merge → Score → Output
 func executeReview(scannerName string) (string, int, error) {
 	// Load workspace config (.terraview.yaml)
 	cfg, err := config.Load(workDir)
@@ -170,7 +199,7 @@ func executeReview(scannerName string) (string, int, error) {
 		resolvedPlan = generatedPlan
 	}
 
-	// Resolve effective AI config: CLI flags > safe mode > config > defaults
+	// Resolve effective AI config: CLI flags > config > defaults
 	effectiveProvider := cfg.LLM.Provider
 	if aiProvider != "" {
 		effectiveProvider = aiProvider
@@ -180,19 +209,24 @@ func executeReview(scannerName string) (string, int, error) {
 		effectiveModel = ollamaModel
 	}
 	effectiveURL := cfg.LLM.URL
-	// When the provider is not ollama, clear the URL so each provider
-	// falls back to its own default base URL.
 	if effectiveProvider != "ollama" {
 		effectiveURL = ""
 	}
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
 	effectiveTemperature := cfg.LLM.Temperature
-	// --provider or --model implies --ai
-	effectiveAI := aiEnabled || aiProvider != "" || ollamaModel != "" || explainFlag
 
-	// If AI is configured but not active, show info
-	if cfg.LLM.Enabled && !effectiveAI {
-		logVerbose("AI is configured but not active. Use --ai to enable.")
+	// AI is ON by default unless --static is set.
+	// Graceful degradation: if no provider is available, run scanner-only silently.
+	effectiveAI := !staticOnly
+	if effectiveAI {
+		if !canResolveAIProvider(cfg) && aiProvider == "" && ollamaModel == "" {
+			logVerbose("No AI provider configured — running in static mode (scanner only)")
+			effectiveAI = false
+		}
+	}
+	// Legacy --ai flag: ignored (AI is default), but --explain still implies AI
+	if explainFlag {
+		effectiveAI = true
 	}
 
 	// Resolve output format: CLI flag > config > default
@@ -221,42 +255,113 @@ func executeReview(scannerName string) (string, int, error) {
 	}
 
 	resources := p.NormalizeResources(plan)
-	summary := p.ExtractResourceSummary(resources)
+	_ = p.ExtractResourceSummary(resources) // summary available for verbose logging
 	logVerbose("Found %d resource changes", len(resources))
 
-	// 2. Scanner-based analysis (primary detection engine)
+	// Build topology graph (used by both scanner clustering and AI context)
+	topoGraph := topology.BuildGraph(resources)
+
+	// 2. PARALLEL: Scanner + AI Context Analysis
 	var hardFindings []rules.Finding
 	var scannerResult *scanner.AggregatedResult
+	var contextFindings []rules.Finding
+	var contextSummary string
 
+	// Channels for parallel execution
+	type scannerOutput struct {
+		findings []rules.Finding
+		result   *scanner.AggregatedResult
+		err      error
+	}
+	type contextOutput struct {
+		findings []rules.Finding
+		summary  string
+		err      error
+	}
+
+	scannerCh := make(chan scannerOutput, 1)
+	contextCh := make(chan contextOutput, 1)
+
+	var wg sync.WaitGroup
+
+	// 2a. Scanner goroutine
 	if scannerName != "" {
-		// Run the specified scanner
-		resolvedScanner, err := scanner.Resolve(scannerName)
-		if err != nil {
-			return resolvedPlan, 0, fmt.Errorf("scanner error: %w", err)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resolvedScanner, err := scanner.Resolve(scannerName)
+			if err != nil {
+				scannerCh <- scannerOutput{err: err}
+				return
+			}
 
-		scanCtx := scanner.ScanContext{
-			PlanPath:  resolvedPlan,
-			SourceDir: workDir,
-			WorkDir:   workDir,
-		}
+			scanCtx := scanner.ScanContext{
+				PlanPath:  resolvedPlan,
+				SourceDir: workDir,
+				WorkDir:   workDir,
+			}
 
-		scanSpinner := output.NewSpinner(fmt.Sprintf("Running scanner: %s...", resolvedScanner.Name()))
-		scanSpinner.Start()
-		rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
-		aggResult := scanner.Aggregate(rawResults)
-		scanSpinner.Stop(true)
+			scanSpinner := output.NewSpinner(fmt.Sprintf("Running scanner: %s...", resolvedScanner.Name()))
+			scanSpinner.Start()
+			rawResults := scanner.RunAll([]scanner.Scanner{resolvedScanner}, scanCtx)
+			aggResult := scanner.Aggregate(rawResults)
+			scanSpinner.Stop(true)
 
-		scannerResult = &aggResult
-
-		hardFindings = append(hardFindings, aggResult.Findings...)
-		logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
-			resolvedScanner.Name(), len(aggResult.Findings), aggResult.TotalRaw, aggResult.TotalDeduped)
+			scannerCh <- scannerOutput{findings: aggResult.Findings, result: &aggResult}
+		}()
 	} else {
+		scannerCh <- scannerOutput{} // no scanner
 		logVerbose("No scanner specified, skipping security scan")
 	}
 
-	// 2b. Import external findings if specified (backward compat)
+	// 2b. AI Context Analysis goroutine (runs in parallel with scanner)
+	if effectiveAI {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctxFindings, ctxSummary, ctxErr := runCodeContextAnalysis(
+				resources, topoGraph,
+				effectiveProvider, effectiveURL, effectiveModel,
+				effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, cfg)
+			contextCh <- contextOutput{findings: ctxFindings, summary: ctxSummary, err: ctxErr}
+		}()
+	} else {
+		contextCh <- contextOutput{} // no AI
+		logVerbose("AI contextual analysis disabled (--static)")
+	}
+
+	// Wait for both to complete
+	go func() {
+		wg.Wait()
+		// Channels are already written to by goroutines
+	}()
+
+	// Collect scanner results
+	scanOut := <-scannerCh
+	if scanOut.err != nil {
+		return resolvedPlan, 0, fmt.Errorf("scanner error: %w", scanOut.err)
+	}
+	hardFindings = scanOut.findings
+	scannerResult = scanOut.result
+	if scannerResult != nil {
+		logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
+			scannerName, len(scannerResult.Findings), scannerResult.TotalRaw, scannerResult.TotalDeduped)
+	}
+
+	// Collect AI context results (graceful: errors are warnings, not fatal)
+	ctxOut := <-contextCh
+	if ctxOut.err != nil {
+		fmt.Fprintf(os.Stderr, "%s AI context analysis warning: %v\n", output.Prefix(), ctxOut.err)
+		logVerbose("AI context analysis failed (non-fatal): %v", ctxOut.err)
+	} else {
+		contextFindings = ctxOut.findings
+		contextSummary = ctxOut.summary
+		if len(contextFindings) > 0 {
+			logVerbose("AI context analysis: %d findings", len(contextFindings))
+		}
+	}
+
+	// 2c. Import external findings if specified
 	if findingsFile != "" {
 		externalFindings, err := importer.Import(findingsFile)
 		if err != nil {
@@ -267,72 +372,31 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 3. AI review (optional) with lifecycle management
-	var aiFindings []rules.Finding
-	var aiSummary string
-	var clusterCache *clusterai.ClusterCache
-
-	// Build topology graph (used for AI context and other features)
-	topoGraph := topology.BuildGraph(resources)
-
-	// 3a. Risk clustering: group scanner findings BEFORE AI to enable cluster-level invocation
-	var clusterResult *cluster.ClusterResult
-	if len(hardFindings) > 0 {
-		builder := cluster.NewBuilder()
-		clusterResult = builder.Build(hardFindings)
-		if clusterResult.HighRiskClusters > 0 {
-			logVerbose("Risk clusters: %d total, %d high-risk", len(clusterResult.Clusters), clusterResult.HighRiskClusters)
-		}
-	}
-
-	if effectiveAI {
-		// Build resource limits from config
-		limits := buildResourceLimits(cfg, false)
-
-		// Inject topology context into summary for AI
-		topoSummary := make(map[string]interface{})
-		for k, v := range summary {
-			topoSummary[k] = v
-		}
-		topoSummary["topology_context"] = topoGraph.FormatContext()
-		topoSummary["topology_layers"] = topoGraph.Layers()
-
-		// Cluster-level adaptive AI invocation
-		if clusterResult != nil && len(clusterResult.Clusters) > 0 {
-			aiFindings, aiSummary, clusterCache = runClusterAIReview(
-				clusterResult.Clusters, effectiveProvider, effectiveURL,
-				effectiveModel, effectiveTimeout, effectiveTemperature,
-				cfg.LLM.APIKey, limits)
-		} else {
-			logVerbose("No clusters for AI analysis — skipping cluster-level AI")
-		}
-	} else {
-		logVerbose("%s", i18n.T().AISkipped)
-	}
-
-	// 3b. (second-opinion removed)
-	// 3c. Deduplicate: merge scanner + AI findings (replaces normalizer + resolver)
-	if effectiveAI && (len(hardFindings) > 0 || len(aiFindings) > 0) {
-		dr := normalizer.Deduplicate(hardFindings, aiFindings)
+	// 4. Merge all findings: scanner + AI context
+	allAIFindings := contextFindings
+	if len(hardFindings) > 0 || len(allAIFindings) > 0 {
+		dr := normalizer.Deduplicate(hardFindings, allAIFindings)
 		hardFindings = dr.Findings
-		aiFindings = nil // absorbed into hardFindings via dedup
-		aiSummary = ""
+		allAIFindings = nil
 		logVerbose("Dedup: %s", dr.Summary)
 	}
 
-	// 4. Aggregate (with configurable scoring weights)
+	// Use contextSummary as the AI summary
+	aiSummary := contextSummary
+
+	// 5. Aggregate (with configurable scoring weights)
 	sw := cfg.Scoring.SeverityWeights
 	scorer := scoring.NewScorerWithWeights(sw.Critical, sw.High, sw.Medium, sw.Low)
 	agg := aggregator.NewAggregator(scorer)
-	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, aiFindings, aiSummary, strict)
+	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, allAIFindings, aiSummary, strict)
 
-	// 4a. Apply rule filtering from config
+	// 5a. Apply rule filtering from config
 	if len(cfg.Rules.DisabledRules) > 0 {
 		result.Findings = filterDisabledRules(result.Findings, cfg.Rules.DisabledRules)
 		logVerbose("Filtered %d disabled rules from findings", len(cfg.Rules.DisabledRules))
 	}
 
-	// 4b2. Meta-analysis: unified cross-tool scoring
+	// 5b. Meta-analysis: unified cross-tool scoring
 	if len(result.Findings) > 0 {
 		metaAnalyzer := meta.NewAnalyzer()
 		metaResult := metaAnalyzer.Analyze(result.Findings)
@@ -340,14 +404,14 @@ func executeReview(scannerName string) (string, int, error) {
 		logVerbose("Meta-analysis: %s", metaResult.Summary)
 	}
 
-	// 4c. Generate diagram if requested (deterministic, no AI)
+	// 5c. Generate diagram if requested (deterministic, no AI)
 	if diagramFlag {
 		gen := diagram.NewGenerator()
 		result.Diagram = gen.GenerateWithGraph(resources, topoGraph)
 		logVerbose("Infrastructure diagram generated")
 	}
 
-	// 4d. Analyze impact if requested (deterministic, no AI)
+	// 5d. Analyze impact if requested (deterministic, no AI)
 	if impactFlag {
 		analyzer := blast.NewAnalyzer()
 		blastResult := analyzer.AnalyzeWithGraph(resources, topoGraph)
@@ -355,23 +419,7 @@ func executeReview(scannerName string) (string, int, error) {
 		logVerbose("Impact analysis: %s", blastResult.Summary)
 	}
 
-	// 4e. Generate AI explanation if requested (reuses cluster cache — NO additional AI invocation)
-	if explainFlag && effectiveAI {
-		if clusterCache != nil {
-			explainSummary := clusterai.GenerateExplainSummary(clusterCache)
-			if explainSummary != "" {
-				result.Explanation = &explain.Explanation{
-					Summary:   explainSummary,
-					RiskLevel: "INFO",
-				}
-				logVerbose("Explanation generated from cluster cache (no additional AI calls)")
-			}
-		} else {
-			logVerbose("No cluster cache available for --explain")
-		}
-	}
-
-	// 5. Output
+	// 6. Output
 	langCode := ""
 	if brFlag {
 		langCode = "pt-BR"
@@ -403,10 +451,10 @@ func executeReview(scannerName string) (string, int, error) {
 		logVerbose("Written: %s", mdPath)
 	}
 
-	// 6. Print summary
+	// 7. Print summary
 	writer.PrintSummary(result)
 
-	// 6a. Print scanner stats if scanners were used
+	// 7a. Print scanner stats if scanners were used
 	if scannerResult != nil && effectiveFormat != output.FormatJSON {
 		if brFlag {
 			fmt.Print(scanner.FormatScannerHeaderBR(*scannerResult))
@@ -415,15 +463,7 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// (conflict resolution section removed — dedup summary is logged inline)
-
-	// 6c. Print risk clusters if available
-	if clusterResult != nil && clusterResult.HighRiskClusters > 0 && effectiveFormat != output.FormatJSON {
-		fmt.Println()
-		fmt.Print(cluster.FormatClusters(clusterResult))
-	}
-
-	// 6d. Print impact analysis if generated
+	// 7b. Print impact analysis if generated
 	if impactFlag && result.BlastRadius != nil {
 		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
 			fmt.Println()
@@ -431,7 +471,7 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 7. Apply strict mode: HIGH becomes exit code 2
+	// 8. Apply strict mode: HIGH becomes exit code 2
 	exitCode := result.ExitCode
 	if strict && exitCode == 1 {
 		exitCode = 2
@@ -440,51 +480,41 @@ func executeReview(scannerName string) (string, int, error) {
 	return resolvedPlan, exitCode, nil
 }
 
-// buildResourceLimits constructs runtime limits from config and safe mode.
-func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
-	if safe {
-		return runtime.SafeResourceLimits()
+// canResolveAIProvider checks if an AI provider can be resolved from config.
+func canResolveAIProvider(cfg config.Config) bool {
+	provider := cfg.LLM.Provider
+	if provider == "" {
+		return false
 	}
-
-	limits := runtime.DefaultResourceLimits()
-
-	if cfg.LLM.Ollama.MaxThreads > 0 {
-		limits.MaxThreads = cfg.LLM.Ollama.MaxThreads
-	}
-	if cfg.LLM.Ollama.MaxMemoryMB > 0 {
-		limits.MaxMemoryMB = cfg.LLM.Ollama.MaxMemoryMB
-	}
-	if cfg.LLM.Ollama.MinFreeMemoryMB > 0 {
-		limits.MinFreeMemoryMB = cfg.LLM.Ollama.MinFreeMemoryMB
-	}
-
-	return limits
+	return ai.Has(provider)
 }
 
-// runClusterAIReview runs cluster-level adaptive AI invocation.
-// Instead of running AI per-resource, groups findings into clusters and runs
-// AI per-cluster with adaptive depth (enrichment_only, full_analysis, or skip).
-// Returns findings, summary, and the cluster cache for --explain reuse.
-func runClusterAIReview(clusters []cluster.RiskCluster,
-	providerName, url, model string, timeoutSecs int, temp float64,
-	apiKey string, limits runtime.ResourceLimits) ([]rules.Finding, string, *clusterai.ClusterCache) {
+// runCodeContextAnalysis runs AI-powered contextual analysis on resources and topology.
+// This analyzes the CODE and RELATIONSHIPS, not scanner findings.
+func runCodeContextAnalysis(
+	resources []parser.NormalizedResource,
+	graph *topology.Graph,
+	providerName, url, model string,
+	timeoutSecs int, temp float64,
+	apiKey string, cfg config.Config,
+) ([]rules.Finding, string, error) {
 
-	logVerbose("AI provider: %s (model: %s) — cluster-level invocation", providerName, model)
+	logVerbose("AI context analysis: %s (model: %s)", providerName, model)
 
-	// Ollama lifecycle management: auto-start and auto-stop
+	// Ollama lifecycle management
+	limits := buildResourceLimits(cfg, false)
 	var ollamaCleanup func()
 	if providerName == "ollama" {
 		lc := runtime.NewOllamaLifecycle(limits, url)
 		bgCtx := context.Background()
 		cleanup, err := lc.Ensure(bgCtx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnOllamaUnavail+"\n", output.Prefix(), err)
-			return nil, "", nil
+			return nil, "", fmt.Errorf("ollama unavailable: %w", err)
 		}
 		ollamaCleanup = cleanup
 	}
 
-	// Create cancellable context for AI execution
+	// Create cancellable context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSecs+30)*time.Second)
 	defer cancel()
 
@@ -514,32 +544,42 @@ func runClusterAIReview(clusters []cluster.RiskCluster,
 		if ollamaCleanup != nil {
 			ollamaCleanup()
 		}
-		fmt.Fprintf(os.Stderr, "%s "+i18n.T().WarnAIProviderFailed+"\n", output.Prefix(), providerName, err)
-		return nil, "", nil
+		return nil, "", fmt.Errorf("AI provider %s: %w", providerName, err)
 	}
 
-	// Cluster-level adaptive AI controller
-	cache := clusterai.NewClusterCache()
-	workers := 4
-	if len(clusters) < 4 {
-		workers = len(clusters)
-	}
-	ctrl := clusterai.NewController(provider, cache, workers)
-
-	// Set language if pt-BR
+	// Run context analysis
+	lang := ""
 	if brFlag {
-		ctrl.SetLang("pt-BR")
+		lang = "pt-BR"
 	}
 
-	logVerbose("Cluster AI: %d clusters → adaptive invocation (workers=%d)", len(clusters), workers)
+	// Load the context-analysis prompt from prompts directory (if available)
+	contextPrompt := ""
+	execPath, exErr := os.Executable()
+	if exErr == nil {
+		promptDir := filepath.Join(filepath.Dir(execPath), "prompts")
+		if _, statErr := os.Stat(promptDir); statErr != nil {
+			// Fallback: prompts next to working directory
+			promptDir = filepath.Join(".", "prompts")
+		}
+		pl := ai.NewPromptLoader(promptDir)
+		if prompts, loadErr := pl.Load(); loadErr == nil {
+			contextPrompt = prompts.ContextAnalysis
+		}
+	}
 
-	// Run cluster-level AI analysis
-	aiSpinner := output.NewSpinner(fmt.Sprintf("AI analyzing %d clusters (%s/%s)...", len(clusters), providerName, model))
+	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt)
+
+	displayModel := model
+	if providerName != "" && !strings.Contains(model, "/") {
+		displayModel = providerName + "/" + model
+	}
+	aiSpinner := output.NewSpinner(fmt.Sprintf("AI context analysis (%s)...", displayModel))
 	aiSpinner.Start()
-	results, stats := ctrl.Run(ctx, clusters)
-	aiSpinner.Stop(stats.Errors == 0)
+	result, err := analyzer.Analyze(ctx, resources, graph)
+	aiSpinner.Stop(err == nil)
 
-	// Stop monitor and cleanup Ollama process
+	// Cleanup
 	if monitor != nil {
 		monitor.Stop()
 	}
@@ -547,18 +587,33 @@ func runClusterAIReview(clusters []cluster.RiskCluster,
 		ollamaCleanup()
 	}
 
-	logVerbose("Cluster AI stats: total=%d skipped=%d enriched=%d full=%d cached=%d errors=%d",
-		stats.TotalClusters, stats.Skipped, stats.Enriched, stats.FullAnalysis, stats.CacheHits, stats.Errors)
+	if err != nil {
+		return nil, "", err
+	}
 
-	// Convert cluster results to standard findings
-	findings := clusterai.ToFindings(results, clusters, providerName)
+	logVerbose("AI context (%s/%s): %d findings", providerName, model, len(result.Findings))
+	return result.Findings, result.Summary, nil
+}
 
-	// Build summary from cluster stats
-	aiSummary := fmt.Sprintf("Cluster-level AI: %d clusters (%d enriched, %d full, %d skipped, %d cached)",
-		stats.TotalClusters, stats.Enriched, stats.FullAnalysis, stats.Skipped, stats.CacheHits)
+// buildResourceLimits constructs runtime limits from config and safe mode.
+func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
+	if safe {
+		return runtime.SafeResourceLimits()
+	}
 
-	logVerbose("AI (%s/%s): %d cluster findings", providerName, model, len(findings))
-	return findings, aiSummary, cache
+	limits := runtime.DefaultResourceLimits()
+
+	if cfg.LLM.Ollama.MaxThreads > 0 {
+		limits.MaxThreads = cfg.LLM.Ollama.MaxThreads
+	}
+	if cfg.LLM.Ollama.MaxMemoryMB > 0 {
+		limits.MaxMemoryMB = cfg.LLM.Ollama.MaxMemoryMB
+	}
+	if cfg.LLM.Ollama.MinFreeMemoryMB > 0 {
+		limits.MinFreeMemoryMB = cfg.LLM.Ollama.MinFreeMemoryMB
+	}
+
+	return limits
 }
 
 // filterDisabledRules removes findings whose RuleID matches any disabled rule pattern.

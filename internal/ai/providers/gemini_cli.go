@@ -17,16 +17,17 @@ const geminiCLIName = "gemini-cli"
 
 func init() {
 	ai.Register(geminiCLIName, NewGeminiCLI, ai.ProviderInfo{
-		DisplayName:  "Gemini CLI (assinatura)",
+		DisplayName:  "Gemini CLI (subscription)",
 		RequiresKey:  false,
 		EnvVarKey:    "",
 		DefaultModel: "gemini-2.5-pro",
 		SuggestedModels: []string{
-			"gemini-3.0-pro",
+			"gemini-3",
 			"gemini-2.5-pro",
 			"gemini-2.5-flash",
-			"gemini-3.0-flash",
 		},
+		CLIBinary:   "gemini",
+		InstallHint: "npm install -g @google/gemini-cli",
 	})
 }
 
@@ -51,25 +52,13 @@ func NewGeminiCLI(cfg ai.ProviderConfig) (ai.Provider, error) {
 
 func (g *geminiCLIProvider) Name() string { return geminiCLIName }
 
-// Validate checks that the Gemini CLI binary is installed and authenticated.
-func (g *geminiCLIProvider) Validate(ctx context.Context) error {
-	path, err := exec.LookPath("gemini")
-	if err != nil {
-		return fmt.Errorf("%w: gemini CLI não encontrado no PATH — instale via: npm install -g @anthropic-ai/gemini-cli ou consulte https://github.com/google-gemini/gemini-cli", ai.ErrProviderValidation)
+// Validate checks that the Gemini CLI binary is installed.
+// Note: Gemini CLI is a TUI app that may hang when invoked
+// non-interactively, so we only verify the binary is in PATH.
+func (g *geminiCLIProvider) Validate(_ context.Context) error {
+	if _, err := exec.LookPath("gemini"); err != nil {
+		return fmt.Errorf("%w: gemini CLI not found in PATH — install via: npm install -g @google/gemini-cli or see https://github.com/google-gemini/gemini-cli", ai.ErrProviderValidation)
 	}
-	_ = path
-
-	// Quick check: run gemini with a trivial prompt to verify auth
-	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(checkCtx, "gemini", "-p", "responda apenas: ok")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%w: gemini CLI encontrado mas a autenticação falhou — execute 'gemini' interativamente para autenticar. Detalhes: %s", ai.ErrProviderValidation, strings.TrimSpace(stderr.String()))
-	}
-
 	return nil
 }
 
@@ -109,7 +98,7 @@ func (g *geminiCLIProvider) Analyze(ctx context.Context, r ai.Request) (ai.Compl
 	}
 
 	return ai.Completion{}, ai.NewProviderError(geminiCLIName, "analyze",
-		fmt.Errorf("falhou após %d tentativas: %w", g.cfg.MaxRetries+1, lastErr))
+		fmt.Errorf("failed after %d attempts: %w", g.cfg.MaxRetries+1, lastErr))
 }
 
 func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.Finding, string, error) {
@@ -129,21 +118,21 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 
 	if err := cmd.Run(); err != nil {
 		if execCtx.Err() != nil {
-			return nil, "", fmt.Errorf("%w: gemini CLI excedeu timeout de %ds", ai.ErrProviderTimeout, g.cfg.TimeoutSecs)
+			return nil, "", fmt.Errorf("%w: gemini CLI timed out after %ds", ai.ErrProviderTimeout, g.cfg.TimeoutSecs)
 		}
-		return nil, "", fmt.Errorf("gemini CLI falhou: %w — stderr: %s", err, truncate(strings.TrimSpace(stderr.String()), 300))
+		return nil, "", fmt.Errorf("gemini CLI failed: %w — stderr: %s", err, truncate(strings.TrimSpace(stderr.String()), 300))
 	}
 
 	output := stdout.String()
 	if output == "" {
-		return nil, "", fmt.Errorf("%w: gemini CLI retornou saída vazia", ai.ErrInvalidResponse)
+		return nil, "", fmt.Errorf("%w: gemini CLI returned empty output", ai.ErrInvalidResponse)
 	}
 
-	// Tentar parsear como JSON diretamente ou extrair de markdown
+	// Try to parse as JSON directly or extract from markdown
 	return parseResponse(output, geminiCLIName)
 }
 
-// geminiCLIResponse é usado quando o Gemini CLI retorna JSON estruturado.
+// geminiCLIResponse is used when Gemini CLI returns structured JSON.
 type geminiCLIResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -154,7 +143,7 @@ type geminiCLIResponse struct {
 	} `json:"candidates"`
 }
 
-// tryExtractGeminiJSON tenta extrair o texto de uma resposta JSON do Gemini CLI.
+// tryExtractGeminiJSON extracts the text from a Gemini CLI JSON response.
 func tryExtractGeminiJSON(raw string) string {
 	var resp geminiCLIResponse
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
