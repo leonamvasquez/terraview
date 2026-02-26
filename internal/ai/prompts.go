@@ -30,6 +30,9 @@ func (pl *PromptLoader) Load() (Prompts, error) {
 	ps.Security, _ = pl.readPrompt("security.md")
 	ps.Architecture, _ = pl.readPrompt("architecture.md")
 	ps.Standards, _ = pl.readPrompt("standards.md")
+	ps.Cost, _ = pl.readPrompt("cost.md")
+	ps.Compliance, _ = pl.readPrompt("compliance.md")
+	ps.ContextAnalysis, _ = pl.readPrompt("context-analysis.md")
 
 	return ps, nil
 }

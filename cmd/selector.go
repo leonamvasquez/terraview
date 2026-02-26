@@ -334,7 +334,7 @@ func runSelectorFallback(title string, items []selectItem) (string, bool) {
 		}
 		fmt.Println()
 	}
-	fmt.Printf("\nEscolha (1-%d) ou 0 para cancelar: ", len(items))
+	fmt.Printf("\n"+pick("Choose (1-%d) or 0 to cancel: ", "Escolha (1-%d) ou 0 para cancelar: "), len(items))
 
 	var choice int
 	if _, err := fmt.Scan(&choice); err != nil || choice == 0 {

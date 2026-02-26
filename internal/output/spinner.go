@@ -3,14 +3,57 @@ package output
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
+// ── Global spinner manager ─────────────────────────────────────────────
+// Only ONE spinner renders at a time. When a new spinner starts while
+// another is already running, the previous one is silently paused (its
+// goroutine keeps ticking but skips writes). When the top spinner stops,
+// the previous one resumes rendering.
+
+var (
+	spinMgr  spinnerManager
+	stderrMu sync.Mutex // guards raw writes to stderr
+)
+
+type spinnerManager struct {
+	mu    sync.Mutex
+	stack []*Spinner // top = last element = renders
+}
+
+func (m *spinnerManager) push(s *Spinner) {
+	m.mu.Lock()
+	m.stack = append(m.stack, s)
+	m.mu.Unlock()
+}
+
+func (m *spinnerManager) pop(s *Spinner) {
+	m.mu.Lock()
+	for i := len(m.stack) - 1; i >= 0; i-- {
+		if m.stack[i] == s {
+			m.stack = append(m.stack[:i], m.stack[i+1:]...)
+			break
+		}
+	}
+	m.mu.Unlock()
+}
+
+func (m *spinnerManager) isActive(s *Spinner) bool {
+	m.mu.Lock()
+	active := len(m.stack) > 0 && m.stack[len(m.stack)-1] == s
+	m.mu.Unlock()
+	return active
+}
+
+// ── Spinner ────────────────────────────────────────────────────────────
+
 // Spinner displays an animated spinner in the terminal while a long-running
-// operation is executing. It respects the global ColorEnabled flag:
-// when colors are enabled it uses braille-dot frames; otherwise it falls
-// back to a simple ASCII rotation.
+// operation is executing. It respects the global ColorEnabled flag.
 type Spinner struct {
 	message  string
 	frames   []string
@@ -28,9 +71,6 @@ var unicodeFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 var asciiFrames = []string{"|", "/", "-", "\\"}
 
 // NewSpinner creates a Spinner with the given status message.
-// The message is displayed next to the animated spinner, e.g.:
-//
-//	[terraview] ⠹ Running terraform plan...
 func NewSpinner(message string) *Spinner {
 	frames := unicodeFrames
 	if !ColorEnabled {
@@ -44,7 +84,6 @@ func NewSpinner(message string) *Spinner {
 }
 
 // Start begins the spinner animation in a background goroutine.
-// It is safe to call Start multiple times; only the first call takes effect.
 func (s *Spinner) Start() {
 	s.mu.Lock()
 	if s.running {
@@ -55,11 +94,11 @@ func (s *Spinner) Start() {
 	s.done = make(chan struct{})
 	s.mu.Unlock()
 
+	spinMgr.push(s)
 	go s.loop()
 }
 
 // Stop halts the spinner and prints a final status line.
-// If success is true the line ends with ✓; otherwise ✗.
 func (s *Spinner) Stop(success bool) {
 	s.mu.Lock()
 	if !s.running {
@@ -70,14 +109,17 @@ func (s *Spinner) Stop(success bool) {
 	close(s.done)
 	s.mu.Unlock()
 
-	// Clear the spinner line and print final status
-	clearLine()
+	spinMgr.pop(s)
 
 	mark := colorize(bold+green, "✓")
 	if !success {
 		mark = colorize(bold+red, "✗")
 	}
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", Prefix(), s.message, mark)
+	final := fmt.Sprintf("%s %s %s\n", Prefix(), s.message, mark)
+
+	stderrMu.Lock()
+	writeRaw(clearLineSeq() + final)
+	stderrMu.Unlock()
 }
 
 // loop runs the animation until Stop is called.
@@ -91,24 +133,80 @@ func (s *Spinner) loop() {
 		case <-s.done:
 			return
 		case <-ticker.C:
+			// Only the topmost spinner renders; others silently wait.
+			if !spinMgr.isActive(s) {
+				continue
+			}
+
 			frame := s.frames[i%len(s.frames)]
 			if ColorEnabled {
 				frame = colorize(bold+cyan, frame)
 			}
-			clearLine()
-			fmt.Fprintf(os.Stderr, "%s %s %s", Prefix(), frame, s.message)
+			line := fmt.Sprintf("%s %s %s", Prefix(), frame, s.message)
+			line = truncateToTermWidth(line)
+
+			stderrMu.Lock()
+			writeRaw(clearLineSeq() + line)
+			stderrMu.Unlock()
+
 			i++
 		}
 	}
 }
 
-// clearLine moves the cursor to column 0 and clears the entire line.
-func clearLine() {
+// clearLineSeq returns the escape sequence to move cursor to column 0
+// and erase the entire line.
+func clearLineSeq() string {
 	if ColorEnabled {
-		fmt.Fprintf(os.Stderr, "\r\033[K")
-	} else {
-		fmt.Fprintf(os.Stderr, "\r")
+		return "\r\033[K"
 	}
+	return "\r" + strings.Repeat(" ", termWidth()-1) + "\r"
+}
+
+// writeRaw does a single os.Stderr.Write so the kernel sees one write(2)
+// syscall, making the output atomic at the file-descriptor level.
+func writeRaw(s string) {
+	os.Stderr.Write([]byte(s)) //nolint:errcheck
+}
+
+// termWidth returns the current terminal width, or 80 as a safe fallback.
+func termWidth() int {
+	w, _, err := term.GetSize(int(os.Stderr.Fd()))
+	if err != nil || w <= 0 {
+		return 80
+	}
+	return w
+}
+
+// truncateToTermWidth truncates s so its visible (non-ANSI) length fits within
+// the terminal width. It strips characters from the end when necessary.
+func truncateToTermWidth(s string) string {
+	tw := termWidth() - 1 // leave 1 col margin to avoid wrap on some terminals
+	if tw <= 0 {
+		return s
+	}
+
+	visible := 0
+	inEsc := false
+	cutIdx := len(s)
+	for i, r := range s {
+		if inEsc {
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEsc = false
+			}
+			continue
+		}
+		if r == '\033' {
+			inEsc = true
+			continue
+		}
+		visible++
+		if visible > tw {
+			cutIdx = i
+			break
+		}
+	}
+	return s[:cutIdx]
 }
 
 // SpinWhile is a convenience helper that runs fn while displaying a spinner.
