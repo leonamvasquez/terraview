@@ -180,6 +180,9 @@ func TestPromptLoader_Load_AllFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "security.md"), []byte("sec rules"), 0644)
 	os.WriteFile(filepath.Join(dir, "architecture.md"), []byte("arch rules"), 0644)
 	os.WriteFile(filepath.Join(dir, "standards.md"), []byte("std rules"), 0644)
+	os.WriteFile(filepath.Join(dir, "cost.md"), []byte("cost rules"), 0644)
+	os.WriteFile(filepath.Join(dir, "compliance.md"), []byte("compliance rules"), 0644)
+	os.WriteFile(filepath.Join(dir, "context-analysis.md"), []byte("context rules"), 0644)
 
 	pl := NewPromptLoader(dir)
 	ps, err := pl.Load()
@@ -198,6 +201,15 @@ func TestPromptLoader_Load_AllFiles(t *testing.T) {
 	if ps.Standards != "std rules" {
 		t.Errorf("Standards = %q", ps.Standards)
 	}
+	if ps.Cost != "cost rules" {
+		t.Errorf("Cost = %q", ps.Cost)
+	}
+	if ps.Compliance != "compliance rules" {
+		t.Errorf("Compliance = %q", ps.Compliance)
+	}
+	if ps.ContextAnalysis != "context rules" {
+		t.Errorf("ContextAnalysis = %q", ps.ContextAnalysis)
+	}
 }
 
 func TestPromptLoader_Load_OnlySystem(t *testing.T) {
@@ -213,7 +225,7 @@ func TestPromptLoader_Load_OnlySystem(t *testing.T) {
 		t.Errorf("System = %q", ps.System)
 	}
 	// Optional files should be empty, not error
-	if ps.Security != "" || ps.Architecture != "" || ps.Standards != "" {
+	if ps.Security != "" || ps.Architecture != "" || ps.Standards != "" || ps.Cost != "" || ps.Compliance != "" || ps.ContextAnalysis != "" {
 		t.Error("optional prompts should be empty when files missing")
 	}
 }
