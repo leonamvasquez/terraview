@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
@@ -206,7 +205,7 @@ func (g *geminiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readResponseBody(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read response: %w", err)
 	}

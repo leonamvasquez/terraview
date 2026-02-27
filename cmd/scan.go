@@ -112,7 +112,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// If no scanner specified, try auto-select
 	if scannerName == "" {
 		// Load config to check for default scanner
-		cfg, _ := config.Load(workDir)
+		cfg, err := config.Load(workDir)
+		if err != nil {
+			return fmt.Errorf("config error: %w", err)
+		}
 		resolved, _ := scanner.ResolveDefault(cfg.Scanner.Default)
 		if resolved != nil {
 			scannerName = resolved.Name()
@@ -137,7 +140,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// If no scanner and no --static, AI-only mode is valid (if provider available)
 	if scannerName == "" && !staticOnly && findingsFile == "" {
-		cfg, _ := config.Load(workDir)
+		cfg, err := config.Load(workDir)
+		if err != nil {
+			return fmt.Errorf("config error: %w", err)
+		}
 		providerAvailable := canResolveAIProvider(cfg)
 		if !providerAvailable {
 			avail := scanner.DefaultManager.Available()

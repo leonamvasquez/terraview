@@ -3,6 +3,7 @@ package providers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"strings"
 	"time"
@@ -11,6 +12,15 @@ import (
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
+
+// maxResponseBodySize is the upper bound for reading HTTP response bodies
+// from AI provider APIs. Prevents OOM from malformed or malicious responses.
+const maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
+
+// readResponseBody reads an HTTP response body with a size limit to prevent OOM.
+func readResponseBody(body io.Reader) ([]byte, error) {
+	return io.ReadAll(io.LimitReader(body, maxResponseBodySize))
+}
 
 // backoffWithJitter returns an exponential backoff duration with random jitter.
 // Formula: base = attempt² seconds, jitter = ±25% of base, capped at 30s.

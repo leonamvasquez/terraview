@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -175,11 +174,11 @@ func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := readResponseBody(resp.Body)
 		return nil, "", fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readResponseBody(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read response: %w", err)
 	}

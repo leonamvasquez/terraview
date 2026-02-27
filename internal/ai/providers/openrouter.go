@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
@@ -187,7 +186,7 @@ func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPr
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readResponseBody(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read response: %w", err)
 	}
