@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
@@ -242,7 +242,6 @@ func executeReview(scannerName string) (string, int, error) {
 	}
 
 	resources := p.NormalizeResources(plan)
-	_ = p.ExtractResourceSummary(resources) // summary available for verbose logging
 	logVerbose("Found %d resource changes", len(resources))
 
 	// Build topology graph (used by both scanner clustering and AI context)
@@ -269,13 +268,9 @@ func executeReview(scannerName string) (string, int, error) {
 	scannerCh := make(chan scannerOutput, 1)
 	contextCh := make(chan contextOutput, 1)
 
-	var wg sync.WaitGroup
-
 	// 2a. Scanner goroutine
 	if scannerName != "" {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			resolvedScanner, err := scanner.Resolve(scannerName)
 			if err != nil {
 				scannerCh <- scannerOutput{err: err}
@@ -303,9 +298,7 @@ func executeReview(scannerName string) (string, int, error) {
 
 	// 2b. AI Context Analysis goroutine (runs in parallel with scanner)
 	if effectiveAI {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			ctxFindings, ctxSummary, ctxErr := runCodeContextAnalysis(
 				resources, topoGraph,
 				effectiveProvider, effectiveURL, effectiveModel,
@@ -316,12 +309,6 @@ func executeReview(scannerName string) (string, int, error) {
 		contextCh <- contextOutput{} // no AI
 		logVerbose("AI contextual analysis disabled (--static)")
 	}
-
-	// Wait for both to complete
-	go func() {
-		wg.Wait()
-		// Channels are already written to by goroutines
-	}()
 
 	// Collect scanner results
 	scanOut := <-scannerCh
@@ -360,22 +347,17 @@ func executeReview(scannerName string) (string, int, error) {
 	}
 
 	// 4. Merge all findings: scanner + AI context
-	allAIFindings := contextFindings
-	if len(hardFindings) > 0 || len(allAIFindings) > 0 {
-		dr := normalizer.Deduplicate(hardFindings, allAIFindings)
+	if len(hardFindings) > 0 || len(contextFindings) > 0 {
+		dr := normalizer.Deduplicate(hardFindings, contextFindings)
 		hardFindings = dr.Findings
-		allAIFindings = nil
 		logVerbose("Dedup: %s", dr.Summary)
 	}
-
-	// Use contextSummary as the AI summary
-	aiSummary := contextSummary
 
 	// 5. Aggregate (with configurable scoring weights)
 	sw := cfg.Scoring.SeverityWeights
 	scorer := scoring.NewScorerWithWeights(sw.Critical, sw.High, sw.Medium, sw.Low)
 	agg := aggregator.NewAggregator(scorer)
-	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, allAIFindings, aiSummary, strict)
+	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, nil, contextSummary, strict)
 
 	// 5a. Apply rule filtering from config
 	if len(cfg.Rules.DisabledRules) > 0 {

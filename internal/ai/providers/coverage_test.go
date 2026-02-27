@@ -15,7 +15,8 @@ import (
 // shortCtx returns a context with a short timeout to prevent retry-backoff delays
 // in error-path tests (provider constructors force MaxRetries >= 1).
 func shortCtx() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	_ = cancel // cancel will fire on timeout; acceptable in short-lived test helpers
 	return ctx
 }
 
