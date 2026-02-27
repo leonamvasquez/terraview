@@ -30,10 +30,12 @@ jobs:
           cache: true
       - name: Unit tests
         run: go test ./... -race
-      - name: Fuzz smoke (30s cada)
+      - name: Fuzz seed corpus (validação dos inputs de referência)
+        # Em CI apenas o seed corpus é executado como unit tests normais.
+        # O fuzzing real (com -fuzz) roda no job semanal (weekly.yml).
         run: |
-          go test ./internal/parser/ -fuzz=FuzzParse -fuzztime=30s
-          go test ./internal/parser/ -fuzz=FuzzNormalizeAction -fuzztime=30s
+          go test ./internal/parser/ -run=FuzzParse
+          go test ./internal/parser/ -run=FuzzNormalizeAction
 
   # ──────────────────────────────────────────────────────────────────
   # RELEASE — binários multi-plataforma + SBOM + assinatura cosign

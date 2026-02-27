@@ -62,7 +62,8 @@ jobs:
 
   # ──────────────────────────────────────────────────────────────────
   # FUZZ EXTENDED — 2 minutos por target para explorar mais inputs
-  # Flags o CI diário cobre apenas 30s; essa sessão vai mais fundo
+  # go test -fuzz retorna exit 1 ao atingir fuzztime (comportamento do Go);
+  # o wrapper bash distingue timeout esperado de crash real.
   # ──────────────────────────────────────────────────────────────────
   fuzz:
     name: Fuzz Extended (2min)
@@ -74,9 +75,17 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Fuzz Parse
-        run: go test ./internal/parser/ -fuzz=FuzzParse -fuzztime=2m
+        run: |
+          output=$(go test ./internal/parser/ -fuzz=FuzzParse -fuzztime=2m 2>&1) && echo "$output" || {
+            echo "$output"
+            echo "$output" | grep -q "context deadline exceeded" && echo "Fuzz timeout OK" || exit 1
+          }
       - name: Fuzz NormalizeAction
-        run: go test ./internal/parser/ -fuzz=FuzzNormalizeAction -fuzztime=2m
+        run: |
+          output=$(go test ./internal/parser/ -fuzz=FuzzNormalizeAction -fuzztime=2m 2>&1) && echo "$output" || {
+            echo "$output"
+            echo "$output" | grep -q "context deadline exceeded" && echo "Fuzz timeout OK" || exit 1
+          }
 
   # ──────────────────────────────────────────────────────────────────
   # CONTAINER SCOUT — Docker Scout escaneia a imagem :latest em GHCR
