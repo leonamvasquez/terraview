@@ -110,10 +110,10 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 	// On Windows the .cmd shim created by npm may prevent proper non-TTY
 	// detection, so we always pass a short positional argument to
 	// guarantee headless mode on every platform.
-	// --sandbox disables tool execution (we only need analysis output).
+	// NOTE: do NOT use --sandbox — it requires Docker, which fails on
+	// Windows without elevated privileges.
 	args := []string{
 		"--model", g.cfg.Model,
-		"--sandbox",
 		"Respond to the prompt provided on stdin.",
 	}
 
