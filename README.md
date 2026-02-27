@@ -11,7 +11,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/leonamvasquez/terraview)](https://github.com/leonamvasquez/terraview/releases/latest)
 [![CI](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml/badge.svg)](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
-[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](https://slsa.dev)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 
 O Terraview é uma ferramenta de análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA rodando **em paralelo**.
 
@@ -66,7 +66,7 @@ O terraview roda como binário único sem dependências externas. Quando um prov
 - **Zero configuração** — detecta projetos Terraform e roda `init + plan + show` automaticamente
 - **Drift detection** — detecta e classifica drift de infraestrutura com `--intelligence` opcional para scoring avançado
 - **CI/CD nativo** — exit codes semânticos (0/1/2) + saída SARIF, JSON, Markdown para GitHub Actions, GitLab CI e Azure DevOps
-- **Supply chain hardening** — SBOM (CycloneDX), assinatura cosign, SLSA Build Provenance Level 2 em cada release
+- **Supply chain hardening** — SBOM (CycloneDX), assinatura cosign, SLSA Build Provenance Level 3 em cada release
 - **Bilíngue (en/pt-BR)** — flag `--br` disponível em todos os comandos
 - **Auto-atualização** via `terraview upgrade`
 - **Alias `tv`** — symlink criado na instalação; `tv scan` = `terraview scan`
