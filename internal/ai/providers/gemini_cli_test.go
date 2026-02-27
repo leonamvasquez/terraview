@@ -19,8 +19,8 @@ func TestNewGeminiCLI_Defaults(t *testing.T) {
 	if g.cfg.Model != "gemini-2.5-pro" {
 		t.Errorf("default model: got %q, want %q", g.cfg.Model, "gemini-2.5-pro")
 	}
-	if g.cfg.TimeoutSecs != 180 {
-		t.Errorf("default timeout: got %d, want 180", g.cfg.TimeoutSecs)
+	if g.cfg.TimeoutSecs != 300 {
+		t.Errorf("default timeout: got %d, want 300", g.cfg.TimeoutSecs)
 	}
 	if g.cfg.MaxRetries != 1 {
 		t.Errorf("default retries: got %d, want 1", g.cfg.MaxRetries)

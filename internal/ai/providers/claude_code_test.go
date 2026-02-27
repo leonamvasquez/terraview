@@ -19,8 +19,8 @@ func TestNewClaudeCode_Defaults(t *testing.T) {
 	if c.cfg.Model != "claude-sonnet-4-5" {
 		t.Errorf("default model: got %q, want %q", c.cfg.Model, "claude-sonnet-4-5")
 	}
-	if c.cfg.TimeoutSecs != 180 {
-		t.Errorf("default timeout: got %d, want 180", c.cfg.TimeoutSecs)
+	if c.cfg.TimeoutSecs != 300 {
+		t.Errorf("default timeout: got %d, want 300", c.cfg.TimeoutSecs)
 	}
 	if c.cfg.MaxRetries != 1 {
 		t.Errorf("default retries: got %d, want 1", c.cfg.MaxRetries)

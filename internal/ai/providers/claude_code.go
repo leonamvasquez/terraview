@@ -44,7 +44,7 @@ func NewClaudeCode(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.Model = "claude-sonnet-4-5"
 	}
 	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 180
+		cfg.TimeoutSecs = 300
 	}
 	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = 1
@@ -109,9 +109,6 @@ func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules
 
 	// Claude Code CLI: --print outputs text to stdout without interactive mode.
 	// --output-format json wraps the output in a structured JSON envelope.
-	// Prompt is passed via stdin to avoid OS command-line length limits
-	// (Windows has a 32 767 character limit that large plans easily exceed).
-	// claude --print reads from stdin when no positional prompt is given.
 	args := []string{
 		"--print",
 		"--output-format", "json",

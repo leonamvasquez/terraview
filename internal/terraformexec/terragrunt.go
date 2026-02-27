@@ -159,15 +159,21 @@ func (e *TerragruntExecutor) Apply() error {
 	return nil
 }
 
-// injectConfig inserts --terragrunt-config after the subcommand (first arg).
+// injectConfig inserts --terragrunt-non-interactive and --terragrunt-config
+// after the subcommand (first arg).
+// --terragrunt-non-interactive prevents prompts that would block on closed stdin
+// (e.g. "create S3 bucket?", "create DynamoDB lock table?").
 // Terragrunt v0.44.x expects: terragrunt plan --terragrunt-config dev.hcl [flags...]
 func (e *TerragruntExecutor) injectConfig(args []string) []string {
-	if e.configFile == "" || len(args) == 0 {
+	if len(args) == 0 {
 		return args
 	}
-	result := make([]string, 0, len(args)+2)
+	result := make([]string, 0, len(args)+3)
 	result = append(result, args[0])
-	result = append(result, "--terragrunt-config", e.configFile)
+	result = append(result, "--terragrunt-non-interactive")
+	if e.configFile != "" {
+		result = append(result, "--terragrunt-config", e.configFile)
+	}
 	result = append(result, args[1:]...)
 	return result
 }

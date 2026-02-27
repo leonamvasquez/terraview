@@ -341,8 +341,9 @@ func TestInjectConfig_WithConfigFile(t *testing.T) {
 func TestInjectConfig_NoConfigFile(t *testing.T) {
 	e := &TerragruntExecutor{configFile: ""}
 	args := e.injectConfig([]string{"plan"})
-	if len(args) != 1 {
-		t.Errorf("expected unchanged args, got %v", args)
+	// --terragrunt-non-interactive is always injected
+	if len(args) != 2 || args[1] != "--terragrunt-non-interactive" {
+		t.Errorf("expected [plan --terragrunt-non-interactive], got %v", args)
 	}
 }
 

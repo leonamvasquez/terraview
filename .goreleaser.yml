@@ -142,6 +142,8 @@ scoops:
       email: bot@goreleaser.com
     commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
     skip_upload: auto
+    shortcuts:
+      - [terraview.exe, tv]
 
 changelog:
   sort: asc

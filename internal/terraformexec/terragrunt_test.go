@@ -133,8 +133,9 @@ func TestTerragruntRun_EchoCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run echo: %v", err)
 	}
-	if !strings.Contains(out, "hello world") {
-		t.Errorf("expected 'hello world' in output, got %q", out)
+	// --terragrunt-non-interactive is always injected after the subcommand
+	if !strings.Contains(out, "hello") || !strings.Contains(out, "world") {
+		t.Errorf("expected 'hello' and 'world' in output, got %q", out)
 	}
 }
 
@@ -311,25 +312,29 @@ func TestExecutor_ImplementsPlanExecutor(t *testing.T) {
 func TestInjectConfig_Empty(t *testing.T) {
 	e := &TerragruntExecutor{configFile: ""}
 	args := e.injectConfig([]string{"plan", "-out=tfplan"})
-	if len(args) != 2 || args[0] != "plan" {
-		t.Errorf("expected unchanged args, got %v", args)
+	// --terragrunt-non-interactive is always injected
+	if len(args) != 3 || args[0] != "plan" || args[1] != "--terragrunt-non-interactive" {
+		t.Errorf("expected [plan --terragrunt-non-interactive -out=tfplan], got %v", args)
 	}
 }
 
 func TestInjectConfig_WithConfig(t *testing.T) {
 	e := &TerragruntExecutor{configFile: "/path/to/dev.hcl"}
 	args := e.injectConfig([]string{"plan", "-out=tfplan"})
-	if len(args) != 4 {
-		t.Fatalf("expected 4 args, got %d: %v", len(args), args)
+	if len(args) != 5 {
+		t.Fatalf("expected 5 args, got %d: %v", len(args), args)
 	}
 	if args[0] != "plan" {
 		t.Errorf("expected subcommand first, got %q", args[0])
 	}
-	if args[1] != "--terragrunt-config" || args[2] != "/path/to/dev.hcl" {
-		t.Errorf("expected --terragrunt-config after subcommand, got %v", args[1:3])
+	if args[1] != "--terragrunt-non-interactive" {
+		t.Errorf("expected --terragrunt-non-interactive second, got %q", args[1])
 	}
-	if args[3] != "-out=tfplan" {
-		t.Errorf("expected original args preserved, got %v", args[3:])
+	if args[2] != "--terragrunt-config" || args[3] != "/path/to/dev.hcl" {
+		t.Errorf("expected --terragrunt-config after non-interactive, got %v", args[2:4])
+	}
+	if args[4] != "-out=tfplan" {
+		t.Errorf("expected original args preserved, got %v", args[4:])
 	}
 }
 

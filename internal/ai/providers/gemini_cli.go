@@ -42,7 +42,7 @@ func NewGeminiCLI(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.Model = "gemini-2.5-pro"
 	}
 	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 180
+		cfg.TimeoutSecs = 300
 	}
 	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = 1

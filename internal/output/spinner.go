@@ -58,6 +58,7 @@ type Spinner struct {
 	message  string
 	frames   []string
 	interval time.Duration
+	noop     bool // true when stderr is not a TTY
 
 	mu      sync.Mutex
 	running bool
@@ -71,7 +72,12 @@ var unicodeFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 var asciiFrames = []string{"|", "/", "-", "\\"}
 
 // NewSpinner creates a Spinner with the given status message.
+// When stderr is not a terminal (CI, pipe, 2>&1), the spinner is created
+// in noop mode: Start() prints a single log line and Stop() prints the
+// result — no animation frames are emitted.
 func NewSpinner(message string) *Spinner {
+	isTTY := term.IsTerminal(int(os.Stderr.Fd()))
+
 	frames := unicodeFrames
 	if !ColorEnabled {
 		frames = asciiFrames
@@ -80,10 +86,12 @@ func NewSpinner(message string) *Spinner {
 		message:  message,
 		frames:   frames,
 		interval: 80 * time.Millisecond,
+		noop:     !isTTY,
 	}
 }
 
 // Start begins the spinner animation in a background goroutine.
+// In noop mode (non-TTY), prints a single status line instead.
 func (s *Spinner) Start() {
 	s.mu.Lock()
 	if s.running {
@@ -93,6 +101,12 @@ func (s *Spinner) Start() {
 	s.running = true
 	s.done = make(chan struct{})
 	s.mu.Unlock()
+
+	if s.noop {
+		// Non-interactive: single log line, no animation
+		fmt.Fprintf(os.Stderr, "%s %s\n", Prefix(), s.message)
+		return
+	}
 
 	spinMgr.push(s)
 	go s.loop()
@@ -109,12 +123,21 @@ func (s *Spinner) Stop(success bool) {
 	close(s.done)
 	s.mu.Unlock()
 
-	spinMgr.pop(s)
+	if !s.noop {
+		spinMgr.pop(s)
+	}
 
 	mark := colorize(bold+green, "✓")
 	if !success {
 		mark = colorize(bold+red, "✗")
 	}
+
+	if s.noop {
+		// Non-interactive: simple result line
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", Prefix(), s.message, mark)
+		return
+	}
+
 	final := fmt.Sprintf("%s %s %s\n", Prefix(), s.message, mark)
 
 	stderrMu.Lock()
