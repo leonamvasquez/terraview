@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -21,11 +22,39 @@ func captureStdout(fn func()) string {
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		io.Copy(&buf, r)
+		close(done)
+	}()
+
 	fn()
+
 	w.Close()
 	os.Stdout = old
-	out, _ := io.ReadAll(r)
-	return string(out)
+	<-done
+	return buf.String()
+}
+
+// discardStdout executes fn while discarding all stdout output.
+func discardStdout(fn func()) {
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	done := make(chan struct{})
+	go func() {
+		io.Copy(io.Discard, r)
+		close(done)
+	}()
+
+	fn()
+
+	w.Close()
+	os.Stdout = old
+	<-done
 }
 
 // ---------------------------------------------------------------------------
@@ -827,14 +856,20 @@ func TestLogVerbose_Enabled(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	done := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
 	logVerbose("test %s %d", "hello", 42)
 
 	w.Close()
 	os.Stderr = oldStderr
-	out, _ := io.ReadAll(r)
+	out := <-done
 
-	if !strings.Contains(string(out), "hello") || !strings.Contains(string(out), "42") {
-		t.Errorf("expected formatted output, got %q", string(out))
+	if !strings.Contains(out, "hello") || !strings.Contains(out, "42") {
+		t.Errorf("expected formatted output, got %q", out)
 	}
 }
 
@@ -847,14 +882,20 @@ func TestLogVerbose_Disabled(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	done := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
 	logVerbose("should not appear")
 
 	w.Close()
 	os.Stderr = oldStderr
-	out, _ := io.ReadAll(r)
+	out := <-done
 
 	if len(out) > 0 {
-		t.Errorf("expected no output when verbose=false, got %q", string(out))
+		t.Errorf("expected no output when verbose=false, got %q", out)
 	}
 }
 

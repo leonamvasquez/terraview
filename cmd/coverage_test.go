@@ -266,14 +266,20 @@ func TestLogVerbose_FormatString(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	done := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
 	logVerbose("count=%d name=%s", 42, "test")
 
 	w.Close()
 	os.Stderr = oldStderr
-	out, _ := io.ReadAll(r)
+	out := <-done
 
-	if !strings.Contains(string(out), "count=42") || !strings.Contains(string(out), "name=test") {
-		t.Errorf("expected formatted output, got %q", string(out))
+	if !strings.Contains(out, "count=42") || !strings.Contains(out, "name=test") {
+		t.Errorf("expected formatted output, got %q", out)
 	}
 }
 
@@ -1235,23 +1241,14 @@ func TestRunSetupEN(t *testing.T) {
 		return "", fmt.Errorf("not found")
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	out := captureStdout(func() {
+		runErr = runSetupEN()
+	})
 
-	err := runSetupEN()
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runSetupEN error: %v", err)
+	if runErr != nil {
+		t.Fatalf("runSetupEN error: %v", runErr)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
 
 	// Check key sections are present
 	for _, want := range []string{"Security Scanners", "AI Provider", "Quick Start"} {
@@ -1278,22 +1275,14 @@ func TestRunSetupBR(t *testing.T) {
 		return "", fmt.Errorf("not found")
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	out := captureStdout(func() {
+		runErr = runSetupBR()
+	})
 
-	err := runSetupBR()
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runSetupBR error: %v", err)
+	if runErr != nil {
+		t.Fatalf("runSetupBR error: %v", runErr)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
 
 	for _, want := range []string{"Scanners de Segurança", "Provider de IA", "Início Rápido"} {
 		if !strings.Contains(out, want) {
@@ -1320,22 +1309,14 @@ func TestRunSetupEN_WithOllama(t *testing.T) {
 		return "", fmt.Errorf("not found")
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	out := captureStdout(func() {
+		runErr = runSetupEN()
+	})
 
-	err := runSetupEN()
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("error: %v", err)
+	if runErr != nil {
+		t.Fatalf("error: %v", runErr)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
 
 	if !strings.Contains(out, "AI ready") {
 		t.Error("expected 'AI ready' with ollama available")
@@ -1357,26 +1338,20 @@ func TestRunSetup_Dispatch(t *testing.T) {
 		return "", fmt.Errorf("not found")
 	}
 
-	// Redirect stdout
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
 	brFlag = false
-	err := runSetup(nil, nil)
-	w.Close()
-	os.Stdout = oldStdout
+	var err error
+	discardStdout(func() {
+		err = runSetup(nil, nil)
+	})
 	if err != nil {
 		t.Fatalf("runSetup EN error: %v", err)
 	}
 
 	// Test BR dispatch
-	_, w2, _ := os.Pipe()
-	os.Stdout = w2
 	brFlag = true
-	err = runSetup(nil, nil)
-	w2.Close()
-	os.Stdout = oldStdout
+	discardStdout(func() {
+		err = runSetup(nil, nil)
+	})
 	if err != nil {
 		t.Fatalf("runSetup BR error: %v", err)
 	}
@@ -1390,14 +1365,10 @@ func TestRunAIUse_Ollama(t *testing.T) {
 	// Use temp HOME so GlobalConfigDir writes to temp
 	t.Setenv("HOME", t.TempDir())
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runAIUse(nil, []string{"ollama"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	var err error
+	discardStdout(func() {
+		err = runAIUse(nil, []string{"ollama"})
+	})
 
 	if err != nil {
 		t.Fatalf("runAIUse error: %v", err)
@@ -1413,14 +1384,10 @@ func TestRunAIUse_Ollama(t *testing.T) {
 func TestRunAIUse_WithModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runAIUse(nil, []string{"ollama", "llama3:8b"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	var err error
+	discardStdout(func() {
+		err = runAIUse(nil, []string{"ollama", "llama3:8b"})
+	})
 
 	if err != nil {
 		t.Fatalf("runAIUse error: %v", err)
@@ -1456,22 +1423,14 @@ func TestRunAICurrent(t *testing.T) {
 `
 	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(cfgContent), 0644)
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	out := captureStdout(func() {
+		runErr = runAICurrent(nil, nil)
+	})
 
-	err := runAICurrent(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runAICurrent error: %v", err)
+	if runErr != nil {
+		t.Fatalf("runAICurrent error: %v", runErr)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
 
 	if !strings.Contains(out, "ollama") {
 		t.Error("expected 'ollama' in output")
@@ -1506,18 +1465,13 @@ func TestRunDiagram_WithFixture(t *testing.T) {
 	outputDir = tmpDir
 	workDir = tmpDir
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	discardStdout(func() {
+		runErr = runDiagram(nil, nil)
+	})
 
-	err := runDiagram(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runDiagram error: %v", err)
+	if runErr != nil {
+		t.Fatalf("runDiagram error: %v", runErr)
 	}
 
 	// Check diagram.txt was written
@@ -1579,20 +1533,15 @@ func TestRunDrift_WithFixture(t *testing.T) {
 	outputFormat = ""
 	driftIntelligenceFlag = false
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
+	var runErr error
+	discardStdout(func() {
+		runErr = runDrift(nil, nil)
+	})
 
 	// May return ExitError for non-zero drift — that's OK
-	if err != nil {
-		if _, ok := err.(*ExitError); !ok {
-			t.Fatalf("runDrift error: %v", err)
+	if runErr != nil {
+		if _, ok := runErr.(*ExitError); !ok {
+			t.Fatalf("runDrift error: %v", runErr)
 		}
 	}
 
@@ -1628,18 +1577,14 @@ func TestRunDrift_WithIntelligence(t *testing.T) {
 	outputFormat = ""
 	driftIntelligenceFlag = true
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	discardStdout(func() {
+		runErr = runDrift(nil, nil)
+	})
 
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		if _, ok := err.(*ExitError); !ok {
-			t.Fatalf("runDrift error: %v", err)
+	if runErr != nil {
+		if _, ok := runErr.(*ExitError); !ok {
+			t.Fatalf("runDrift error: %v", runErr)
 		}
 	}
 
@@ -1678,24 +1623,16 @@ func TestRunDrift_CompactFormat(t *testing.T) {
 	outputFormat = "compact"
 	driftIntelligenceFlag = false
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	out := captureStdout(func() {
+		runErr = runDrift(nil, nil)
+	})
 
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		if _, ok := err.(*ExitError); !ok {
-			t.Fatalf("runDrift compact error: %v", err)
+	if runErr != nil {
+		if _, ok := runErr.(*ExitError); !ok {
+			t.Fatalf("runDrift compact error: %v", runErr)
 		}
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
 
 	if !strings.Contains(out, "terraview drift:") {
 		t.Errorf("compact output should contain 'terraview drift:', got: %s", out)
@@ -1728,18 +1665,14 @@ func TestRunDrift_JSONFormat(t *testing.T) {
 	outputFormat = "json"
 	driftIntelligenceFlag = false
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
+	var runErr error
+	discardStdout(func() {
+		runErr = runDrift(nil, nil)
+	})
 
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		if _, ok := err.(*ExitError); !ok {
-			t.Fatalf("runDrift json error: %v", err)
+	if runErr != nil {
+		if _, ok := runErr.(*ExitError); !ok {
+			t.Fatalf("runDrift json error: %v", runErr)
 		}
 	}
 }
@@ -1753,18 +1686,9 @@ func TestVersionCmd(t *testing.T) {
 	defer func() { Version = oldVersion }()
 	Version = "v0.0.0-test"
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	versionCmd.Run(versionCmd, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		versionCmd.Run(versionCmd, nil)
+	})
 
 	if !strings.Contains(out, "v0.0.0-test") {
 		t.Errorf("version output missing test version: %s", out)
@@ -1828,19 +1752,9 @@ func TestRenderList(t *testing.T) {
 		{Label: "Option B", Value: "b", IsActive: true},
 	}
 
-	// Capture rawPrint output (goes to os.Stdout)
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	renderList("Test Title", items, 0)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		renderList("Test Title", items, 0)
+	})
 
 	if !strings.Contains(out, "Test Title") {
 		t.Error("renderList should contain title")
@@ -1856,18 +1770,9 @@ func TestRenderList(t *testing.T) {
 func TestPrintItem_Cursor(t *testing.T) {
 	item := selectItem{Label: "Test", Value: "test", Detail: "some detail", IsActive: true}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printItem(0, item, 0) // cursor on this item
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printItem(0, item, 0) // cursor on this item
+	})
 
 	if !strings.Contains(out, "Test") {
 		t.Error("printItem should contain label")
@@ -1880,18 +1785,9 @@ func TestPrintItem_Cursor(t *testing.T) {
 func TestPrintItem_NotCursor(t *testing.T) {
 	item := selectItem{Label: "Other", Value: "other"}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printItem(1, item, 0) // cursor NOT on this item
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printItem(1, item, 0) // cursor NOT on this item
+	})
 
 	if !strings.Contains(out, "Other") {
 		t.Error("printItem should contain label")
@@ -1907,23 +1803,14 @@ func TestRenderFilterList(t *testing.T) {
 		{Label: "Item 2", Value: "2"},
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	lines := renderFilterList("Filter Title", items, "ite", 0)
-
-	w.Close()
-	os.Stdout = oldStdout
+	var lines int
+	out := captureStdout(func() {
+		lines = renderFilterList("Filter Title", items, "ite", 0)
+	})
 
 	if lines < 5 {
 		t.Errorf("renderFilterList returned %d lines, expected >= 5", lines)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
-
 	if !strings.Contains(out, "Filter Title") {
 		t.Error("renderFilterList should contain title")
 	}
@@ -1933,82 +1820,41 @@ func TestRenderFilterList(t *testing.T) {
 }
 
 func TestRenderFilterList_Empty(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	lines := renderFilterList("Empty", nil, "xxx", 0)
-
-	w.Close()
-	os.Stdout = oldStdout
+	var lines int
+	out := captureStdout(func() {
+		lines = renderFilterList("Empty", nil, "xxx", 0)
+	})
 
 	if lines < 5 {
 		t.Errorf("renderFilterList empty returned %d lines", lines)
 	}
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
-
 	if !strings.Contains(out, "nenhum resultado") {
 		t.Error("empty filter should show 'nenhum resultado'")
 	}
 }
 
 func TestEraseLines(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	eraseLines(3)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
-
-	// Should contain ANSI erase sequences
+	out := captureStdout(func() {
+		eraseLines(3)
+	})
 	if !strings.Contains(out, "\033[2K") {
 		t.Error("eraseLines should contain ANSI erase sequences")
 	}
 }
 
 func TestEraseList(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	eraseList(3) // should erase 3+5=8 lines
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
-
+	out := captureStdout(func() {
+		eraseList(3) // should erase 3+5=8 lines
+	})
 	if !strings.Contains(out, "\033[2K") {
 		t.Error("eraseList should contain ANSI erase")
 	}
 }
 
 func TestMoveUp(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	moveUp(3)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
-
-	// Should contain 3 cursor-up sequences
+	out := captureStdout(func() {
+		moveUp(3)
+	})
 	if strings.Count(out, "\033[A") != 3 {
 		t.Errorf("moveUp(3): expected 3 cursor-up sequences, got %d", strings.Count(out, "\033[A"))
 	}
@@ -2114,18 +1960,9 @@ func TestPrintDriftSummary_NoChanges(t *testing.T) {
 		ExitCode:     0,
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printDriftSummary(result, "pretty")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printDriftSummary(result, "pretty")
+	})
 
 	if !strings.Contains(out, "No infrastructure drift") {
 		t.Errorf("expected 'No infrastructure drift', got: %s", out)
@@ -2147,18 +1984,9 @@ func TestPrintDriftSummary_WithChanges(t *testing.T) {
 		},
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printDriftSummary(result, "pretty")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printDriftSummary(result, "pretty")
+	})
 
 	for _, want := range []string{"Creates", "Updates", "Deletes", "Replaces", "HIGH", "IAM role modified"} {
 		if !strings.Contains(out, want) {
@@ -2177,18 +2005,9 @@ func TestPrintDriftSummary_Compact(t *testing.T) {
 		},
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printDriftSummary(result, "compact")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printDriftSummary(result, "compact")
+	})
 
 	if !strings.Contains(out, "terraview drift:") {
 		t.Errorf("compact format should contain 'terraview drift:', got: %s", out)
@@ -2201,18 +2020,9 @@ func TestPrintDriftSummary_CompactNoChanges(t *testing.T) {
 		ExitCode:     0,
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printDriftSummary(result, "compact")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	outBytes, _ := io.ReadAll(r)
-	
-	out := string(outBytes)
+	out := captureStdout(func() {
+		printDriftSummary(result, "compact")
+	})
 
 	if !strings.Contains(out, "no changes detected") {
 		t.Errorf("compact no-changes should contain 'no changes detected', got: %s", out)
@@ -2229,14 +2039,10 @@ func TestRunAICurrent_NoConfig(t *testing.T) {
 
 	workDir = t.TempDir() // no config file
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runAICurrent(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
+	var err error
+	discardStdout(func() {
+		err = runAICurrent(nil, nil)
+	})
 
 	if err != nil {
 		t.Fatalf("runAICurrent no config error: %v", err)
