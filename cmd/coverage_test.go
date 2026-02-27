@@ -1249,9 +1249,9 @@ func TestRunSetupEN(t *testing.T) {
 		t.Fatalf("runSetupEN error: %v", err)
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	// Check key sections are present
 	for _, want := range []string{"Security Scanners", "AI Provider", "Quick Start"} {
@@ -1291,9 +1291,9 @@ func TestRunSetupBR(t *testing.T) {
 		t.Fatalf("runSetupBR error: %v", err)
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	for _, want := range []string{"Scanners de Segurança", "Provider de IA", "Início Rápido"} {
 		if !strings.Contains(out, want) {
@@ -1333,9 +1333,9 @@ func TestRunSetupEN_WithOllama(t *testing.T) {
 		t.Fatalf("error: %v", err)
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "AI ready") {
 		t.Error("expected 'AI ready' with ollama available")
@@ -1469,9 +1469,9 @@ func TestRunAICurrent(t *testing.T) {
 		t.Fatalf("runAICurrent error: %v", err)
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "ollama") {
 		t.Error("expected 'ollama' in output")
@@ -1693,9 +1693,9 @@ func TestRunDrift_CompactFormat(t *testing.T) {
 		}
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "terraview drift:") {
 		t.Errorf("compact output should contain 'terraview drift:', got: %s", out)
@@ -1762,9 +1762,9 @@ func TestVersionCmd(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "v0.0.0-test") {
 		t.Errorf("version output missing test version: %s", out)
@@ -1838,9 +1838,9 @@ func TestRenderList(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "Test Title") {
 		t.Error("renderList should contain title")
@@ -1865,9 +1865,9 @@ func TestPrintItem_Cursor(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "Test") {
 		t.Error("printItem should contain label")
@@ -1889,9 +1889,9 @@ func TestPrintItem_NotCursor(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "Other") {
 		t.Error("printItem should contain label")
@@ -1920,9 +1920,9 @@ func TestRenderFilterList(t *testing.T) {
 		t.Errorf("renderFilterList returned %d lines, expected >= 5", lines)
 	}
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "Filter Title") {
 		t.Error("renderFilterList should contain title")
@@ -1946,9 +1946,9 @@ func TestRenderFilterList_Empty(t *testing.T) {
 		t.Errorf("renderFilterList empty returned %d lines", lines)
 	}
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "nenhum resultado") {
 		t.Error("empty filter should show 'nenhum resultado'")
@@ -1965,9 +1965,9 @@ func TestEraseLines(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	// Should contain ANSI erase sequences
 	if !strings.Contains(out, "\033[2K") {
@@ -1985,9 +1985,9 @@ func TestEraseList(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "\033[2K") {
 		t.Error("eraseList should contain ANSI erase")
@@ -2004,9 +2004,9 @@ func TestMoveUp(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	// Should contain 3 cursor-up sequences
 	if strings.Count(out, "\033[A") != 3 {
@@ -2123,9 +2123,9 @@ func TestPrintDriftSummary_NoChanges(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "No infrastructure drift") {
 		t.Errorf("expected 'No infrastructure drift', got: %s", out)
@@ -2156,9 +2156,9 @@ func TestPrintDriftSummary_WithChanges(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	for _, want := range []string{"Creates", "Updates", "Deletes", "Replaces", "HIGH", "IAM role modified"} {
 		if !strings.Contains(out, want) {
@@ -2186,9 +2186,9 @@ func TestPrintDriftSummary_Compact(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "terraview drift:") {
 		t.Errorf("compact format should contain 'terraview drift:', got: %s", out)
@@ -2210,9 +2210,9 @@ func TestPrintDriftSummary_CompactNoChanges(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
+	outBytes, _ := io.ReadAll(r)
+	
+	out := string(outBytes)
 
 	if !strings.Contains(out, "no changes detected") {
 		t.Errorf("compact no-changes should contain 'no changes detected', got: %s", out)
