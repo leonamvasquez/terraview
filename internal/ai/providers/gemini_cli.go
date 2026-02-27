@@ -105,12 +105,14 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(g.cfg.TimeoutSecs)*time.Second)
 	defer cancel()
 
+	// Prompt is passed via stdin to avoid OS command-line length limits
+	// (Windows has a 32 767 character limit that large plans easily exceed).
 	args := []string{
-		"-p", prompt,
 		"--model", g.cfg.Model,
 	}
 
 	cmd := exec.CommandContext(execCtx, "gemini", args...)
+	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

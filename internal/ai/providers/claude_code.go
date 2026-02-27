@@ -109,14 +109,17 @@ func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules
 
 	// Claude Code CLI: --print outputs text to stdout without interactive mode.
 	// --output-format json wraps the output in a structured JSON envelope.
+	// Prompt is passed via stdin to avoid OS command-line length limits
+	// (Windows has a 32 767 character limit that large plans easily exceed).
+	// claude --print reads from stdin when no positional prompt is given.
 	args := []string{
 		"--print",
 		"--output-format", "json",
 		"--model", c.cfg.Model,
-		prompt,
 	}
 
 	cmd := exec.CommandContext(execCtx, "claude", args...)
+	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
