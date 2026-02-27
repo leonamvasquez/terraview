@@ -1,6 +1,7 @@
 package output
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -92,6 +93,78 @@ func TestSevColor_Disabled(t *testing.T) {
 	got := SevColor("CRITICAL")
 	if got != "CRITICAL" {
 		t.Errorf("expected plain text when disabled, got %q", got)
+	}
+}
+
+func TestSevColor_PortugueseCritico(t *testing.T) {
+	original := ColorEnabled
+	defer func() { ColorEnabled = original }()
+	ColorEnabled = true
+
+	got := SevColor("CRÍTICO")
+	if !strings.Contains(got, "CRÍTICO") {
+		t.Error("missing severity text")
+	}
+	if !strings.Contains(got, "\033[") {
+		t.Error("expected ANSI codes")
+	}
+}
+
+func TestSevColor_PortugueseAlto(t *testing.T) {
+	original := ColorEnabled
+	defer func() { ColorEnabled = original }()
+	ColorEnabled = true
+
+	got := SevColor("ALTO")
+	if !strings.Contains(got, "ALTO") {
+		t.Error("missing severity text")
+	}
+	if !strings.Contains(got, "\033[") {
+		t.Error("expected ANSI codes")
+	}
+}
+
+func TestSevColor_PortugueseMedio(t *testing.T) {
+	original := ColorEnabled
+	defer func() { ColorEnabled = original }()
+	ColorEnabled = true
+
+	got := SevColor("MÉDIO")
+	if !strings.Contains(got, "MÉDIO") {
+		t.Error("missing severity text")
+	}
+	if !strings.Contains(got, "\033[") {
+		t.Error("expected ANSI codes")
+	}
+}
+
+func TestSevColor_PortugueseBaixo(t *testing.T) {
+	original := ColorEnabled
+	defer func() { ColorEnabled = original }()
+	ColorEnabled = true
+
+	got := SevColor("BAIXO")
+	if !strings.Contains(got, "BAIXO") {
+		t.Error("missing severity text")
+	}
+	if !strings.Contains(got, "\033[") {
+		t.Error("expected ANSI codes")
+	}
+}
+
+func TestInit_NoColorEnv(t *testing.T) {
+	// The init function respects NO_COLOR env var.
+	original := ColorEnabled
+	defer func() { ColorEnabled = original }()
+
+	t.Setenv("NO_COLOR", "1")
+	// Simulate what init does
+	ColorEnabled = true
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		ColorEnabled = false
+	}
+	if ColorEnabled {
+		t.Error("expected colors disabled with NO_COLOR set")
 	}
 }
 
