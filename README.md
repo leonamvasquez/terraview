@@ -22,7 +22,7 @@ O terraview roda como binário único sem dependências externas. Quando um prov
 ## Sumário
 
 - [Features](#features)
-- [Screenshots](#screenshots)
+- [Exemplos](#exemplos)
 - [Primeiros Passos](#primeiros-passos)
 - [Instalação](#instalação)
 - [Atualização](#atualização)
