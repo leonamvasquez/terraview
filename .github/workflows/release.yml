@@ -6,11 +6,12 @@ on:
       - "v*"
 
 permissions:
-  contents: write       # GoReleaser: criar GitHub Release
-  packages: write       # push da imagem para GHCR
-  id-token: write       # cosign keyless signing via OIDC
-  attestations: write   # GitHub build-provenance attestation
+  contents: write        # GoReleaser: criar GitHub Release
+  packages: write        # push da imagem para GHCR
+  id-token: write        # cosign keyless signing via OIDC
+  attestations: write    # GitHub attestations API
   security-events: write # upload SARIF ao Security tab
+  actions: read          # slsa-github-generator: leitura do contexto do workflow
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ jobs:
     name: GoReleaser
     runs-on: ubuntu-latest
     needs: gate
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,10 +65,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-      - name: Attest provenance dos binários
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: dist/checksums.txt
+      - name: Compute artifact hashes (SLSA 3)
+        id: hash
+        # dist/checksums.txt já contém "<sha256>  <filename>" — formato
+        # exato esperado pelo generator_generic_slsa3.
+        run: |
+          echo "hashes=$(cat dist/checksums.txt | base64 -w0)" >> $GITHUB_OUTPUT
 
   # ──────────────────────────────────────────────────────────────────
   # PACKAGES — publicar .deb e .rpm no Cloudsmith
@@ -115,6 +120,8 @@ jobs:
     name: Container
     runs-on: ubuntu-latest
     needs: release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,16 +208,38 @@ jobs:
       - name: Sign DockerHub image
         run: cosign sign --yes docker.io/leonamvasquez/terraview@${{ steps.build.outputs.digest }}
 
-      - name: Attest provenance (GHCR)
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: ghcr.io/leonamvasquez/terraview
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
+  # ──────────────────────────────────────────────────────────────────
+  # PROVENANCE — binários: job isolado e efêmero (SLSA 3)
+  # O generator_generic_slsa3 roda em um workflow reutilizável separado,
+  # o provenance é assinado via GitHub OIDC sem acesso ao contexto do
+  # job de build — requisito central do SLSA 3.
+  # ──────────────────────────────────────────────────────────────────
+  provenance:
+    name: Binary Provenance (SLSA 3)
+    needs: release
+    permissions:
+      actions: read    # leitura do contexto do workflow
+      id-token: write  # assinar provenance via GitHub OIDC
+      contents: write  # upload do .intoto.jsonl na GitHub Release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
+      upload-assets: true
 
-      - name: Attest provenance (DockerHub)
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: docker.io/leonamvasquez/terraview
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
+  # ──────────────────────────────────────────────────────────────────
+  # CONTAINER PROVENANCE — imagem GHCR: job isolado (SLSA 3)
+  # ──────────────────────────────────────────────────────────────────
+  container-provenance:
+    name: Container Provenance (SLSA 3)
+    needs: container
+    permissions:
+      actions: read    # leitura do contexto do workflow
+      id-token: write  # assinar provenance via GitHub OIDC
+      packages: write  # upload attestation no GHCR
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ghcr.io/leonamvasquez/terraview
+      digest: ${{ needs.container.outputs.digest }}
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
