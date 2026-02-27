@@ -105,8 +105,16 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(g.cfg.TimeoutSecs)*time.Second)
 	defer cancel()
 
+	// Gemini CLI enters headless (non-interactive) mode when it detects a
+	// non-TTY environment OR when a positional argument is provided.
+	// On Windows the .cmd shim created by npm may prevent proper non-TTY
+	// detection, so we always pass a short positional argument to
+	// guarantee headless mode on every platform.
+	// --sandbox disables tool execution (we only need analysis output).
 	args := []string{
 		"--model", g.cfg.Model,
+		"--sandbox",
+		"Respond to the prompt provided on stdin.",
 	}
 
 	cmd := exec.CommandContext(execCtx, "gemini", args...)
