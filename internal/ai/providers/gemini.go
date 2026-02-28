@@ -129,7 +129,7 @@ func (g *geminiProvider) Validate(ctx context.Context) error {
 }
 
 func (g *geminiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, g.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(geminiName, "build_prompt", err)
 	}

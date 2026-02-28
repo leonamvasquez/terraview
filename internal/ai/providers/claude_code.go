@@ -67,7 +67,7 @@ func (c *claudeCodeProvider) Validate(_ context.Context) error {
 
 // Analyze sends the terraform plan context to Claude Code CLI and parses the response.
 func (c *claudeCodeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(claudeCodeName, "build_prompt", err)
 	}

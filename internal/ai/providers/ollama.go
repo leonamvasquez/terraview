@@ -15,6 +15,9 @@ import (
 
 const ollamaName = "ollama"
 
+// defaultNumCtx is the default context window size for Ollama models.
+const defaultNumCtx = 4096
+
 func init() {
 	ai.Register(ollamaName, NewOllama, ai.ProviderInfo{
 		DisplayName:  "Ollama (Local)",
@@ -104,7 +107,7 @@ func (o *ollamaProvider) Validate(ctx context.Context) error {
 }
 
 func (o *ollamaProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(ollamaName, "build_prompt", err)
 	}
@@ -141,6 +144,11 @@ func (o *ollamaProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 }
 
 func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {
+	numCtx := o.cfg.NumCtx
+	if numCtx <= 0 {
+		numCtx = defaultNumCtx
+	}
+
 	reqBody := ollamaRequest{
 		Model:  o.cfg.Model,
 		Prompt: userPrompt,
@@ -149,7 +157,7 @@ func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 		Format: "json",
 		Options: ollamaOptions{
 			Temperature: o.cfg.Temperature,
-			NumCtx:      4096,
+			NumCtx:      numCtx,
 			NumPredict:  o.cfg.MaxTokens,
 		},
 	}

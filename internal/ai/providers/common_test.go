@@ -131,7 +131,7 @@ func TestBuildUserPrompt_Normal(t *testing.T) {
 	}
 	summary := map[string]interface{}{"total": 1}
 
-	got, err := buildUserPrompt(resources, summary)
+	got, err := buildUserPrompt(resources, summary, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestBuildUserPrompt_Truncation(t *testing.T) {
 	}
 	summary := map[string]interface{}{"total": 35}
 
-	got, err := buildUserPrompt(resources, summary)
+	got, err := buildUserPrompt(resources, summary, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestBuildUserPrompt_Truncation(t *testing.T) {
 }
 
 func TestBuildUserPrompt_Empty(t *testing.T) {
-	got, err := buildUserPrompt(nil, map[string]interface{}{})
+	got, err := buildUserPrompt(nil, map[string]interface{}{}, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

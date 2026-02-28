@@ -137,7 +137,7 @@ func (d *deepseekProvider) Validate(ctx context.Context) error {
 }
 
 func (d *deepseekProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, d.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(deepseekName, "build_prompt", err)
 	}

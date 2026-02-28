@@ -65,7 +65,7 @@ func (g *geminiCLIProvider) Validate(_ context.Context) error {
 
 // Analyze sends the terraform plan context to Gemini CLI and parses the response.
 func (g *geminiCLIProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, g.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(geminiCLIName, "build_prompt", err)
 	}

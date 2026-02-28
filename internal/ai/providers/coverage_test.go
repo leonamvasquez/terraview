@@ -1065,7 +1065,7 @@ func TestParseResponse_MarkdownFenced(t *testing.T) {
 // ===========================================================================
 
 func TestBuildUserPrompt_Nil(t *testing.T) {
-	got, err := buildUserPrompt(nil, nil)
+	got, err := buildUserPrompt(nil, nil, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1079,7 +1079,7 @@ func TestBuildUserPrompt_WithSummaryMap(t *testing.T) {
 		{Address: "aws_instance.web", Type: "aws_instance", Action: "create"},
 	}
 	summary := map[string]interface{}{"description": "This creates a web server"}
-	got, err := buildUserPrompt(res, summary)
+	got, err := buildUserPrompt(res, summary, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -177,12 +177,14 @@ type reviewConfig struct {
 	effectiveFormat string
 
 	// AI settings
-	aiProvider    string
-	aiModel       string
-	aiURL         string
-	aiTimeout     int
-	aiTemperature float64
-	aiAPIKey      string
+	aiProvider     string
+	aiModel        string
+	aiURL          string
+	aiTimeout      int
+	aiTemperature  float64
+	aiAPIKey       string
+	aiMaxResources int
+	aiNumCtx       int
 }
 
 // scanResult holds the output of the parallel scanner + AI phase.
@@ -292,6 +294,8 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 		aiTimeout:       cfg.LLM.TimeoutSeconds,
 		aiTemperature:   cfg.LLM.Temperature,
 		aiAPIKey:        cfg.LLM.APIKey,
+		aiMaxResources:  cfg.LLM.MaxResources,
+		aiNumCtx:        cfg.LLM.Ollama.NumCtx,
 	}, nil
 }
 
@@ -361,7 +365,8 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 			ctxFindings, ctxSummary, ctxErr := runCodeContextAnalysis(
 				resources, topoGraph,
 				rc.aiProvider, rc.aiURL, rc.aiModel,
-				rc.aiTimeout, rc.aiTemperature, rc.aiAPIKey, rc.cfg)
+				rc.aiTimeout, rc.aiTemperature, rc.aiAPIKey,
+				rc.aiMaxResources, rc.aiNumCtx, rc.cfg)
 			contextCh <- contextOutput{findings: ctxFindings, summary: ctxSummary, err: ctxErr}
 		}()
 	} else {
@@ -540,7 +545,8 @@ func runCodeContextAnalysis(
 	graph *topology.Graph,
 	providerName, url, model string,
 	timeoutSecs int, temp float64,
-	apiKey string, cfg config.Config,
+	apiKey string, maxResources, numCtx int,
+	cfg config.Config,
 ) ([]rules.Finding, string, error) {
 
 	logVerbose("AI context analysis: %s (model: %s)", providerName, model)
@@ -571,13 +577,15 @@ func runCodeContextAnalysis(
 
 	// Create provider
 	providerCfg := ai.ProviderConfig{
-		Model:       model,
-		APIKey:      apiKey,
-		BaseURL:     url,
-		Temperature: temp,
-		TimeoutSecs: timeoutSecs,
-		MaxTokens:   4096,
-		MaxRetries:  2,
+		Model:        model,
+		APIKey:       apiKey,
+		BaseURL:      url,
+		Temperature:  temp,
+		TimeoutSecs:  timeoutSecs,
+		MaxTokens:    4096,
+		MaxRetries:   2,
+		MaxResources: maxResources,
+		NumCtx:       numCtx,
 	}
 
 	provider, err := ai.NewProvider(ctx, providerName, providerCfg)

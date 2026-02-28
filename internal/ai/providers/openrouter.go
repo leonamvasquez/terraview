@@ -118,7 +118,7 @@ func (o *openrouterProvider) Validate(ctx context.Context) error {
 }
 
 func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(openrouterName, "build_prompt", err)
 	}

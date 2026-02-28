@@ -17,6 +17,10 @@ import (
 // from AI provider APIs. Prevents OOM from malformed or malicious responses.
 const maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
 
+// defaultMaxResources is the default number of resources included in the
+// AI prompt. Plans with more resources are truncated to fit context limits.
+const defaultMaxResources = 30
+
 // readResponseBody reads an HTTP response body with a size limit to prevent OOM.
 func readResponseBody(body io.Reader) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(body, maxResponseBodySize))
@@ -129,7 +133,11 @@ Do NOT include any text outside the JSON object.`)
 }
 
 // buildUserPrompt creates the user prompt with plan context.
-func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]interface{}) (string, error) {
+// maxResources controls how many resources are included; 0 means use defaultMaxResources.
+func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]interface{}, maxResources int) (string, error) {
+	if maxResources <= 0 {
+		maxResources = defaultMaxResources
+	}
 	var sb strings.Builder
 
 	sb.WriteString("Review the following Terraform plan for security, architecture, and best practice issues.\n\n")
@@ -146,8 +154,8 @@ func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]i
 	sb.WriteString("## Resource Changes\n\n")
 
 	for i, r := range resources {
-		if i >= 30 {
-			sb.WriteString(fmt.Sprintf("\n... and %d more resources (truncated for context limit)\n", len(resources)-30))
+		if i >= maxResources {
+			sb.WriteString(fmt.Sprintf("\n... and %d more resources (truncated for context limit)\n", len(resources)-maxResources))
 			break
 		}
 

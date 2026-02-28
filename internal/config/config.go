@@ -81,11 +81,13 @@ type LLMConfig struct {
 	APIKey         string       `yaml:"api_key"`
 	TimeoutSeconds int          `yaml:"timeout_seconds"`
 	Temperature    float64      `yaml:"temperature"`
+	MaxResources   int          `yaml:"max_resources"`
 	Ollama         OllamaConfig `yaml:"ollama"`
 }
 
 // OllamaConfig holds Ollama-specific resource limits.
 type OllamaConfig struct {
+	NumCtx          int `yaml:"num_ctx"`
 	MaxThreads      int `yaml:"max_threads"`
 	MaxMemoryMB     int `yaml:"max_memory_mb"`
 	MinFreeMemoryMB int `yaml:"min_free_memory_mb"`
@@ -211,10 +213,12 @@ type fileLLMConfig struct {
 	APIKey         *string           `yaml:"api_key"`
 	TimeoutSeconds *int              `yaml:"timeout_seconds"`
 	Temperature    *float64          `yaml:"temperature"`
+	MaxResources   *int              `yaml:"max_resources"`
 	Ollama         *fileOllamaConfig `yaml:"ollama"`
 }
 
 type fileOllamaConfig struct {
+	NumCtx          *int `yaml:"num_ctx"`
 	MaxThreads      *int `yaml:"max_threads"`
 	MaxMemoryMB     *int `yaml:"max_memory_mb"`
 	MinFreeMemoryMB *int `yaml:"min_free_memory_mb"`
@@ -256,7 +260,13 @@ func (f *fileConfig) validate() error {
 		if f.LLM.TimeoutSeconds != nil && *f.LLM.TimeoutSeconds <= 0 {
 			return fmt.Errorf("llm.timeout_seconds must be positive, got %d", *f.LLM.TimeoutSeconds)
 		}
+		if f.LLM.MaxResources != nil && *f.LLM.MaxResources < 0 {
+			return fmt.Errorf("llm.max_resources must be >= 0, got %d", *f.LLM.MaxResources)
+		}
 		if f.LLM.Ollama != nil {
+			if f.LLM.Ollama.NumCtx != nil && *f.LLM.Ollama.NumCtx < 0 {
+				return fmt.Errorf("llm.ollama.num_ctx must be >= 0")
+			}
 			if f.LLM.Ollama.MaxThreads != nil && *f.LLM.Ollama.MaxThreads < 0 {
 				return fmt.Errorf("llm.ollama.max_threads must be >= 0")
 			}
@@ -323,7 +333,13 @@ func (f *fileConfig) merge(defaults Config) Config {
 		if f.LLM.Temperature != nil {
 			cfg.LLM.Temperature = *f.LLM.Temperature
 		}
+		if f.LLM.MaxResources != nil {
+			cfg.LLM.MaxResources = *f.LLM.MaxResources
+		}
 		if f.LLM.Ollama != nil {
+			if f.LLM.Ollama.NumCtx != nil {
+				cfg.LLM.Ollama.NumCtx = *f.LLM.Ollama.NumCtx
+			}
 			if f.LLM.Ollama.MaxThreads != nil {
 				cfg.LLM.Ollama.MaxThreads = *f.LLM.Ollama.MaxThreads
 			}

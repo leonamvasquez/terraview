@@ -19,11 +19,13 @@ type ProviderFactory func(cfg ProviderConfig) (Provider, error)
 
 // ProviderConfig holds generic configuration passed to provider factories.
 type ProviderConfig struct {
-	Model       string
-	APIKey      string
-	BaseURL     string
-	Temperature float64
-	TimeoutSecs int
-	MaxTokens   int
-	MaxRetries  int
+	Model        string
+	APIKey       string
+	BaseURL      string
+	Temperature  float64
+	TimeoutSecs  int
+	MaxTokens    int
+	MaxRetries   int
+	MaxResources int // max resources in AI prompt (0 = default 30)
+	NumCtx       int // context window size, used by Ollama (0 = default 4096)
 }

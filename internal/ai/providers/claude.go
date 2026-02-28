@@ -100,25 +100,11 @@ func (c *claudeProvider) Validate(ctx context.Context) error {
 		return fmt.Errorf("%w: ANTHROPIC_API_KEY not set", ai.ErrProviderValidation)
 	}
 
-	// Lightweight validation: send a minimal request to verify API key
-	reqBody := claudeRequest{
-		Model:     c.cfg.Model,
-		MaxTokens: 1,
-		Messages: []claudeMessage{
-			{Role: "user", Content: "ping"},
-		},
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to marshal validation request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.cfg.BaseURL+"/v1/messages", bytes.NewReader(body))
+	// Token-free validation: GET /v1/models only checks API key, no token cost.
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", c.cfg.BaseURL+"/v1/models", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", c.cfg.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
@@ -138,7 +124,7 @@ func (c *claudeProvider) Validate(ctx context.Context) error {
 }
 
 func (c *claudeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(claudeName, "build_prompt", err)
 	}

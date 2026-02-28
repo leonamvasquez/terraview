@@ -111,7 +111,7 @@ func (o *openaiProvider) Validate(ctx context.Context) error {
 }
 
 func (o *openaiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(openaiName, "build_prompt", err)
 	}
