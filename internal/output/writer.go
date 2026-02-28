@@ -20,8 +20,9 @@ const (
 
 // WriterConfig configures output behavior.
 type WriterConfig struct {
-	Format string // "pretty", "compact", "json"
-	Lang   string // "pt-BR" for Brazilian Portuguese
+	Format  string // "pretty", "compact", "json"
+	Lang    string // "pt-BR" for Brazilian Portuguese
+	Version string // application version for SARIF reports
 }
 
 // IsBR returns true if output should be in Brazilian Portuguese.

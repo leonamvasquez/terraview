@@ -400,8 +400,9 @@ func executeReview(scannerName string) (string, int, error) {
 		langCode = "pt-BR"
 	}
 	writer := output.NewWriterWithConfig(output.WriterConfig{
-		Format: effectiveFormat,
-		Lang:   langCode,
+		Format:  effectiveFormat,
+		Lang:    langCode,
+		Version: Version,
 	})
 
 	jsonPath := filepath.Join(resolvedOutput, "review.json")

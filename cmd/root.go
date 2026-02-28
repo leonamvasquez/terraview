@@ -29,7 +29,7 @@ var (
 )
 
 // Version is set at build time via ldflags.
-var Version = "v0.2.1"
+var Version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:   "terraview",

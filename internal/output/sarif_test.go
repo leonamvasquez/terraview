@@ -128,7 +128,7 @@ func TestSeverityToSARIFLevel_Lowercase(t *testing.T) {
 
 func TestBuildSARIF_SchemaAndToolInfo(t *testing.T) {
 	result := aggregator.ReviewResult{}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 
 	if report.Schema != "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json" {
 		t.Errorf("unexpected schema: %s", report.Schema)
@@ -146,6 +146,17 @@ func TestBuildSARIF_SchemaAndToolInfo(t *testing.T) {
 	if driver.InformationURI != "https://github.com/leonamvasquez/terraview" {
 		t.Errorf("unexpected informationUri: %s", driver.InformationURI)
 	}
+	if driver.Version != "test" {
+		t.Errorf("tool version = %q, want \"test\"", driver.Version)
+	}
+}
+
+func TestBuildSARIF_EmptyVersionFallback(t *testing.T) {
+	report := buildSARIF(aggregator.ReviewResult{}, "")
+	driver := report.Runs[0].Tool.Driver
+	if driver.Version != "dev" {
+		t.Errorf("empty version should fallback to \"dev\", got %q", driver.Version)
+	}
 }
 
 func TestBuildSARIF_RuleDeduplication(t *testing.T) {
@@ -156,7 +167,7 @@ func TestBuildSARIF_RuleDeduplication(t *testing.T) {
 			{RuleID: "SEC002", Severity: "MEDIUM", Category: "security", Resource: "aws_instance.c", Message: "msg3", Source: "checkov"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	run := report.Runs[0]
 
 	// Two unique rules despite three findings
@@ -192,7 +203,7 @@ func TestBuildSARIF_WithRemediation(t *testing.T) {
 			},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	res := report.Runs[0].Results[0]
 
 	if len(res.Fixes) != 1 {
@@ -209,7 +220,7 @@ func TestBuildSARIF_WithoutRemediation(t *testing.T) {
 			{RuleID: "SEC001", Severity: "HIGH", Resource: "aws_instance.web", Message: "msg", Source: "s"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	res := report.Runs[0].Results[0]
 
 	if len(res.Fixes) != 0 {
@@ -223,7 +234,7 @@ func TestBuildSARIF_EmptyResource(t *testing.T) {
 			{RuleID: "SEC001", Severity: "HIGH", Resource: "", Message: "global issue", Source: "lint"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	res := report.Runs[0].Results[0]
 
 	if len(res.Locations) != 0 {
@@ -237,7 +248,7 @@ func TestBuildSARIF_LocationURI(t *testing.T) {
 			{RuleID: "R1", Severity: "LOW", Resource: "module.vpc.aws_vpc.main", Message: "m", Source: "s"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	res := report.Runs[0].Results[0]
 
 	if len(res.Locations) != 1 {
@@ -255,7 +266,7 @@ func TestBuildSARIF_ResultMessageFormat(t *testing.T) {
 			{RuleID: "R1", Severity: "LOW", Resource: "aws_s3_bucket.b", Message: "no encryption", Source: "tfsec"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	msg := report.Runs[0].Results[0].Message.Text
 
 	want := "[tfsec] aws_s3_bucket.b: no encryption"
@@ -270,7 +281,7 @@ func TestBuildSARIF_RuleCategoryProperty(t *testing.T) {
 			{RuleID: "R1", Severity: "LOW", Category: "cost", Resource: "r", Message: "m", Source: "s"},
 		},
 	}
-	report := buildSARIF(result)
+	report := buildSARIF(result, "test")
 	rule := report.Runs[0].Tool.Driver.Rules[0]
 
 	if rule.Properties.Category != "cost" {

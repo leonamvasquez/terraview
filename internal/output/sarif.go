@@ -96,7 +96,7 @@ type SARIFFix struct {
 
 // WriteSARIF writes the review result as a SARIF 2.1.0 report.
 func (w *Writer) WriteSARIF(result aggregator.ReviewResult, path string) error {
-	report := buildSARIF(result)
+	report := buildSARIF(result, w.config.Version)
 
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -110,7 +110,10 @@ func (w *Writer) WriteSARIF(result aggregator.ReviewResult, path string) error {
 	return nil
 }
 
-func buildSARIF(result aggregator.ReviewResult) SARIFReport {
+func buildSARIF(result aggregator.ReviewResult, version string) SARIFReport {
+	if version == "" {
+		version = "dev"
+	}
 	rulesMap := make(map[string]int)
 	var sarifRules []SARIFRule
 
@@ -177,7 +180,7 @@ func buildSARIF(result aggregator.ReviewResult) SARIFReport {
 				Tool: SARIFTool{
 					Driver: SARIFDriver{
 						Name:           "terraview",
-						Version:        "0.1.0",
+						Version:        version,
 						InformationURI: "https://github.com/leonamvasquez/terraview",
 						Rules:          sarifRules,
 					},

@@ -319,7 +319,7 @@ output:
 }
 
 func TestLoad_ValidFormats(t *testing.T) {
-	for _, format := range []string{"pretty", "compact", "json"} {
+	for _, format := range []string{"pretty", "compact", "json", "sarif"} {
 		dir := t.TempDir()
 		content := "output:\n  format: " + format + "\n"
 		os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(content), 0644)

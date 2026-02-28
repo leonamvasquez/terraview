@@ -287,10 +287,10 @@ func (f *fileConfig) validate() error {
 
 	if f.Output != nil && f.Output.Format != nil {
 		switch *f.Output.Format {
-		case "pretty", "compact", "json":
+		case "pretty", "compact", "json", "sarif":
 			// valid
 		default:
-			return fmt.Errorf("output.format must be pretty, compact, or json, got %q", *f.Output.Format)
+			return fmt.Errorf("output.format must be pretty, compact, json, or sarif, got %q", *f.Output.Format)
 		}
 	}
 
