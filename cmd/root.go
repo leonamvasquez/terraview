@@ -157,8 +157,7 @@ Utilitários:
 Primeiros passos:
   cd meu-projeto-terraform
   terraview scan checkov                    # scanner de segurança
-  terraview scan checkov --ai               # scanner + análise IA
-  terraview scan --ai                       # apenas análise IA
+  terraview scan checkov --provider gemini  # scanner + análise IA
   terraview scan checkov --all              # tudo habilitado
   terraview diagram                         # diagrama de infraestrutura
   terraview explain                         # explicação com IA
@@ -177,10 +176,8 @@ Se --plan não for especificado, o terraview executará automaticamente:
 
 Exemplos:
   terraview scan checkov                       # apenas scanner de segurança
-  terraview scan checkov --ai                  # scanner + análise IA
-  terraview scan --ai                          # apenas análise IA (sem scanner)
+  terraview scan checkov --provider gemini     # scanner + análise IA
   terraview scan checkov --all                 # tudo habilitado
-  terraview scan checkov --ai --provider gemini  # Gemini AI
   terraview scan checkov --explain             # scanner + explicação IA
   terraview scan checkov --diagram             # scanner + diagrama
   terraview scan checkov --impact             # análise de impacto
@@ -202,7 +199,7 @@ Comportamento:
 
 Exemplos:
   terraview apply checkov                     # escanear + aplicar interativo
-  terraview apply checkov --ai                # escanear + IA + aplicar
+  terraview apply checkov --provider gemini   # escanear + IA + aplicar
   terraview apply checkov --non-interactive   # modo CI
   terraview apply checkov --all               # tudo habilitado + aplicar`
 
@@ -335,9 +332,8 @@ Exemplos:
 
 	// Translate local flags for each command
 	translateFlags(scanCmd, map[string]string{
-		"ai":       "Habilitar revisão semântica com IA",
 		"strict":   "Modo estrito: achados HIGH também retornam código de saída 2",
-		"explain":  "Gerar explicação em linguagem natural com IA (implica --ai)",
+		"explain":  "Gerar explicação em linguagem natural com IA",
 		"diagram":  "Exibir diagrama ASCII de infraestrutura",
 		"impact":   "Analisar impacto de dependências das mudanças",
 		"findings": "Importar achados externos de Checkov/tfsec/Trivy JSON",
@@ -345,9 +341,8 @@ Exemplos:
 	})
 	translateFlags(applyCmd, map[string]string{
 		"non-interactive": "Pular prompt de confirmação (para CI)",
-		"ai":              "Habilitar revisão semântica com IA",
 		"strict":          "Modo estrito: achados HIGH também retornam código de saída 2",
-		"explain":         "Gerar explicação em linguagem natural com IA (implica --ai)",
+		"explain":         "Gerar explicação em linguagem natural com IA",
 		"diagram":         "Exibir diagrama ASCII de infraestrutura",
 		"impact":          "Analisar impacto de dependências das mudanças",
 		"findings":        "Importar achados externos de Checkov/tfsec/Trivy JSON",

@@ -171,8 +171,8 @@ func runSetupEN() error {
 	fmt.Println()
 	fmt.Println(ansiBold + "  Quick Start" + ansiReset)
 	fmt.Println()
-	fmt.Printf("  %sterraview scan checkov%s          # scanners only\n", ansiCyan, ansiReset)
-	fmt.Printf("  %sterraview scan checkov --ai%s     # scanners + AI\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview scan checkov%s                   # scanners only\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview scan checkov --provider gemini%s # scanners + AI\n", ansiCyan, ansiReset)
 	fmt.Println()
 
 	return nil
@@ -309,8 +309,8 @@ func runSetupBR() error {
 	fmt.Println()
 	fmt.Println(ansiBold + "  Início Rápido" + ansiReset)
 	fmt.Println()
-	fmt.Printf("  %sterraview scan checkov%s          # apenas scanners\n", ansiCyan, ansiReset)
-	fmt.Printf("  %sterraview scan checkov --ai%s     # scanners + IA\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview scan checkov%s                   # apenas scanners\n", ansiCyan, ansiReset)
+	fmt.Printf("  %sterraview scan checkov --provider gemini%s # scanners + IA\n", ansiCyan, ansiReset)
 	fmt.Println()
 
 	return nil

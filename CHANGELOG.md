@@ -12,6 +12,12 @@ com versionamento semântico [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+- `executeReview` refatorada em funções modulares: `resolveReviewConfig`, `parsePlan`, `runScanners`, `mergeAndScore`, `renderOutput`
+
+### Removido
+- Flag `--ai` removida (depreciada). IA é habilitada por padrão quando um provider está configurado; use `--static` para desabilitar
+
 ## [0.5.3] — 2026-01-xx
 
 ### Adicionado

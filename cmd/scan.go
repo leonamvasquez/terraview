@@ -33,7 +33,6 @@ import (
 var (
 	// Scan-local flags
 	staticOnly   bool // --static: disable AI contextual analysis
-	aiEnabled    bool // deprecated: kept for backward compat, ignored
 	strict       bool
 	explainFlag  bool
 	diagramFlag  bool
@@ -84,15 +83,12 @@ Terragrunt:
 
 func init() {
 	scanCmd.Flags().BoolVar(&staticOnly, "static", false, "Static analysis only: disable AI contextual analysis")
-	scanCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Deprecated: AI is enabled by default when a provider is configured")
 	scanCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
 	scanCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation")
 	scanCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
-	// Hide deprecated --ai flag from help
-	_ = scanCmd.Flags().MarkHidden("ai")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -171,23 +167,73 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// reviewConfig holds the resolved configuration for a review pipeline run.
+type reviewConfig struct {
+	cfg            config.Config
+	scannerName    string
+	resolvedPlan   string
+	resolvedOutput string
+	effectiveAI    bool
+	effectiveFormat string
+
+	// AI settings
+	aiProvider    string
+	aiModel       string
+	aiURL         string
+	aiTimeout     int
+	aiTemperature float64
+	aiAPIKey      string
+}
+
+// scanResult holds the output of the parallel scanner + AI phase.
+type scanResult struct {
+	hardFindings    []rules.Finding
+	scannerResult   *scanner.AggregatedResult
+	contextFindings []rules.Finding
+	contextSummary  string
+}
+
 // executeReview runs the full review pipeline and returns the plan path, exit code, and any error.
 // Pipeline: Parse → [Scanner ‖ AI Context] → Merge → Score → Output
 func executeReview(scannerName string) (string, int, error) {
-	// Load workspace config (.terraview.yaml)
+	rc, err := resolveReviewConfig(scannerName)
+	if err != nil {
+		return "", 0, err
+	}
+
+	resources, topoGraph, err := parsePlan(rc.resolvedPlan)
+	if err != nil {
+		return rc.resolvedPlan, 0, err
+	}
+
+	sr, err := runScanners(rc, resources, topoGraph)
+	if err != nil {
+		return rc.resolvedPlan, 0, err
+	}
+
+	result := mergeAndScore(rc, resources, topoGraph, sr)
+
+	exitCode, err := renderOutput(rc, result, sr.scannerResult)
+	if err != nil {
+		return rc.resolvedPlan, 0, err
+	}
+
+	return rc.resolvedPlan, exitCode, nil
+}
+
+// resolveReviewConfig loads config, resolves the plan file, and determines effective settings.
+func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 	cfg, err := config.Load(workDir)
 	if err != nil {
-		return "", 0, fmt.Errorf("config error: %w", err)
+		return reviewConfig{}, fmt.Errorf("config error: %w", err)
 	}
 	logVerbose("Config loaded from %s", workDir)
 
 	resolvedPlan := planFile
-
-	// If no plan provided, auto-generate from terraform/terragrunt
 	if resolvedPlan == "" {
 		generated, _, err := generatePlan()
 		if err != nil {
-			return "", 0, err
+			return reviewConfig{}, err
 		}
 		resolvedPlan = generated
 	}
@@ -205,8 +251,6 @@ func executeReview(scannerName string) (string, int, error) {
 	if effectiveProvider != "ollama" {
 		effectiveURL = ""
 	}
-	effectiveTimeout := cfg.LLM.TimeoutSeconds
-	effectiveTemperature := cfg.LLM.Temperature
 
 	// AI is ON by default unless --static is set.
 	// Graceful degradation: if no provider is available, run scanner-only silently.
@@ -217,7 +261,6 @@ func executeReview(scannerName string) (string, int, error) {
 			effectiveAI = false
 		}
 	}
-	// Legacy --ai flag: ignored (AI is default), but --explain still implies AI
 	if explainFlag {
 		effectiveAI = true
 	}
@@ -231,35 +274,45 @@ func executeReview(scannerName string) (string, int, error) {
 		effectiveFormat = outputFormat
 	}
 
-	// Resolve output directory
 	resolvedOutput := outputDir
 	if resolvedOutput == "" {
 		resolvedOutput = workDir
 	}
 
-	// --- Pipeline ---
+	return reviewConfig{
+		cfg:             cfg,
+		scannerName:     scannerName,
+		resolvedPlan:    resolvedPlan,
+		resolvedOutput:  resolvedOutput,
+		effectiveAI:     effectiveAI,
+		effectiveFormat: effectiveFormat,
+		aiProvider:      effectiveProvider,
+		aiModel:         effectiveModel,
+		aiURL:           effectiveURL,
+		aiTimeout:       cfg.LLM.TimeoutSeconds,
+		aiTemperature:   cfg.LLM.Temperature,
+		aiAPIKey:        cfg.LLM.APIKey,
+	}, nil
+}
 
-	// 1. Parse
-	logVerbose("Parsing plan: %s", resolvedPlan)
+// parsePlan reads and normalizes the Terraform plan, returning resources and the topology graph.
+func parsePlan(planPath string) ([]parser.NormalizedResource, *topology.Graph, error) {
+	logVerbose("Parsing plan: %s", planPath)
 	p := parser.NewParser()
-	plan, err := p.ParseFile(resolvedPlan)
+	plan, err := p.ParseFile(planPath)
 	if err != nil {
-		return resolvedPlan, 0, fmt.Errorf("parse error: %w", err)
+		return nil, nil, fmt.Errorf("parse error: %w", err)
 	}
 
 	resources := p.NormalizeResources(plan)
 	logVerbose("Found %d resource changes", len(resources))
 
-	// Build topology graph (used by both scanner clustering and AI context)
 	topoGraph := topology.BuildGraph(resources)
+	return resources, topoGraph, nil
+}
 
-	// 2. PARALLEL: Scanner + AI Context Analysis
-	var hardFindings []rules.Finding
-	var scannerResult *scanner.AggregatedResult
-	var contextFindings []rules.Finding
-	var contextSummary string
-
-	// Channels for parallel execution
+// runScanners executes the security scanner and AI context analysis in parallel.
+func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph) (scanResult, error) {
 	type scannerOutput struct {
 		findings []rules.Finding
 		result   *scanner.AggregatedResult
@@ -274,17 +327,17 @@ func executeReview(scannerName string) (string, int, error) {
 	scannerCh := make(chan scannerOutput, 1)
 	contextCh := make(chan contextOutput, 1)
 
-	// 2a. Scanner goroutine
-	if scannerName != "" {
+	// Scanner goroutine
+	if rc.scannerName != "" {
 		go func() {
-			resolvedScanner, err := scanner.Resolve(scannerName)
+			resolvedScanner, err := scanner.Resolve(rc.scannerName)
 			if err != nil {
 				scannerCh <- scannerOutput{err: err}
 				return
 			}
 
 			scanCtx := scanner.ScanContext{
-				PlanPath:  resolvedPlan,
+				PlanPath:  rc.resolvedPlan,
 				SourceDir: workDir,
 				WorkDir:   workDir,
 			}
@@ -298,38 +351,38 @@ func executeReview(scannerName string) (string, int, error) {
 			scannerCh <- scannerOutput{findings: aggResult.Findings, result: &aggResult}
 		}()
 	} else {
-		scannerCh <- scannerOutput{} // no scanner
+		scannerCh <- scannerOutput{}
 		logVerbose("No scanner specified, skipping security scan")
 	}
 
-	// 2b. AI Context Analysis goroutine (runs in parallel with scanner)
-	if effectiveAI {
+	// AI Context Analysis goroutine (runs in parallel with scanner)
+	if rc.effectiveAI {
 		go func() {
 			ctxFindings, ctxSummary, ctxErr := runCodeContextAnalysis(
 				resources, topoGraph,
-				effectiveProvider, effectiveURL, effectiveModel,
-				effectiveTimeout, effectiveTemperature, cfg.LLM.APIKey, cfg)
+				rc.aiProvider, rc.aiURL, rc.aiModel,
+				rc.aiTimeout, rc.aiTemperature, rc.aiAPIKey, rc.cfg)
 			contextCh <- contextOutput{findings: ctxFindings, summary: ctxSummary, err: ctxErr}
 		}()
 	} else {
-		contextCh <- contextOutput{} // no AI
+		contextCh <- contextOutput{}
 		logVerbose("AI contextual analysis disabled (--static)")
 	}
 
 	// Collect scanner results
 	scanOut := <-scannerCh
 	if scanOut.err != nil {
-		return resolvedPlan, 0, fmt.Errorf("scanner error: %w", scanOut.err)
+		return scanResult{}, fmt.Errorf("scanner error: %w", scanOut.err)
 	}
-	hardFindings = scanOut.findings
-	scannerResult = scanOut.result
-	if scannerResult != nil {
+	if scanOut.result != nil {
 		logVerbose("Scanner %s: %d findings (%d raw, %d after dedup)",
-			scannerName, len(scannerResult.Findings), scannerResult.TotalRaw, scannerResult.TotalDeduped)
+			rc.scannerName, len(scanOut.result.Findings), scanOut.result.TotalRaw, scanOut.result.TotalDeduped)
 	}
 
 	// Collect AI context results (graceful: errors are warnings, not fatal)
 	ctxOut := <-contextCh
+	var contextFindings []rules.Finding
+	var contextSummary string
 	if ctxOut.err != nil {
 		fmt.Fprintf(os.Stderr, "%s AI context analysis warning: %v\n", output.Prefix(), ctxOut.err)
 		logVerbose("AI context analysis failed (non-fatal): %v", ctxOut.err)
@@ -341,7 +394,8 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 2c. Import external findings if specified
+	// Import external findings if specified
+	hardFindings := scanOut.findings
 	if findingsFile != "" {
 		externalFindings, err := importer.Import(findingsFile)
 		if err != nil {
@@ -352,26 +406,38 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 4. Merge all findings: scanner + AI context
-	if len(hardFindings) > 0 || len(contextFindings) > 0 {
-		dr := normalizer.Deduplicate(hardFindings, contextFindings)
+	return scanResult{
+		hardFindings:    hardFindings,
+		scannerResult:   scanOut.result,
+		contextFindings: contextFindings,
+		contextSummary:  contextSummary,
+	}, nil
+}
+
+// mergeAndScore deduplicates findings, scores them, and enriches the result with optional analyses.
+func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph, sr scanResult) aggregator.ReviewResult {
+	hardFindings := sr.hardFindings
+
+	// Merge all findings: scanner + AI context
+	if len(hardFindings) > 0 || len(sr.contextFindings) > 0 {
+		dr := normalizer.Deduplicate(hardFindings, sr.contextFindings)
 		hardFindings = dr.Findings
 		logVerbose("Dedup: %s", dr.Summary)
 	}
 
-	// 5. Aggregate (with configurable scoring weights)
-	sw := cfg.Scoring.SeverityWeights
+	// Aggregate (with configurable scoring weights)
+	sw := rc.cfg.Scoring.SeverityWeights
 	scorer := scoring.NewScorerWithWeights(sw.Critical, sw.High, sw.Medium, sw.Low)
 	agg := aggregator.NewAggregator(scorer)
-	result := agg.Aggregate(resolvedPlan, len(resources), hardFindings, nil, contextSummary, strict)
+	result := agg.Aggregate(rc.resolvedPlan, len(resources), hardFindings, nil, sr.contextSummary, strict)
 
-	// 5a. Apply rule filtering from config
-	if len(cfg.Rules.DisabledRules) > 0 {
-		result.Findings = filterDisabledRules(result.Findings, cfg.Rules.DisabledRules)
-		logVerbose("Filtered %d disabled rules from findings", len(cfg.Rules.DisabledRules))
+	// Apply rule filtering from config
+	if len(rc.cfg.Rules.DisabledRules) > 0 {
+		result.Findings = filterDisabledRules(result.Findings, rc.cfg.Rules.DisabledRules)
+		logVerbose("Filtered %d disabled rules from findings", len(rc.cfg.Rules.DisabledRules))
 	}
 
-	// 5b. Meta-analysis: unified cross-tool scoring
+	// Meta-analysis: unified cross-tool scoring
 	if len(result.Findings) > 0 {
 		metaAnalyzer := meta.NewAnalyzer()
 		metaResult := metaAnalyzer.Analyze(result.Findings)
@@ -379,14 +445,14 @@ func executeReview(scannerName string) (string, int, error) {
 		logVerbose("Meta-analysis: %s", metaResult.Summary)
 	}
 
-	// 5c. Generate diagram if requested (deterministic, no AI)
+	// Generate diagram if requested (deterministic, no AI)
 	if diagramFlag {
 		gen := diagram.NewGenerator()
 		result.Diagram = gen.GenerateWithGraph(resources, topoGraph)
 		logVerbose("Infrastructure diagram generated")
 	}
 
-	// 5d. Analyze impact if requested (deterministic, no AI)
+	// Analyze impact if requested (deterministic, no AI)
 	if impactFlag {
 		analyzer := blast.NewAnalyzer()
 		blastResult := analyzer.AnalyzeWithGraph(resources, topoGraph)
@@ -394,44 +460,48 @@ func executeReview(scannerName string) (string, int, error) {
 		logVerbose("Impact analysis: %s", blastResult.Summary)
 	}
 
-	// 6. Output
+	return result
+}
+
+// renderOutput writes all output files, prints the summary, and returns the exit code.
+func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult *scanner.AggregatedResult) (int, error) {
 	langCode := ""
 	if brFlag {
 		langCode = "pt-BR"
 	}
 	writer := output.NewWriterWithConfig(output.WriterConfig{
-		Format:  effectiveFormat,
+		Format:  rc.effectiveFormat,
 		Lang:    langCode,
 		Version: Version,
 	})
 
-	jsonPath := filepath.Join(resolvedOutput, "review.json")
+	jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
 	if err := writer.WriteJSON(result, jsonPath); err != nil {
-		return resolvedPlan, 0, fmt.Errorf("failed to write JSON: %w", err)
+		return 0, fmt.Errorf("failed to write JSON: %w", err)
 	}
 	logVerbose("Written: %s", jsonPath)
 
-	if effectiveFormat == output.FormatSARIF {
-		sarifPath := filepath.Join(resolvedOutput, "review.sarif.json")
+	if rc.effectiveFormat == output.FormatSARIF {
+		sarifPath := filepath.Join(rc.resolvedOutput, "review.sarif.json")
 		if err := writer.WriteSARIF(result, sarifPath); err != nil {
-			return resolvedPlan, 0, fmt.Errorf("failed to write SARIF: %w", err)
+			return 0, fmt.Errorf("failed to write SARIF: %w", err)
 		}
 		logVerbose("Written: %s", sarifPath)
 	}
 
-	if effectiveFormat != output.FormatJSON && effectiveFormat != output.FormatSARIF {
-		mdPath := filepath.Join(resolvedOutput, "review.md")
+	if rc.effectiveFormat != output.FormatJSON && rc.effectiveFormat != output.FormatSARIF {
+		mdPath := filepath.Join(rc.resolvedOutput, "review.md")
 		if err := writer.WriteMarkdown(result, mdPath); err != nil {
-			return resolvedPlan, 0, fmt.Errorf("failed to write Markdown: %w", err)
+			return 0, fmt.Errorf("failed to write Markdown: %w", err)
 		}
 		logVerbose("Written: %s", mdPath)
 	}
 
-	// 7. Print summary
+	// Print summary
 	writer.PrintSummary(result)
 
-	// 7a. Print scanner stats if scanners were used
-	if scannerResult != nil && effectiveFormat != output.FormatJSON {
+	// Print scanner stats if scanners were used
+	if scannerResult != nil && rc.effectiveFormat != output.FormatJSON {
 		if brFlag {
 			fmt.Print(scanner.FormatScannerHeaderBR(*scannerResult))
 		} else {
@@ -439,7 +509,7 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 7b. Print impact analysis if generated
+	// Print impact analysis if generated
 	if impactFlag && result.BlastRadius != nil {
 		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
 			fmt.Println()
@@ -447,13 +517,13 @@ func executeReview(scannerName string) (string, int, error) {
 		}
 	}
 
-	// 8. Apply strict mode: HIGH becomes exit code 2
+	// Apply strict mode: HIGH becomes exit code 2
 	exitCode := result.ExitCode
 	if strict && exitCode == 1 {
 		exitCode = 2
 	}
 
-	return resolvedPlan, exitCode, nil
+	return exitCode, nil
 }
 
 // canResolveAIProvider checks if an AI provider can be resolved from config.

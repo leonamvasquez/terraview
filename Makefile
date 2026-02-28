@@ -46,7 +46,7 @@ run: build
 	$(BUILD_DIR)/$(BINARY_NAME) scan checkov --plan examples/plan.json -v
 
 run-with-llm: build
-	$(BUILD_DIR)/$(BINARY_NAME) scan checkov --plan examples/plan.json --ai -v
+	$(BUILD_DIR)/$(BINARY_NAME) scan checkov --plan examples/plan.json -v
 
 # Build for all platforms
 dist: clean

@@ -46,14 +46,12 @@ Terragrunt:
 func init() {
 	applyCmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip confirmation prompt (for CI)")
 	applyCmd.Flags().BoolVar(&staticOnly, "static", false, "Static analysis only: disable AI contextual analysis")
-	applyCmd.Flags().BoolVar(&aiEnabled, "ai", false, "Deprecated: AI is enabled by default when a provider is configured")
 	applyCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
 	applyCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation")
 	applyCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	applyCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	applyCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	applyCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
-	_ = applyCmd.Flags().MarkHidden("ai")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
