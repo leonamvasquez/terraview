@@ -1,0 +1,123 @@
+# =============================================================================
+# .terraview.yaml — Configuração do Terraview
+# =============================================================================
+#
+# Este arquivo pode ser colocado em dois locais:
+#   1. ~/.terraview/.terraview.yaml   (global, menor prioridade)
+#   2. <projeto>/.terraview.yaml      (local, maior prioridade)
+#
+# Valores locais sobrescrevem os globais. Campos omitidos usam o padrão.
+#
+# AVISO: Nunca commite api_key diretamente neste arquivo.
+#        Prefira variáveis de ambiente (ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)
+#        ou adicione .terraview.yaml ao seu .gitignore.
+#
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# llm — Configuração do provider de IA
+# ---------------------------------------------------------------------------
+llm:
+  # Habilita análise com IA (padrão: true).
+  # Use --static na CLI para desabilitar pontualmente.
+  enabled: true
+
+  # Provider de IA. Opções:
+  #   ollama      — inferência local (não requer API key)
+  #   gemini      — Google Gemini
+  #   claude      — Anthropic Claude
+  #   openai      — OpenAI / compatíveis
+  #   deepseek    — DeepSeek
+  #   openrouter  — OpenRouter (múltiplos modelos)
+  #   gemini-cli  — Gemini via CLI
+  #   claude-code — Claude Code via CLI
+  provider: ollama
+
+  # Modelo a ser usado. Cada provider tem um padrão:
+  #   ollama:      qwen3.5
+  #   gemini:      gemini-2.0-flash
+  #   claude:      claude-sonnet-4-5
+  #   openai:      gpt-4o
+  #   deepseek:    deepseek-chat
+  #   openrouter:  google/gemini-2.0-flash-001
+  model: ""
+
+  # URL base do provider (apenas para ollama ou endpoints customizados).
+  url: "http://localhost:11434"
+
+  # Chave de API para providers que exigem autenticação.
+  # IMPORTANTE: Prefira variáveis de ambiente em vez de colocar a chave aqui:
+  #   ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY,
+  #   DEEPSEEK_API_KEY, OPENROUTER_API_KEY
+  # api_key: ""
+
+  # Timeout em segundos para chamadas ao provider (padrão: 120).
+  timeout_seconds: 120
+
+  # Temperatura para geração de texto (0.0 a 1.0, padrão: 0.2).
+  # Valores mais baixos = respostas mais determinísticas.
+  temperature: 0.2
+
+  # Máximo de recursos incluídos no prompt de IA (padrão: 30).
+  # Planos com mais recursos são truncados para caber no contexto.
+  # Aumente para planos grandes se o modelo suportar contexto amplo.
+  # max_resources: 30
+
+  # Configurações específicas do Ollama
+  ollama:
+    # Tamanho da janela de contexto (padrão: 4096).
+    # Aumente para modelos que suportam contextos maiores (ex: 8192, 32768).
+    # num_ctx: 4096
+
+    # Limite de threads de CPU (0 = usar todos os cores).
+    # max_threads: 0
+
+    # Limite de memória em MB (0 = sem limite).
+    # max_memory_mb: 0
+
+    # Memória livre mínima em MB antes de cancelar a análise.
+    min_free_memory_mb: 1024
+
+# ---------------------------------------------------------------------------
+# scoring — Pesos de severidade para cálculo do score
+# ---------------------------------------------------------------------------
+scoring:
+  severity_weights:
+    critical: 5.0
+    high: 3.0
+    medium: 1.0
+    low: 0.5
+
+# ---------------------------------------------------------------------------
+# rules — Configuração de regras
+# ---------------------------------------------------------------------------
+rules:
+  # Tags obrigatórias em todos os recursos (ex: ["Environment", "Team"]).
+  # required_tags: []
+
+  # Pacotes de regras adicionais a carregar.
+  # rule_packs: []
+
+  # Modo estrito via config (equivale a --strict na CLI).
+  # strict_mode: false
+
+  # Regras desabilitadas por ID (ex: ["SEC001", "TAG002"]).
+  # disabled_rules: []
+
+  # Habilitar apenas estas regras (ignora todas as outras).
+  # enabled_rules: []
+
+# ---------------------------------------------------------------------------
+# output — Formato de saída padrão
+# ---------------------------------------------------------------------------
+output:
+  # Formato: pretty (padrão), compact, json, sarif
+  format: pretty
+
+# ---------------------------------------------------------------------------
+# scanner — Scanner de segurança padrão
+# ---------------------------------------------------------------------------
+scanner:
+  # Scanner padrão: checkov, tfsec, terrascan
+  # Pode ser omitido — o primeiro argumento do 'scan' define o scanner.
+  # default: checkov

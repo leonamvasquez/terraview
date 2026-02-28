@@ -494,7 +494,9 @@ O terraview pode ser configurado com um arquivo YAML. Por padrão, procura `.ter
 2. Diretório de trabalho atual
 3. Home do usuário (`~/.terraview/.terraview.yaml`)
 
-Exemplo de configuração:
+Exemplo de configuração (veja [`examples/.terraview.yaml`](examples/.terraview.yaml) para referência completa com todos os campos documentados):
+
+> **AVISO:** Nunca commite `api_key` diretamente no `.terraview.yaml`. Prefira variáveis de ambiente (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.) ou adicione `.terraview.yaml` ao seu `.gitignore`. O terraview emite um aviso em stderr quando detecta `api_key` no arquivo de config.
 
 ```yaml
 llm:
@@ -502,10 +504,12 @@ llm:
   provider: ollama              # ollama, gemini, claude, openai, deepseek, openrouter, gemini-cli, claude-code
   model: llama3.1:8b            # modelo específico do provider
   url: http://localhost:11434   # URL customizada (relevante apenas para ollama)
-  api_key: ""                   # para providers API (não necessário para ollama ou CLI providers)
+  # api_key: ""                 # prefira variáveis de ambiente (ver aviso acima)
   timeout_seconds: 120          # timeout para chamadas LLM
   temperature: 0.2              # 0.0 a 1.0 (menor = mais determinístico)
+  max_resources: 30             # máximo de recursos no prompt IA (padrão: 30)
   ollama:
+    num_ctx: 4096               # janela de contexto do modelo (padrão: 4096)
     max_threads: 0              # 0 = usar todos os CPUs
     max_memory_mb: 0            # 0 = sem limite
     min_free_memory_mb: 1024    # memória livre mínima para iniciar Ollama
@@ -530,7 +534,7 @@ rules:
   # enabled_rules: []           # se definido, apenas estas rules são avaliadas
 
 output:
-  format: pretty                # pretty, compact, json
+  format: pretty                # pretty, compact, json, sarif
 ```
 
 ### Variáveis de ambiente

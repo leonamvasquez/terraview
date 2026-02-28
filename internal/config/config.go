@@ -193,6 +193,12 @@ func Load(workDir string) (Config, error) {
 	}
 
 	cfg = fileCfg.merge(cfg)
+
+	// Warn if api_key is embedded in the config file (risk of committing secrets).
+	if cfg.LLM.APIKey != "" {
+		fmt.Fprintln(os.Stderr, "AVISO: api_key detectada no arquivo de config. Evite commitar .terraview.yaml. Prefira a variável de ambiente correspondente.")
+	}
+
 	return cfg, nil
 }
 

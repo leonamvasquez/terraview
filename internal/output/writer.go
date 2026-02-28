@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/util"
 )
@@ -112,11 +113,7 @@ func (w *Writer) printCompact(result aggregator.ReviewResult) {
 		parts := []string{}
 		for _, sev := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW"} {
 			if count, ok := result.SeverityCounts[sev]; ok && count > 0 {
-				sevLabel := sev
-				if w.config.IsBR() {
-					sevLabel = sevBR(sev)
-				}
-				parts = append(parts, fmt.Sprintf("%s:%d", SevColor(sevLabel), count))
+				parts = append(parts, fmt.Sprintf("%s:%d", SevColor(i18n.SevLabel(sev)), count))
 			}
 		}
 		if len(parts) > 0 {
@@ -160,33 +157,22 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 	fmt.Println()
 
 	// AI Explanation (after verdict, before findings)
+	m := i18n.T()
 	if result.Explanation != nil {
-		if br {
-			fmt.Println("  Explicação IA:")
-		} else {
-			fmt.Println("  AI Explanation:")
-		}
+		fmt.Printf("  %s:\n", m.LblAIExplanation)
 		if result.Explanation.Summary != "" {
 			fmt.Printf("  %s\n", result.Explanation.Summary)
 		}
 		fmt.Println()
 		if len(result.Explanation.Risks) > 0 {
-			if br {
-				fmt.Println("  Riscos:")
-			} else {
-				fmt.Println("  Risks:")
-			}
+			fmt.Printf("  %s:\n", m.LblRisks)
 			for _, r := range result.Explanation.Risks {
 				fmt.Printf("    • %s\n", r)
 			}
 			fmt.Println()
 		}
 		if len(result.Explanation.Suggestions) > 0 {
-			if br {
-				fmt.Println("  Sugestões:")
-			} else {
-				fmt.Println("  Suggestions:")
-			}
+			fmt.Printf("  %s:\n", m.LblSuggestions)
 			for _, s := range result.Explanation.Suggestions {
 				fmt.Printf("    • %s\n", s)
 			}
@@ -200,25 +186,15 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		fmt.Println()
 	}
 
-	if br {
-		fmt.Printf("  Recursos analisados: %d\n", result.TotalResources)
-		fmt.Printf("  Total de achados:    %d (%d por recurso)\n",
-			len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
-	} else {
-		fmt.Printf("  Resources analyzed: %d\n", result.TotalResources)
-		fmt.Printf("  Total findings:     %d (%d per resource avg)\n",
-			len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
-	}
+	fmt.Printf("  %s: %d\n", m.LblResources, result.TotalResources)
+	fmt.Printf("  %s: %d (%d per resource avg)\n",
+		m.LblTotalFindings, len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
 	fmt.Println()
 
 	if len(result.SeverityCounts) > 0 {
 		for _, sev := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"} {
 			if count, ok := result.SeverityCounts[sev]; ok && count > 0 {
-				label := sev
-				if br {
-					label = sevBR(sev)
-				}
-				fmt.Println(SevCountLine(sev, label, count))
+				fmt.Println(SevCountLine(sev, i18n.SevLabel(sev), count))
 			}
 		}
 		fmt.Println()
@@ -240,17 +216,9 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 
 		for _, src := range sourceOrder {
 			findings := sourceGroups[src]
-			if br {
-				fmt.Printf("  %s\n", SourceHeader(fmt.Sprintf("── %s (%d achados) ──", src, len(findings))))
-			} else {
-				fmt.Printf("  %s\n", SourceHeader(fmt.Sprintf("── %s (%d findings) ──", src, len(findings))))
-			}
+			fmt.Printf("  %s\n", SourceHeader(fmt.Sprintf("── %s (%d %s) ──", src, len(findings), m.LblFindings)))
 			for _, f := range findings {
-				sevLabel := f.Severity
-				if br {
-					sevLabel = sevBR(f.Severity)
-				}
-				fmt.Printf("    [%s] %s\n", SevColor(sevLabel), util.Truncate(f.Message, 80))
+				fmt.Printf("    [%s] %s\n", SevColor(i18n.SevLabel(f.Severity)), util.Truncate(f.Message, 80))
 				fmt.Printf("           %s\n", Resource(f.Resource))
 			}
 			fmt.Println()
@@ -269,11 +237,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		fmt.Printf("  %s         %s\n", Header("Overall Score:"), ScoreColor(result.Score.OverallScore))
 	}
 	fmt.Println()
-	if br {
-		fmt.Printf("  Código de saída: %d\n", result.ExitCode)
-	} else {
-		fmt.Printf("  Exit code: %d\n", result.ExitCode)
-	}
+	fmt.Printf("  %s: %d\n", m.LblExitCode, result.ExitCode)
 	fmt.Println(Bar())
 }
 
@@ -337,12 +301,9 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 	}
 
 	// AI Explanation
+	mm := i18n.T()
 	if result.Explanation != nil {
-		if br {
-			sb.WriteString("## Explicação IA\n\n")
-		} else {
-			sb.WriteString("## AI Explanation\n\n")
-		}
+		sb.WriteString(fmt.Sprintf("## %s\n\n", mm.LblAIExplanation))
 		if result.Explanation.Summary != "" {
 			sb.WriteString(fmt.Sprintf("%s\n\n", result.Explanation.Summary))
 		}
@@ -358,22 +319,14 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 			sb.WriteString("\n")
 		}
 		if len(result.Explanation.Risks) > 0 {
-			if br {
-				sb.WriteString("### Riscos\n\n")
-			} else {
-				sb.WriteString("### Risks\n\n")
-			}
+			sb.WriteString(fmt.Sprintf("### %s\n\n", mm.LblRisks))
 			for _, r := range result.Explanation.Risks {
 				sb.WriteString(fmt.Sprintf("- %s\n", r))
 			}
 			sb.WriteString("\n")
 		}
 		if len(result.Explanation.Suggestions) > 0 {
-			if br {
-				sb.WriteString("### Sugestões\n\n")
-			} else {
-				sb.WriteString("### Suggestions\n\n")
-			}
+			sb.WriteString(fmt.Sprintf("### %s\n\n", mm.LblSuggestions))
 			for _, s := range result.Explanation.Suggestions {
 				sb.WriteString(fmt.Sprintf("- %s\n", s))
 			}
@@ -428,11 +381,7 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 		}
 		for _, sev := range []string{rules.SeverityCritical, rules.SeverityHigh, rules.SeverityMedium, rules.SeverityLow, rules.SeverityInfo} {
 			if count, ok := result.SeverityCounts[sev]; ok && count > 0 {
-				label := sev
-				if br {
-					label = sevBR(sev)
-				}
-				sb.WriteString(fmt.Sprintf("| %s %s | %d |\n", severityIcon(sev), label, count))
+				sb.WriteString(fmt.Sprintf("| %s %s | %d |\n", severityIcon(sev), i18n.SevLabel(sev), count))
 			}
 		}
 		sb.WriteString("\n")
@@ -454,11 +403,7 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 				continue
 			}
 
-			label := sev
-			if br {
-				label = sevBR(sev)
-			}
-			sb.WriteString(fmt.Sprintf("### %s %s (%d)\n\n", severityIcon(sev), label, len(group)))
+			sb.WriteString(fmt.Sprintf("### %s %s (%d)\n\n", severityIcon(sev), i18n.SevLabel(sev), len(group)))
 
 			for _, f := range group {
 				sb.WriteString(fmt.Sprintf("%d. **`%s`** — %s\n", counter, f.Resource, f.Message))
@@ -490,28 +435,12 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 	// Footer
 	sb.WriteString("---\n\n")
 	if br {
-		sb.WriteString(fmt.Sprintf("*Gerado por [terraview](https://github.com/leonamvasquez/terraview) | Código de saída: %d*\n", result.ExitCode))
+		sb.WriteString(fmt.Sprintf("*Gerado por [terraview](https://github.com/leonamvasquez/terraview) | %s: %d*\n", mm.LblExitCode, result.ExitCode))
 	} else {
-		sb.WriteString(fmt.Sprintf("*Generated by [terraview](https://github.com/leonamvasquez/terraview) | Exit code: %d*\n", result.ExitCode))
+		sb.WriteString(fmt.Sprintf("*Generated by [terraview](https://github.com/leonamvasquez/terraview) | %s: %d*\n", mm.LblExitCode, result.ExitCode))
 	}
 
 	return sb.String()
-}
-
-// sevBR translates severity labels to Portuguese.
-func sevBR(sev string) string {
-	switch sev {
-	case "CRITICAL":
-		return "CRÍTICO"
-	case "HIGH":
-		return "ALTO"
-	case "MEDIUM":
-		return "MÉDIO"
-	case "LOW":
-		return "BAIXO"
-	default:
-		return sev
-	}
 }
 
 // translateReason translates known verdict reason patterns to Portuguese.

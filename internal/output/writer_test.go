@@ -11,6 +11,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/explain"
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/util"
@@ -75,10 +76,13 @@ func TestWriterConfig_IsCompact(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// sevBR
+// i18n.SevLabel (replaces sevBR)
 // ---------------------------------------------------------------------------
 
-func TestSevBR(t *testing.T) {
+func TestSevLabel_BR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
+
 	tests := []struct {
 		sev  string
 		want string
@@ -91,8 +95,29 @@ func TestSevBR(t *testing.T) {
 		{"UNKNOWN", "UNKNOWN"},
 	}
 	for _, tt := range tests {
-		if got := sevBR(tt.sev); got != tt.want {
-			t.Errorf("sevBR(%q) = %q, want %q", tt.sev, got, tt.want)
+		if got := i18n.SevLabel(tt.sev); got != tt.want {
+			t.Errorf("SevLabel(%q) = %q, want %q", tt.sev, got, tt.want)
+		}
+	}
+}
+
+func TestSevLabel_EN(t *testing.T) {
+	i18n.SetLang("")
+
+	tests := []struct {
+		sev  string
+		want string
+	}{
+		{"CRITICAL", "CRITICAL"},
+		{"HIGH", "HIGH"},
+		{"MEDIUM", "MEDIUM"},
+		{"LOW", "LOW"},
+		{"INFO", "INFO"},
+		{"UNKNOWN", "UNKNOWN"},
+	}
+	for _, tt := range tests {
+		if got := i18n.SevLabel(tt.sev); got != tt.want {
+			t.Errorf("SevLabel(%q) = %q, want %q", tt.sev, got, tt.want)
 		}
 	}
 }
@@ -405,6 +430,8 @@ func TestWriteMarkdown_Success(t *testing.T) {
 }
 
 func TestWriteMarkdown_BR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, Lang: "pt-BR"})
 	result := aggregator.ReviewResult{
 		PlanFile:       "plan.json",
@@ -616,6 +643,8 @@ func TestRenderMarkdown_Footer(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderMarkdown_BR_WithExplanation(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	w := NewWriterWithConfig(WriterConfig{Lang: "pt-BR"})
 	result := aggregator.ReviewResult{
 		PlanFile:       "plan.json",
@@ -663,6 +692,8 @@ func TestRenderMarkdown_BR_WithExplanation(t *testing.T) {
 }
 
 func TestRenderMarkdown_BR_WithFindings(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	w := NewWriterWithConfig(WriterConfig{Lang: "pt-BR"})
 	result := aggregator.ReviewResult{
 		PlanFile:       "plan.json",
@@ -793,6 +824,8 @@ func TestPrintCompact_Safe_EN(t *testing.T) {
 }
 
 func TestPrintCompact_Unsafe_BR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	ColorEnabled = false
 	defer func() { ColorEnabled = true }()
 
@@ -872,6 +905,8 @@ func TestPrintFull_Safe_EN(t *testing.T) {
 }
 
 func TestPrintFull_Unsafe_BR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	ColorEnabled = false
 	defer func() { ColorEnabled = true }()
 
@@ -962,6 +997,8 @@ func TestPrintFull_WithExplanation(t *testing.T) {
 }
 
 func TestPrintFull_WithExplanation_BR(t *testing.T) {
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 	ColorEnabled = false
 	defer func() { ColorEnabled = true }()
 

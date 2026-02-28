@@ -36,6 +36,15 @@ type Messages struct {
 	SevMedium   string
 	SevLow      string
 	SevInfo     string
+
+	// Output — section headers shared between printFull and renderMarkdown
+	LblAIExplanation string
+	LblRisks         string
+	LblSuggestions   string
+	LblExitCode      string
+	LblFindings      string // used in "(%d findings)" / "(%d achados)"
+	LblResources     string // "Resources analyzed" / "Recursos analisados"
+	LblTotalFindings string // "Total findings" / "Total de achados"
 }
 
 // active holds the currently selected language. 0 = EN, 1 = BR.
@@ -66,6 +75,14 @@ var en = Messages{
 	SevMedium:   "MEDIUM",
 	SevLow:      "LOW",
 	SevInfo:     "INFO",
+
+	LblAIExplanation: "AI Explanation",
+	LblRisks:         "Risks",
+	LblSuggestions:   "Suggestions",
+	LblExitCode:      "Exit code",
+	LblFindings:      "findings",
+	LblResources:     "Resources analyzed",
+	LblTotalFindings:  "Total findings",
 }
 
 var br = Messages{
@@ -93,6 +110,14 @@ var br = Messages{
 	SevMedium:   "MÉDIO",
 	SevLow:      "BAIXO",
 	SevInfo:     "INFO",
+
+	LblAIExplanation: "Explicação IA",
+	LblRisks:         "Riscos",
+	LblSuggestions:   "Sugestões",
+	LblExitCode:      "Código de saída",
+	LblFindings:      "achados",
+	LblResources:     "Recursos analisados",
+	LblTotalFindings:  "Total de achados",
 }
 
 // SetLang selects the active language. Use "pt-BR" for Portuguese.
@@ -115,4 +140,23 @@ func T() *Messages {
 		return &br
 	}
 	return &en
+}
+
+// SevLabel translates a severity string (CRITICAL, HIGH, etc.) to the active language.
+func SevLabel(sev string) string {
+	m := T()
+	switch sev {
+	case "CRITICAL":
+		return m.SevCritical
+	case "HIGH":
+		return m.SevHigh
+	case "MEDIUM":
+		return m.SevMedium
+	case "LOW":
+		return m.SevLow
+	case "INFO":
+		return m.SevInfo
+	default:
+		return sev
+	}
 }
