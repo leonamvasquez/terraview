@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const ollamaName = "ollama"
@@ -175,7 +176,7 @@ func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := readResponseBody(resp.Body)
-		return nil, "", fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+		return nil, "", fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
 	}
 
 	respBody, err := readResponseBody(resp.Body)
@@ -191,9 +192,3 @@ func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 	return parseResponse(ollamaResp.Response, ollamaName)
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}

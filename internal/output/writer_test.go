@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
+	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scoring"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 // ---------------------------------------------------------------------------
@@ -240,8 +242,8 @@ func TestTruncate(t *testing.T) {
 		{"", 10, ""},
 	}
 	for _, tt := range tests {
-		if got := truncate(tt.s, tt.max); got != tt.want {
-			t.Errorf("truncate(%q, %d) = %q, want %q", tt.s, tt.max, got, tt.want)
+		if got := util.Truncate(tt.s, tt.max); got != tt.want {
+			t.Errorf("Truncate(%q, %d) = %q, want %q", tt.s, tt.max, got, tt.want)
 		}
 	}
 }
@@ -997,12 +999,17 @@ func TestPrintFull_WithBlastRadius(t *testing.T) {
 		TotalResources: 2,
 		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
 		Score:          scoring.Score{OverallScore: 8.0},
-		BlastRadius:    "Blast radius: 3 resources affected",
+		BlastRadius: &blast.BlastResult{
+			Impacts: []blast.Impact{
+				{Resource: "aws_instance.web", Action: "create", TotalAffected: 3, RiskLevel: "high"},
+			},
+			Summary: "3 resources affected",
+		},
 		SeverityCounts: map[string]int{},
 	}
 	out := captureStdout(t, func() { w.PrintSummary(result) })
 
-	if !strings.Contains(out, "Blast radius: 3 resources affected") {
+	if !strings.Contains(out, "3 resources affected") {
 		t.Error("expected blast radius in output")
 	}
 }

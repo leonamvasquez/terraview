@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const openaiName = "openai"
@@ -185,7 +186,7 @@ func (o *openaiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("openai returned status %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+		return nil, "", fmt.Errorf("openai returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
 	}
 
 	var chatResp chatResponse

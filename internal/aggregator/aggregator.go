@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/explain"
 	"github.com/leonamvasquez/terraview/internal/meta"
 	"github.com/leonamvasquez/terraview/internal/rules"
@@ -29,7 +30,7 @@ type ReviewResult struct {
 	Summary        string               `json:"summary,omitempty"`
 	Explanation    *explain.Explanation `json:"explanation,omitempty"`
 	Diagram        string               `json:"diagram,omitempty"`
-	BlastRadius    interface{}          `json:"blast_radius,omitempty"`
+	BlastRadius    *blast.BlastResult   `json:"blast_radius,omitempty"`
 	MetaAnalysis   *meta.MetaResult     `json:"meta_analysis,omitempty"`
 	SeverityCounts map[string]int       `json:"severity_counts"`
 	CategoryCounts map[string]int       `json:"category_counts"`

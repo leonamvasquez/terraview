@@ -244,8 +244,8 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 		effectiveProvider = aiProvider
 	}
 	effectiveModel := cfg.LLM.Model
-	if ollamaModel != "" {
-		effectiveModel = ollamaModel
+	if aiModel != "" {
+		effectiveModel = aiModel
 	}
 	effectiveURL := cfg.LLM.URL
 	if effectiveProvider != "ollama" {
@@ -256,7 +256,7 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 	// Graceful degradation: if no provider is available, run scanner-only silently.
 	effectiveAI := !staticOnly
 	if effectiveAI {
-		if !canResolveAIProvider(cfg) && aiProvider == "" && ollamaModel == "" {
+		if !canResolveAIProvider(cfg) && aiProvider == "" && aiModel == "" {
 			logVerbose("No AI provider configured — running in static mode (scanner only)")
 			effectiveAI = false
 		}
@@ -511,10 +511,8 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 
 	// Print impact analysis if generated
 	if impactFlag && result.BlastRadius != nil {
-		if br, ok := result.BlastRadius.(*blast.BlastResult); ok {
-			fmt.Println()
-			fmt.Print(br.FormatPretty())
-		}
+		fmt.Println()
+		fmt.Print(result.BlastRadius.FormatPretty())
 	}
 
 	// Apply strict mode: HIGH becomes exit code 2

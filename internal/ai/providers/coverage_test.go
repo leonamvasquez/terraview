@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 // shortCtx returns a context with a short timeout to prevent retry-backoff delays
@@ -542,25 +543,25 @@ func TestOpenRouter_Analyze_OK(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// truncate (ollama.go)
+// truncate (util/strings.go)
 // ---------------------------------------------------------------------------
 
 func TestTruncate_Short(t *testing.T) {
-	got := truncate("hello", 10)
+	got := util.Truncate("hello", 10)
 	if got != "hello" {
 		t.Errorf("got %q, want %q", got, "hello")
 	}
 }
 
 func TestTruncate_Exact(t *testing.T) {
-	got := truncate("12345", 5)
+	got := util.Truncate("12345", 5)
 	if got != "12345" {
 		t.Errorf("got %q, want %q", got, "12345")
 	}
 }
 
 func TestTruncate_Long(t *testing.T) {
-	got := truncate("hello world this is long", 5)
+	got := util.Truncate("hello world this is long", 8)
 	if got != "hello..." {
 		t.Errorf("got %q, want %q", got, "hello...")
 	}

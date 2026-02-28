@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 // Format constants for output mode.
@@ -195,7 +196,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 
 	// Blast Radius
 	if result.BlastRadius != nil {
-		fmt.Println(result.BlastRadius)
+		fmt.Print(result.BlastRadius.FormatPretty())
 		fmt.Println()
 	}
 
@@ -215,18 +216,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 			if count, ok := result.SeverityCounts[sev]; ok && count > 0 {
 				label := sev
 				if br {
-					switch sev {
-					case "CRITICAL":
-						label = "CRÍTICO"
-					case "HIGH":
-						label = "ALTO"
-					case "MEDIUM":
-						label = "MÉDIO"
-					case "LOW":
-						label = "BAIXO"
-					case "INFO":
-						label = "INFO"
-					}
+					label = sevBR(sev)
 				}
 				fmt.Println(SevCountLine(sev, label, count))
 			}
@@ -260,7 +250,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 				if br {
 					sevLabel = sevBR(f.Severity)
 				}
-				fmt.Printf("    [%s] %s\n", SevColor(sevLabel), truncate(f.Message, 80))
+				fmt.Printf("    [%s] %s\n", SevColor(sevLabel), util.Truncate(f.Message, 80))
 				fmt.Printf("           %s\n", Resource(f.Resource))
 			}
 			fmt.Println()
@@ -601,12 +591,7 @@ func findingsPerResource(findings, resources int) int {
 	return findings / resources
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
-}
+
 
 func scoreEmoji(score float64) string {
 	switch {

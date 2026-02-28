@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const deepseekName = "deepseek"
@@ -211,7 +212,7 @@ func (d *deepseekProvider) doRequest(ctx context.Context, systemPrompt, userProm
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("deepseek returned status %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+		return nil, "", fmt.Errorf("deepseek returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
 	}
 
 	var chatResp chatResponse

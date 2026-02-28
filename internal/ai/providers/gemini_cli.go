@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const geminiCLIName = "gemini-cli"
@@ -128,7 +129,7 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 		if execCtx.Err() != nil {
 			return nil, "", fmt.Errorf("%w: gemini CLI timed out after %ds", ai.ErrProviderTimeout, g.cfg.TimeoutSecs)
 		}
-		return nil, "", fmt.Errorf("gemini CLI failed: %w — stderr: %s", err, truncate(strings.TrimSpace(stderr.String()), 300))
+		return nil, "", fmt.Errorf("gemini CLI failed: %w — stderr: %s", err, util.Truncate(strings.TrimSpace(stderr.String()), 300))
 	}
 
 	output := stdout.String()

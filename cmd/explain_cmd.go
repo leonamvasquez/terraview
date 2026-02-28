@@ -102,8 +102,8 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	effectiveModel := cfg.LLM.Model
-	if ollamaModel != "" {
-		effectiveModel = ollamaModel
+	if aiModel != "" {
+		effectiveModel = aiModel
 	}
 
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
