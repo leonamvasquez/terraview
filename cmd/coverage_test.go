@@ -1219,11 +1219,10 @@ func TestApplyTemplateToCmds_MultipleSubcommands(t *testing.T) {
 }
 
 // ===========================================================================
-// runSetupEN — integration test (captures stdout)
+// runSetup — integration test (captures stdout)
 // ===========================================================================
 
 func TestRunSetupEN(t *testing.T) {
-	// Save and restore package-level state
 	oldWorkDir := workDir
 	oldLookPath := execLookPath
 	oldBR := brFlag
@@ -1236,21 +1235,19 @@ func TestRunSetupEN(t *testing.T) {
 	workDir = t.TempDir()
 	brFlag = false
 
-	// Mock execLookPath: simulate ollama not installed
 	execLookPath = func(name string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
 	var runErr error
 	out := captureStdout(func() {
-		runErr = runSetupEN()
+		runErr = runSetup(nil, nil)
 	})
 
 	if runErr != nil {
-		t.Fatalf("runSetupEN error: %v", runErr)
+		t.Fatalf("runSetup EN error: %v", runErr)
 	}
 
-	// Check key sections are present
 	for _, want := range []string{"Security Scanners", "AI Provider", "Quick Start"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing section %q in output", want)
@@ -1270,6 +1267,8 @@ func TestRunSetupBR(t *testing.T) {
 
 	workDir = t.TempDir()
 	brFlag = true
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("")
 
 	execLookPath = func(name string) (string, error) {
 		return "", fmt.Errorf("not found")
@@ -1277,11 +1276,11 @@ func TestRunSetupBR(t *testing.T) {
 
 	var runErr error
 	out := captureStdout(func() {
-		runErr = runSetupBR()
+		runErr = runSetup(nil, nil)
 	})
 
 	if runErr != nil {
-		t.Fatalf("runSetupBR error: %v", runErr)
+		t.Fatalf("runSetup BR error: %v", runErr)
 	}
 
 	for _, want := range []string{"Scanners de Segurança", "Provider de IA", "Início Rápido"} {
@@ -1294,14 +1293,16 @@ func TestRunSetupBR(t *testing.T) {
 func TestRunSetupEN_WithOllama(t *testing.T) {
 	oldWorkDir := workDir
 	oldLookPath := execLookPath
+	oldBR := brFlag
 	defer func() {
 		workDir = oldWorkDir
 		execLookPath = oldLookPath
+		brFlag = oldBR
 	}()
 
 	workDir = t.TempDir()
+	brFlag = false
 
-	// Simulate ollama installed
 	execLookPath = func(name string) (string, error) {
 		if name == "ollama" {
 			return "/usr/local/bin/ollama", nil
@@ -1311,7 +1312,7 @@ func TestRunSetupEN_WithOllama(t *testing.T) {
 
 	var runErr error
 	out := captureStdout(func() {
-		runErr = runSetupEN()
+		runErr = runSetup(nil, nil)
 	})
 
 	if runErr != nil {
@@ -1340,7 +1341,7 @@ func TestRunSetup_Dispatch(t *testing.T) {
 
 	brFlag = false
 	var err error
-	discardStdout(func() {
+	captureStdout(func() {
 		err = runSetup(nil, nil)
 	})
 	if err != nil {
@@ -1349,7 +1350,7 @@ func TestRunSetup_Dispatch(t *testing.T) {
 
 	// Test BR dispatch
 	brFlag = true
-	discardStdout(func() {
+	captureStdout(func() {
 		err = runSetup(nil, nil)
 	})
 	if err != nil {
@@ -1366,7 +1367,7 @@ func TestRunAIUse_Ollama(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var err error
-	discardStdout(func() {
+	captureStdout(func() {
 		err = runAIUse(nil, []string{"ollama"})
 	})
 
@@ -1385,7 +1386,7 @@ func TestRunAIUse_WithModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var err error
-	discardStdout(func() {
+	captureStdout(func() {
 		err = runAIUse(nil, []string{"ollama", "llama3:8b"})
 	})
 
@@ -1466,7 +1467,7 @@ func TestRunDiagram_WithFixture(t *testing.T) {
 	workDir = tmpDir
 
 	var runErr error
-	discardStdout(func() {
+	captureStdout(func() {
 		runErr = runDiagram(nil, nil)
 	})
 
@@ -1534,7 +1535,7 @@ func TestRunDrift_WithFixture(t *testing.T) {
 	driftIntelligenceFlag = false
 
 	var runErr error
-	discardStdout(func() {
+	captureStdout(func() {
 		runErr = runDrift(nil, nil)
 	})
 
@@ -1578,7 +1579,7 @@ func TestRunDrift_WithIntelligence(t *testing.T) {
 	driftIntelligenceFlag = true
 
 	var runErr error
-	discardStdout(func() {
+	captureStdout(func() {
 		runErr = runDrift(nil, nil)
 	})
 
@@ -1666,7 +1667,7 @@ func TestRunDrift_JSONFormat(t *testing.T) {
 	driftIntelligenceFlag = false
 
 	var runErr error
-	discardStdout(func() {
+	captureStdout(func() {
 		runErr = runDrift(nil, nil)
 	})
 
@@ -1828,8 +1829,8 @@ func TestRenderFilterList_Empty(t *testing.T) {
 	if lines < 5 {
 		t.Errorf("renderFilterList empty returned %d lines", lines)
 	}
-	if !strings.Contains(out, "nenhum resultado") {
-		t.Error("empty filter should show 'nenhum resultado'")
+	if !strings.Contains(out, "no results") {
+		t.Error("empty filter should show 'no results'")
 	}
 }
 
@@ -2040,7 +2041,7 @@ func TestRunAICurrent_NoConfig(t *testing.T) {
 	workDir = t.TempDir() // no config file
 
 	var err error
-	discardStdout(func() {
+	captureStdout(func() {
 		err = runAICurrent(nil, nil)
 	})
 

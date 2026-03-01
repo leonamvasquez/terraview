@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
-	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/topology"
+	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +60,6 @@ type ComponentExpl struct {
 }
 
 func runExplainCmd(cmd *cobra.Command, args []string) error {
-	// Load config
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
@@ -75,7 +74,6 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		resolvedPlan = generated
 	}
 
-	// Parse plan
 	p := parser.NewParser()
 	plan, err := p.ParseFile(resolvedPlan)
 	if err != nil {
@@ -89,42 +87,41 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Build topology
 	topoGraph := topology.BuildGraph(resources)
 
 	// Resolve AI provider
 	effectiveProvider := cfg.LLM.Provider
-	if aiProvider != "" {
-		effectiveProvider = aiProvider
+	if activeProvider != "" {
+		effectiveProvider = activeProvider
 	}
 	if effectiveProvider == "" {
-		return fmt.Errorf("AI provider required. Use --provider or configure in .terraview.yaml")
+		return fmt.Errorf("ai provider required: use --provider or configure in .terraview.yaml")
 	}
 
 	effectiveModel := cfg.LLM.Model
-	if aiModel != "" {
-		effectiveModel = aiModel
+	if activeModel != "" {
+		effectiveModel = activeModel
 	}
 
 	effectiveTimeout := cfg.LLM.TimeoutSeconds
 	if effectiveTimeout == 0 {
-		effectiveTimeout = 120
+		effectiveTimeout = util.DefaultTimeoutSeconds
 	}
 
 	// Create AI provider
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+30)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+util.ContextTimeoutGraceSecs)*time.Second)
 	defer cancel()
 
 	// When the provider is not ollama and no explicit URL was set, clear the
 	// default Ollama URL so each provider falls back to its own base URL.
 	explainURL := cfg.LLM.URL
-	if effectiveProvider != "ollama" && explainURL == "http://localhost:11434" {
+	if effectiveProvider != "ollama" && explainURL == util.DefaultOllamaURL {
 		explainURL = ""
 	}
 
 	effectiveTemp := cfg.LLM.Temperature
 	if effectiveTemp == 0 {
-		effectiveTemp = 0.3
+		effectiveTemp = util.DefaultExplainTemperature
 	}
 
 	providerCfg := ai.ProviderConfig{
@@ -133,16 +130,15 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		BaseURL:     explainURL,
 		Temperature: effectiveTemp,
 		TimeoutSecs: effectiveTimeout,
-		MaxTokens:   8192,
+		MaxTokens:   util.DefaultExplainMaxTokens,
 		MaxRetries:  2,
 	}
 
 	provider, err := ai.NewProvider(ctx, effectiveProvider, providerCfg)
 	if err != nil {
-		return fmt.Errorf("AI provider error: %w", err)
+		return fmt.Errorf("ai provider error: %w", err)
 	}
 
-	// Build explain prompt
 	prompt := buildInfraExplainPrompt(resources, topoGraph)
 	if brFlag {
 		prompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text, descriptions, and explanations must be in Portuguese.\n"
@@ -166,13 +162,11 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	completion, err := provider.Analyze(ctx, req)
 	explainSpinner.Stop(err == nil)
 	if err != nil {
-		return fmt.Errorf("AI analysis failed: %w", err)
+		return fmt.Errorf("ai analysis failed: %w", err)
 	}
 
-	// Parse response
 	explanation := parseInfraExplanation(completion.Summary)
 
-	// Output
 	resolvedOutput := outputDir
 	if resolvedOutput == "" {
 		resolvedOutput = workDir

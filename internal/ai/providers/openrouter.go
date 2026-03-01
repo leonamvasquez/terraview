@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const openrouterName = "openrouter"
@@ -103,7 +104,7 @@ func (o *openrouterProvider) Validate(ctx context.Context) error {
 	}
 	o.setHeaders(httpReq)
 
-	healthClient := &http.Client{Timeout: 15 * time.Second}
+	healthClient := &http.Client{Timeout: util.HealthCheckTimeout}
 	resp, err := healthClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("openrouter API is not reachable: %w", err)
@@ -125,33 +126,9 @@ func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= o.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(openrouterName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := o.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    o.cfg.Model,
-			Provider: openrouterName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(openrouterName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", o.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, o.cfg, openrouterName, func() ([]rules.Finding, string, error) {
+		return o.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {
@@ -194,9 +171,9 @@ func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPr
 	if resp.StatusCode != http.StatusOK {
 		var errResp chatResponse
 		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != nil {
-			return nil, "", fmt.Errorf("API error %d: %s", resp.StatusCode, errResp.Error.Message)
+			return nil, "", fmt.Errorf("api error %d: %s", resp.StatusCode, errResp.Error.Message)
 		}
-		return nil, "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, "", fmt.Errorf("api error %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var chatResp chatResponse

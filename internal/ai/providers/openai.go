@@ -118,33 +118,9 @@ func (o *openaiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= o.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(openaiName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := o.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    o.cfg.Model,
-			Provider: openaiName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(openaiName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", o.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, o.cfg, openaiName, func() ([]rules.Finding, string, error) {
+		return o.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (o *openaiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

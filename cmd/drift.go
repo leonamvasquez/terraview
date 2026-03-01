@@ -79,13 +79,11 @@ func runDrift(cmd *cobra.Command, args []string) error {
 		logVerbose("Drift intelligence: %d items, risk=%s (%.1f)", len(intelResult.Items), intelResult.RiskLevel, intelResult.OverallRisk)
 	}
 
-	// Output
 	resolvedOutput := outputDir
 	if resolvedOutput == "" {
 		resolvedOutput = workDir
 	}
 
-	// Write JSON
 	driftJSON, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal drift result: %w", err)
@@ -110,13 +108,11 @@ func runDrift(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Resolve format
 	driftFormat := "pretty"
 	if outputFormat != "" {
 		driftFormat = outputFormat
 	}
 
-	// Print summary
 	if driftFormat != "json" {
 		printDriftSummary(result, driftFormat)
 		if intelResult != nil && driftFormat != "compact" {

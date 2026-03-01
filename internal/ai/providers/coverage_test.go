@@ -34,8 +34,8 @@ func TestNewOllama_Defaults(t *testing.T) {
 	if o.cfg.BaseURL != "http://localhost:11434" {
 		t.Errorf("BaseURL = %q, want default", o.cfg.BaseURL)
 	}
-	if o.cfg.Model != "qwen3.5" {
-		t.Errorf("Model = %q, want qwen3.5", o.cfg.Model)
+	if o.cfg.Model != "llama3.1:8b" {
+		t.Errorf("Model = %q, want llama3.1:8b", o.cfg.Model)
 	}
 	if o.cfg.MaxTokens != 2048 {
 		t.Errorf("MaxTokens = %d, want 2048", o.cfg.MaxTokens)
@@ -603,27 +603,6 @@ func TestAllProviders_Registered(t *testing.T) {
 }
 
 // GeminiCLI_Defaults and GeminiCLI_Name are tested in gemini_cli_test.go
-
-// ---------------------------------------------------------------------------
-// tryExtractGeminiJSON
-// ---------------------------------------------------------------------------
-
-func TestTryExtractGeminiJSON_PlainJSON(t *testing.T) {
-	input := `{"result":"hello from gemini"}`
-	got := tryExtractGeminiJSON(input)
-	// plain JSON without gemini envelope structure stays as-is
-	if got != input {
-		t.Errorf("got %q, want original", got)
-	}
-}
-
-func TestTryExtractGeminiJSON_NonJSON(t *testing.T) {
-	input := "just plain text"
-	got := tryExtractGeminiJSON(input)
-	if got != input {
-		t.Errorf("got %q, want original", got)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // buildSystemPrompt - with Cost and Compliance sections

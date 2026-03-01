@@ -70,7 +70,10 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// If no scanner specified, try auto-select (same as scan command)
 	if scannerName == "" {
-		cfg, _ := config.Load(workDir)
+		cfg, err := config.Load(workDir)
+		if err != nil {
+			return fmt.Errorf("config error: %w", err)
+		}
 		resolved, _ := scanner.ResolveDefault(cfg.Scanner.Default)
 		if resolved != nil {
 			scannerName = resolved.Name()

@@ -24,6 +24,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
+	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/topology"
@@ -242,12 +243,12 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 
 	// Resolve effective AI config: CLI flags > config > defaults
 	effectiveProvider := cfg.LLM.Provider
-	if aiProvider != "" {
-		effectiveProvider = aiProvider
+	if activeProvider != "" {
+		effectiveProvider = activeProvider
 	}
 	effectiveModel := cfg.LLM.Model
-	if aiModel != "" {
-		effectiveModel = aiModel
+	if activeModel != "" {
+		effectiveModel = activeModel
 	}
 	effectiveURL := cfg.LLM.URL
 	if effectiveProvider != "ollama" {
@@ -258,7 +259,7 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 	// Graceful degradation: if no provider is available, run scanner-only silently.
 	effectiveAI := !staticOnly
 	if effectiveAI {
-		if !canResolveAIProvider(cfg) && aiProvider == "" && aiModel == "" {
+		if !canResolveAIProvider(cfg) && activeProvider == "" && activeModel == "" {
 			logVerbose("No AI provider configured — running in static mode (scanner only)")
 			effectiveAI = false
 		}
@@ -371,7 +372,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 		}()
 	} else {
 		contextCh <- contextOutput{}
-		logVerbose("AI contextual analysis disabled (--static)")
+		logVerbose("AI contextual analysis disabled (no provider configured or --static)")
 	}
 
 	// Collect scanner results
@@ -565,7 +566,7 @@ func runCodeContextAnalysis(
 	}
 
 	// Create cancellable context
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSecs+30)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSecs+util.ContextTimeoutGraceSecs)*time.Second)
 	defer cancel()
 
 	// Start resource monitor for Ollama
@@ -575,14 +576,13 @@ func runCodeContextAnalysis(
 		monitor.Start(ctx)
 	}
 
-	// Create provider
 	providerCfg := ai.ProviderConfig{
 		Model:        model,
 		APIKey:       apiKey,
 		BaseURL:      url,
 		Temperature:  temp,
 		TimeoutSecs:  timeoutSecs,
-		MaxTokens:    4096,
+		MaxTokens:    util.DefaultAnalyzeMaxTokens,
 		MaxRetries:   2,
 		MaxResources: maxResources,
 		NumCtx:       numCtx,
@@ -596,10 +596,9 @@ func runCodeContextAnalysis(
 		if ollamaCleanup != nil {
 			ollamaCleanup()
 		}
-		return nil, "", fmt.Errorf("AI provider %s: %w", providerName, err)
+		return nil, "", fmt.Errorf("ai provider %s: %w", providerName, err)
 	}
 
-	// Run context analysis
 	lang := ""
 	if brFlag {
 		lang = "pt-BR"

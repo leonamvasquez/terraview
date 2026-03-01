@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,6 +41,43 @@ func backoffWithJitter(attempt int) time.Duration {
 		result = 100 * time.Millisecond
 	}
 	return result
+}
+
+// retryAnalyze executes fn with exponential backoff, retrying on transient errors.
+// It encapsulates the retry loop shared by all HTTP-based providers.
+func retryAnalyze(
+	ctx context.Context,
+	cfg ai.ProviderConfig,
+	providerName string,
+	fn func() ([]rules.Finding, string, error),
+) (ai.Completion, error) {
+	var lastErr error
+	for attempt := 0; attempt <= cfg.MaxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := backoffWithJitter(attempt)
+			select {
+			case <-ctx.Done():
+				return ai.Completion{}, ai.NewProviderError(providerName, "analyze", ctx.Err())
+			case <-time.After(backoff):
+			}
+		}
+
+		findings, summary, err := fn()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		return ai.Completion{
+			Findings: findings,
+			Summary:  summary,
+			Model:    cfg.Model,
+			Provider: providerName,
+		}, nil
+	}
+
+	return ai.Completion{}, ai.NewProviderError(providerName, "analyze",
+		fmt.Errorf("failed after %d attempts: %w", cfg.MaxRetries+1, lastErr))
 }
 
 // llmFinding is the expected JSON shape from any LLM provider.

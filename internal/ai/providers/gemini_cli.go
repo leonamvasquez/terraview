@@ -3,7 +3,6 @@ package providers
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -139,27 +138,4 @@ func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.
 
 	// Try to parse as JSON directly or extract from markdown
 	return parseResponse(output, geminiCLIName)
-}
-
-// geminiCLIResponse is used when Gemini CLI returns structured JSON.
-type geminiCLIResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
-// tryExtractGeminiJSON extracts the text from a Gemini CLI JSON response.
-func tryExtractGeminiJSON(raw string) string {
-	var resp geminiCLIResponse
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return raw
-	}
-	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
-		return resp.Candidates[0].Content.Parts[0].Text
-	}
-	return raw
 }

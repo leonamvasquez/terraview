@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
+	"github.com/leonamvasquez/terraview/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -127,7 +129,7 @@ func DefaultConfig() Config {
 			Enabled:        true,
 			Provider:       "ollama",
 			Model:          "llama3.1:8b",
-			URL:            "http://localhost:11434",
+			URL:            util.DefaultOllamaURL,
 			TimeoutSeconds: 120,
 			Temperature:    0.2,
 			Ollama: OllamaConfig{
@@ -196,7 +198,11 @@ func Load(workDir string) (Config, error) {
 
 	// Warn if api_key is embedded in the config file (risk of committing secrets).
 	if cfg.LLM.APIKey != "" {
-		fmt.Fprintln(os.Stderr, "AVISO: api_key detectada no arquivo de config. Evite commitar .terraview.yaml. Prefira a variável de ambiente correspondente.")
+		msg := "WARNING: api_key detected in config file. Avoid committing .terraview.yaml. Prefer the corresponding environment variable."
+		if i18n.IsBR() {
+			msg = "AVISO: api_key detectada no arquivo de config. Evite commitar .terraview.yaml. Prefira a variável de ambiente correspondente."
+		}
+		fmt.Fprintln(os.Stderr, msg)
 	}
 
 	return cfg, nil
@@ -242,8 +248,11 @@ type fileSeverityWeights struct {
 }
 
 type fileRulesConfig struct {
-	RequiredTags *[]string `yaml:"required_tags"`
-	RulePacks    *[]string `yaml:"rule_packs"`
+	RequiredTags  *[]string `yaml:"required_tags"`
+	RulePacks     *[]string `yaml:"rule_packs"`
+	StrictMode    *bool     `yaml:"strict_mode,omitempty"`
+	DisabledRules *[]string `yaml:"disabled_rules,omitempty"`
+	EnabledRules  *[]string `yaml:"enabled_rules,omitempty"`
 }
 
 type fileOutputConfig struct {
@@ -380,6 +389,15 @@ func (f *fileConfig) merge(defaults Config) Config {
 		}
 		if f.Rules.RulePacks != nil {
 			cfg.Rules.RulePacks = *f.Rules.RulePacks
+		}
+		if f.Rules.StrictMode != nil {
+			cfg.Rules.StrictMode = f.Rules.StrictMode
+		}
+		if f.Rules.DisabledRules != nil {
+			cfg.Rules.DisabledRules = *f.Rules.DisabledRules
+		}
+		if f.Rules.EnabledRules != nil {
+			cfg.Rules.EnabledRules = *f.Rules.EnabledRules
 		}
 	}
 

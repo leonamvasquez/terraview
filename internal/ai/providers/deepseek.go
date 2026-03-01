@@ -144,33 +144,9 @@ func (d *deepseekProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comple
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= d.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(deepseekName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := d.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    d.cfg.Model,
-			Provider: deepseekName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(deepseekName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", d.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, d.cfg, deepseekName, func() ([]rules.Finding, string, error) {
+		return d.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (d *deepseekProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

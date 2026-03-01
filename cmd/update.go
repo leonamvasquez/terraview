@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/leonamvasquez/terraview/internal/output"
+	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -165,7 +165,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: util.HealthCheckTimeout}
 
 	req, err := http.NewRequest("GET", githubAPIURL, nil)
 	if err != nil {
@@ -184,7 +184,7 @@ func fetchLatestRelease() (*githubRelease, error) {
 		return nil, fmt.Errorf("no releases found for %s", githubRepo)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("github API returned status %d", resp.StatusCode)
 	}
 
 	var release githubRelease
@@ -210,9 +210,9 @@ func findAssetURL(release *githubRelease, name string) string {
 
 func downloadFile(url, dest string) error {
 	client := &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout: util.DefaultRequestTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
+			if len(via) >= util.MaxHTTPRedirects {
 				return fmt.Errorf("too many redirects")
 			}
 			return nil

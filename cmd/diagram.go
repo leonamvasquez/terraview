@@ -42,7 +42,6 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 		resolvedPlan = generated
 	}
 
-	// Parse plan
 	p := parser.NewParser()
 	plan, err := p.ParseFile(resolvedPlan)
 	if err != nil {
@@ -57,12 +56,10 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Build topology and generate diagram
 	topoGraph := topology.BuildGraph(resources)
 	gen := diagram.NewGenerator()
 	result := gen.GenerateWithGraph(resources, topoGraph)
 
-	// Output
 	fmt.Println(result)
 
 	// Write to file if output dir specified

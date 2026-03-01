@@ -295,7 +295,7 @@ func renderFilterList(title string, filtered []selectItem, query string, cursor 
 	rawPrint("\n")
 	lines++
 	if len(filtered) == 0 {
-		rawPrint(ansiDim + "  (nenhum resultado — Enter para usar o texto digitado)" + ansiReset + "\n")
+		rawPrint(ansiDim + "  " + pick("(no results — Enter to use typed text)", "(nenhum resultado — Enter para usar o texto digitado)") + ansiReset + "\n")
 		lines++
 	} else {
 		for i, item := range filtered {

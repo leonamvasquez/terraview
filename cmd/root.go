@@ -22,8 +22,8 @@ var (
 	planFile       string
 	outputDir      string
 	outputFormat   string
-	aiProvider     string
-	aiModel    string
+	activeProvider     string
+	activeModel    string
 	terragruntFlag bool   // --terragrunt: use terragrunt instead of terraform
 	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config
 )
@@ -82,8 +82,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
 	rootCmd.PersistentFlags().StringVarP(&outputDir, "output", "o", "", "Output directory for generated files")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif (default pretty)")
-	rootCmd.PersistentFlags().StringVar(&aiProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
-	rootCmd.PersistentFlags().StringVar(&aiModel, "model", "", "AI model to use")
+	rootCmd.PersistentFlags().StringVar(&activeProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
+	rootCmd.PersistentFlags().StringVar(&activeModel, "model", "", "AI model to use")
 	rootCmd.PersistentFlags().BoolVar(&terragruntFlag, "terragrunt", false, "Use Terragrunt instead of Terraform for plan generation")
 	rootCmd.PersistentFlags().StringVar(&tgConfigFile, "tg-config", "", "Path to custom terragrunt.hcl config file (implies --terragrunt)")
 
@@ -266,9 +266,9 @@ Subcomandos:
 	aiUseCmd.Long = `Define o provider padrão globalmente sem modo interativo.
 
 Exemplos:
-  terraview ai use gemini
-  terraview ai use openrouter google/gemini-2.0-flash-001
-  terraview ai use ollama llama3.1:8b`
+  terraview provider use gemini
+  terraview provider use openrouter google/gemini-2.0-flash-001
+  terraview provider use ollama llama3.1:8b`
 	aiCurrentCmd.Short = "Exibir o provider de IA atualmente configurado"
 	aiTestCmd.Short = "Testar conectividade com o provider de IA configurado"
 

@@ -22,7 +22,7 @@ func init() {
 	ai.Register(ollamaName, NewOllama, ai.ProviderInfo{
 		DisplayName:  "Ollama (Local)",
 		RequiresKey:  false,
-		DefaultModel: "qwen3.5",
+		DefaultModel: "llama3.1:8b",
 		SuggestedModels: []string{
 			"olmo2:7b",
 			"olmo2:13b",
@@ -61,10 +61,10 @@ type ollamaResponse struct {
 // NewOllama creates a new Ollama provider.
 func NewOllama(cfg ai.ProviderConfig) (ai.Provider, error) {
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "http://localhost:11434"
+		cfg.BaseURL = util.DefaultOllamaURL
 	}
 	if cfg.Model == "" {
-		cfg.Model = "qwen3.5"
+		cfg.Model = "llama3.1:8b" // aligned with config.DefaultConfig()
 	}
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 2048
@@ -114,33 +114,9 @@ func (o *ollamaProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= o.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(ollamaName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := o.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    o.cfg.Model,
-			Provider: ollamaName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(ollamaName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", o.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, o.cfg, ollamaName, func() ([]rules.Finding, string, error) {
+		return o.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

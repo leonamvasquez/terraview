@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const (
@@ -327,7 +329,7 @@ func (inst *Installer) validate(ctx context.Context) error {
 	inst.log("\nValidating installation...")
 
 	healthClient := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", util.DefaultOllamaURL+"/api/tags", nil)
 	if err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}

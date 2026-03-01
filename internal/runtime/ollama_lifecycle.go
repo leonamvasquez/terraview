@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonamvasquez/terraview/internal/installer"
 	"github.com/leonamvasquez/terraview/internal/output"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const (
@@ -29,7 +30,7 @@ type OllamaLifecycle struct {
 // NewOllamaLifecycle creates a new lifecycle manager.
 func NewOllamaLifecycle(limits ResourceLimits, baseURL string) *OllamaLifecycle {
 	if baseURL == "" {
-		baseURL = "http://localhost:11434"
+		baseURL = util.DefaultOllamaURL
 	}
 	return &OllamaLifecycle{
 		limits:  limits,

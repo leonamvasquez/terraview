@@ -29,7 +29,10 @@ var scannersListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, _ := platform.Detect()
 		cache := bininstaller.LoadCache()
-		cfg, _ := config.Load(workDir)
+		cfg, err := config.Load(workDir)
+		if err != nil {
+			return fmt.Errorf("config error: %w", err)
+		}
 
 		if brFlag {
 			fmt.Printf("  Plataforma: %s\n\n", p.String())
@@ -246,7 +249,10 @@ Examples:
   tv scanners default tfsec        # set tfsec as default`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, _ := config.Load(workDir)
+		cfg, err := config.Load(workDir)
+		if err != nil {
+			return fmt.Errorf("config error: %w", err)
+		}
 
 		// Show current default
 		if len(args) == 0 {

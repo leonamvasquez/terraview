@@ -131,33 +131,9 @@ func (c *claudeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= c.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(claudeName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := c.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    c.cfg.Model,
-			Provider: claudeName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(claudeName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", c.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, c.cfg, claudeName, func() ([]rules.Finding, string, error) {
+		return c.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (c *claudeProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

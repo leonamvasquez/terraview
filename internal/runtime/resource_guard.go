@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 // ResourceLimits defines configurable resource constraints.
@@ -159,7 +161,7 @@ func measureWindows(res *SystemResources) error {
 // parseDarwinFreeMemory extracts free + inactive pages from vm_stat output.
 func parseDarwinFreeMemory(vmstat string) int {
 	var freePages, inactivePages int64
-	pageSize := int64(16384) // Apple Silicon default
+	pageSize := int64(util.DefaultAppleSiliconPageSize)
 
 	for _, line := range strings.Split(vmstat, "\n") {
 		if strings.HasPrefix(line, "Mach Virtual Memory Statistics") {

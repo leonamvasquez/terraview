@@ -7,13 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
-	_ "github.com/leonamvasquez/terraview/internal/ai/providers" // register all providers
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
+	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -87,7 +86,10 @@ func runAIList(cmd *cobra.Command, args []string) error {
 	providers := ai.List()
 
 	// Load current config to mark the active provider
-	cfg, _ := config.Load(workDir)
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return fmt.Errorf("config error: %w", err)
+	}
 	currentProvider := cfg.LLM.Provider
 	currentModel := cfg.LLM.Model
 
@@ -146,7 +148,7 @@ func runAIList(cmd *cobra.Command, args []string) error {
 
 		// ── Step 3: Test connectivity ──────────────────────────────────────
 		effectiveURL := cfg.LLM.URL
-		if chosenProvider != "ollama" && effectiveURL == "http://localhost:11434" {
+		if chosenProvider != "ollama" && effectiveURL == util.DefaultOllamaURL {
 			effectiveURL = ""
 		}
 
@@ -155,7 +157,7 @@ func runAIList(cmd *cobra.Command, args []string) error {
 			APIKey:      cfg.LLM.APIKey,
 			BaseURL:     effectiveURL,
 			Temperature: cfg.LLM.Temperature,
-			TimeoutSecs: 20,
+			TimeoutSecs: int(util.ValidationTimeout.Seconds()),
 			MaxTokens:   64,
 			MaxRetries:  0,
 		}
@@ -170,7 +172,7 @@ func runAIList(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			testCtx, testCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			testCtx, testCancel := context.WithTimeout(context.Background(), util.ValidationTimeout)
 			defer testCancel()
 			return testProvider.Validate(testCtx)
 		})
@@ -303,7 +305,7 @@ func runAIUse(cmd *cobra.Command, args []string) error {
 func runAICurrent(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(workDir)
 	if err != nil {
-		return fmt.Errorf("erro ao ler config: %w", err)
+		return fmt.Errorf(pick("error reading config: %w", "erro ao ler config: %w"), err)
 	}
 
 	globalPath := config.GlobalConfigPath()
@@ -354,7 +356,7 @@ func runAITest(cmd *cobra.Command, args []string) error {
 	}
 
 	effectiveURL := cfg.LLM.URL
-	if providerName != "ollama" && effectiveURL == "http://localhost:11434" {
+	if providerName != "ollama" && effectiveURL == util.DefaultOllamaURL {
 		effectiveURL = ""
 	}
 
@@ -364,7 +366,7 @@ func runAITest(cmd *cobra.Command, args []string) error {
 		BaseURL:     effectiveURL,
 		Temperature: cfg.LLM.Temperature,
 		TimeoutSecs: cfg.LLM.TimeoutSeconds,
-		MaxTokens:   4096,
+		MaxTokens:   util.DefaultAnalyzeMaxTokens,
 		MaxRetries:  1,
 	}
 
@@ -378,7 +380,7 @@ func runAITest(cmd *cobra.Command, args []string) error {
 		if createErr != nil {
 			return createErr
 		}
-		testCtx, testCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		testCtx, testCancel := context.WithTimeout(context.Background(), util.ValidationTimeout)
 		defer testCancel()
 		return testProvider.Validate(testCtx)
 	})
@@ -389,7 +391,6 @@ func runAITest(cmd *cobra.Command, args []string) error {
 		return errors.New(pick("provider test failed", "teste do provider falhou"))
 	}
 
-	// Show integration result
 	if providerInfo.CLIBinary != "" {
 		fmt.Printf("\n%s✓%s  "+pick(
 			"Integration test passed — %q CLI is installed and ready.",

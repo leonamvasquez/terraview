@@ -136,33 +136,9 @@ func (g *geminiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 
 	systemPrompt := buildSystemPrompt(r.Prompts)
 
-	var lastErr error
-	for attempt := 0; attempt <= g.cfg.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := backoffWithJitter(attempt)
-			select {
-			case <-ctx.Done():
-				return ai.Completion{}, ai.NewProviderError(geminiName, "analyze", ctx.Err())
-			case <-time.After(backoff):
-			}
-		}
-
-		findings, summary, err := g.doRequest(ctx, systemPrompt, userPrompt)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return ai.Completion{
-			Findings: findings,
-			Summary:  summary,
-			Model:    g.cfg.Model,
-			Provider: geminiName,
-		}, nil
-	}
-
-	return ai.Completion{}, ai.NewProviderError(geminiName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", g.cfg.MaxRetries+1, lastErr))
+	return retryAnalyze(ctx, g.cfg, geminiName, func() ([]rules.Finding, string, error) {
+		return g.doRequest(ctx, systemPrompt, userPrompt)
+	})
 }
 
 func (g *geminiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

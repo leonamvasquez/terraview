@@ -150,6 +150,33 @@ rules:
 	}
 }
 
+func TestLoad_DisabledRules(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	content := `
+rules:
+  disabled_rules:
+    - AWS_S3_1
+    - CKV_AWS_018
+`
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(content), 0644)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Rules.DisabledRules) != 2 {
+		t.Fatalf("expected 2 disabled rules, got %d", len(cfg.Rules.DisabledRules))
+	}
+	if cfg.Rules.DisabledRules[0] != "AWS_S3_1" {
+		t.Errorf("expected first rule 'AWS_S3_1', got %s", cfg.Rules.DisabledRules[0])
+	}
+	if cfg.Rules.DisabledRules[1] != "CKV_AWS_018" {
+		t.Errorf("expected second rule 'CKV_AWS_018', got %s", cfg.Rules.DisabledRules[1])
+	}
+}
+
 func TestLoad_PartialOverride(t *testing.T) {
 	dir := t.TempDir()
 	content := `

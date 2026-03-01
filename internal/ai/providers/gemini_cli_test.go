@@ -56,34 +56,6 @@ func TestGeminiCLI_Name(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// tryExtractGeminiJSON
-// ---------------------------------------------------------------------------
-
-func TestTryExtractGeminiJSON_ValidEnvelope(t *testing.T) {
-	input := `{"candidates":[{"content":{"parts":[{"text":"hello world"}]}}]}`
-	got := tryExtractGeminiJSON(input)
-	if got != "hello world" {
-		t.Errorf("got %q, want %q", got, "hello world")
-	}
-}
-
-func TestTryExtractGeminiJSON_InvalidJSON(t *testing.T) {
-	input := "plain text response"
-	got := tryExtractGeminiJSON(input)
-	if got != input {
-		t.Errorf("got %q, want original input", got)
-	}
-}
-
-func TestTryExtractGeminiJSON_EmptyCandidates(t *testing.T) {
-	input := `{"candidates":[]}`
-	got := tryExtractGeminiJSON(input)
-	if got != input {
-		t.Errorf("got %q, want original input for empty candidates", got)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 

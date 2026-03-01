@@ -38,25 +38,6 @@ func captureStdout(fn func()) string {
 	return buf.String()
 }
 
-// discardStdout executes fn while discarding all stdout output.
-func discardStdout(fn func()) {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	done := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, r)
-		close(done)
-	}()
-
-	fn()
-
-	w.Close()
-	os.Stdout = old
-	<-done
-}
-
 // ---------------------------------------------------------------------------
 // lastN (ai.go)
 // ---------------------------------------------------------------------------
