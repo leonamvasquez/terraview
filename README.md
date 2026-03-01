@@ -13,6 +13,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/leonamvasquez/terraview)](https://goreportcard.com/report/github.com/leonamvasquez/terraview)
 [![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
 
 O Terraview é uma ferramenta de análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA rodando **em paralelo**.
 
@@ -36,6 +37,7 @@ O terraview roda como binário único sem dependências externas. Quando um prov
 - [Drift](#drift)
 - [Gerenciamento de providers](#gerenciamento-de-providers)
 - [Gerenciamento de scanners](#gerenciamento-de-scanners)
+- [Cache de IA](#cache-de-ia)
 - [Saída e formatos](#saída-e-formatos)
 - [Configuração via arquivo](#configuração-via-arquivo)
 - [Security Scanners](#security-scanners)
@@ -71,6 +73,7 @@ O terraview roda como binário único sem dependências externas. Quando um prov
 - **Bilíngue (en/pt-BR)** — flag `--br` disponível em todos os comandos
 - **Atualização** pelo gerenciador de pacotes (`brew upgrade terraview`, `scoop update terraview`, `apt upgrade terraview`, etc.)
 - **Alias `tv`** — symlink criado na instalação; `tv scan` = `terraview scan`
+- **Cache persistente** de respostas IA em disco — re-execuções com o mesmo plan evitam chamadas repetidas à API (`cache status | clear`)
 - **Instalação cross-platform** dos scanners via `terraview scanners install --all` (Linux, macOS, Windows)
 
 ## Exemplos
@@ -293,6 +296,8 @@ Scanner Management:
               scanners list | install | default
 
 Utilities:
+  cache       Manage the AI response cache
+              cache status | clear
   version     Show version information
   setup       Interactive environment setup
 
@@ -443,6 +448,23 @@ terraview scanners default checkov          # definir scanner padrão
 terraview scanners default                  # exibir scanner padrão atual
 ```
 
+### Cache de IA
+
+O terraview possui cache persistente de respostas IA em disco (`~/.terraview/cache/`). Quando habilitado, re-execuções com o mesmo plan reutilizam a resposta anterior sem chamadas adicionais à API.
+
+```bash
+terraview cache status                      # exibir estatísticas do cache (entradas, tamanho, datas)
+terraview cache clear                       # limpar todo o cache de respostas IA
+```
+
+Habilite no `.terraview.yaml`:
+
+```yaml
+llm:
+  cache: true            # habilitar cache persistente
+  cache_ttl_hours: 24    # TTL em horas (padrão: 24)
+```
+
 ### Outros comandos
 
 ```bash
@@ -492,6 +514,8 @@ llm:
   timeout_seconds: 120          # timeout para chamadas LLM
   temperature: 0.2              # 0.0 a 1.0 (menor = mais determinístico)
   max_resources: 30             # máximo de recursos no prompt IA (padrão: 30)
+  cache: false                  # habilitar cache persistente de respostas IA
+  cache_ttl_hours: 24           # TTL do cache em horas (padrão: 24)
   ollama:
     num_ctx: 4096               # janela de contexto do modelo (padrão: 4096)
     max_threads: 0              # 0 = usar todos os CPUs
@@ -559,18 +583,18 @@ O terraview suporta **8 providers de IA** organizados em três categorias:
 
 | Provider | Variável de ambiente | Modelo padrão | Exemplos de modelos |
 |----------|---------------------|---------------|---------------------|
-| **gemini** | `GEMINI_API_KEY` | gemini-2.5-pro | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash |
-| **claude** | `ANTHROPIC_API_KEY` | claude-sonnet-4-5 | claude-sonnet-4-5, claude-opus-4-5, claude-haiku-4-5 |
-| **openai** | `OPENAI_API_KEY` | gpt-4o | gpt-4o, gpt-4o-mini, o3-mini |
+| **gemini** | `GEMINI_API_KEY` | gemini-2.5-flash | gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash |
+| **claude** | `ANTHROPIC_API_KEY` | claude-haiku-4-5 | claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-6 |
+| **openai** | `OPENAI_API_KEY` | gpt-4o-mini | gpt-4o-mini, gpt-4o, o3-mini |
 | **deepseek** | `DEEPSEEK_API_KEY` | deepseek-v3.2 | deepseek-chat, deepseek-reasoner |
-| **openrouter** | `OPENROUTER_API_KEY` | anthropic/claude-opus-4.6 | Qualquer modelo disponível no OpenRouter |
+| **openrouter** | `OPENROUTER_API_KEY` | google/gemini-2.5-flash | Qualquer modelo disponível no OpenRouter |
 
 ### Providers via CLI (subscription — sem API key)
 
 | Provider | CLI necessário | Instalação | Modelo padrão |
 |----------|---------------|------------|---------------|
-| **gemini-cli** | `gemini` | `npm install -g @google/gemini-cli` | gemini-2.5-pro |
-| **claude-code** | `claude` | `npm install -g @anthropic-ai/claude-code` | claude-sonnet-4-5 |
+| **gemini-cli** | `gemini` | `npm install -g @google/gemini-cli` | gemini-2.5-flash |
+| **claude-code** | `claude` | `npm install -g @anthropic-ai/claude-code` | claude-haiku-4-5 |
 
 Estes providers usam sua **assinatura pessoal** (Google/Anthropic) para billing. Não é necessário API key — basta ter o CLI instalado e autenticado.
 
@@ -710,10 +734,10 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
 ## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                             terraview CLI                               │
-│  scan | apply | diagram | explain | drift | provider | scanners | ...  │
-└────────────────────────────────┬────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                              terraview CLI                                │
+│  scan | apply | diagram | explain | drift | provider | scanners | cache  │
+└────────────────────────────────┬──────────────────────────────────────────┘
                                  │
                         ┌────────┴────────┐
                         ▼                 ▼
@@ -728,38 +752,44 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
                    │   NormalizedResource[]   │
                    └────────────┬────────────┘
                                 │
-                   ┌────────────┴────────────┐
-                   ▼                         ▼
-          Topology Graph            Feature Extractor
-          (30+ ref fields)        (5 risk axes per resource)
-                   │                         │
-          ┌────────┴────────┐    ┌───────────┴──────────┐
-          ▼                 ▼    ▼                       ▼
-  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
-  │   Scanner    │  │  AI Context      │  │  Compress +      │
-  │  Checkov     │  │  Analysis        │  │  Cache           │
-  │  tfsec       │  │  (cross-resource │  │  (risk vectors   │
-  │  Terrascan   │  │   relationships) │  │   → LLM)         │
-  └──────┬───────┘  └────────┬─────────┘  └──────────────────┘
-         │                   │
-         └──────────┬────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Normalizer         │ deduplicar scanner + AI
-         │  Resolver           │ resolver conflitos com confiança
-         └──────────┬──────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Scorer             │ scores 0-10 (segurança, compliance, manutenib.)
-         │  Aggregator         │ veredito + exit code
-         │  Meta-analysis      │ correlação cross-tool
-         └──────────┬──────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Output             │
-         │  pretty | compact   │
-         │  json | sarif | md  │
-         └─────────────────────┘
+                                ▼
+                       Topology Graph
+                       (30+ ref fields)
+                                │
+               ┌────────────────┼────────────────┐
+               │           PARALLEL              │
+               ▼                                 ▼
+      ┌──────────────┐              ┌──────────────────┐
+      │   Scanner    │              │  AI Context      │
+      │  Checkov     │              │  Analysis        │
+      │  tfsec       │              │  (cross-resource │
+      │  Terrascan   │              │   relationships, │
+      │              │              │   risk vectors)  │
+      └──────┬───────┘              └────────┬─────────┘
+             │                               │
+             │                      ┌────────┴─────────┐
+             │                      │  AI Cache        │
+             │                      │  (disk, TTL 24h) │
+             │                      └────────┬─────────┘
+             │                               │
+             └──────────┬────────────────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Normalizer         │ deduplicar scanner + AI
+             │  Resolver           │ mesmo recurso+categoria → scanner prevalece
+             └──────────┬──────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Aggregator         │ scores 0-10 (segurança, compliance, manutenib.)
+             │  Scorer             │ veredito + exit code
+             │  Meta-analysis      │ correlação cross-tool
+             └──────────┬──────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Output             │
+             │  pretty | compact   │
+             │  json | sarif | md  │
+             └─────────────────────┘
 ```
 
 ## Desenvolvimento
