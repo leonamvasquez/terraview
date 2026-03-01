@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/drift"
@@ -15,7 +16,6 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/spf13/cobra"
 )
 
 func captureStdout(fn func()) string {
@@ -768,59 +768,6 @@ func TestExitError(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// normalizeVersion, findAssetURL, getAssetsDir (update.go)
-// ---------------------------------------------------------------------------
-
-func TestNormalizeVersion(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"v1.2.3", "1.2.3"},
-		{"1.2.3", "1.2.3"},
-		{"  v0.1.0  ", "0.1.0"},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		got := normalizeVersion(tc.in)
-		if got != tc.want {
-			t.Errorf("normalizeVersion(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestFindAssetURL_Found(t *testing.T) {
-	release := &githubRelease{
-		TagName: "v1.0.0",
-		Assets: []githubAsset{
-			{Name: "terraview_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/mac"},
-			{Name: "terraview_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/linux"},
-		},
-	}
-	got := findAssetURL(release, "terraview_linux_amd64.tar.gz")
-	if got != "https://example.com/linux" {
-		t.Errorf("got %q", got)
-	}
-}
-
-func TestFindAssetURL_NotFound(t *testing.T) {
-	release := &githubRelease{
-		TagName: "v1.0.0",
-		Assets:  []githubAsset{{Name: "other.tar.gz", BrowserDownloadURL: "x"}},
-	}
-	got := findAssetURL(release, "nonexistent")
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
-func TestGetAssetsDir(t *testing.T) {
-	dir := getAssetsDir()
-	if !strings.HasSuffix(dir, ".terraview") {
-		t.Errorf("expected dir ending with .terraview, got %q", dir)
-	}
-}
-
 // (buildInfraExplainPrompt already tested above)
 
 // ---------------------------------------------------------------------------
@@ -945,74 +892,6 @@ func TestDefaultLookPath_Nonexistent(t *testing.T) {
 	_, err := defaultLookPath("nonexistent-cmd-xyz-12345")
 	if err == nil {
 		t.Error("expected error for nonexistent command")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// extractBinaryFromTar (update.go)
-// ---------------------------------------------------------------------------
-
-func TestExtractBinaryFromTar_InvalidFile(t *testing.T) {
-	_, err := extractBinaryFromTar("/nonexistent/file.tar.gz", t.TempDir())
-	if err == nil {
-		t.Error("expected error for nonexistent tar file")
-	}
-}
-
-func TestExtractTarGz_InvalidFile(t *testing.T) {
-	err := extractTarGz("/nonexistent/file.tar.gz", t.TempDir())
-	if err == nil {
-		t.Error("expected error for nonexistent tar file")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// replaceBinary (update.go)
-// ---------------------------------------------------------------------------
-
-func TestReplaceBinary(t *testing.T) {
-	dir := t.TempDir()
-	oldBin := filepath.Join(dir, "old")
-	newBin := filepath.Join(dir, "new")
-
-	os.WriteFile(oldBin, []byte("old-content"), 0755)
-	os.WriteFile(newBin, []byte("new-content"), 0755)
-
-	err := replaceBinary(newBin, oldBin)
-	if err != nil {
-		t.Fatalf("replaceBinary failed: %v", err)
-	}
-
-	data, _ := os.ReadFile(oldBin)
-	if string(data) != "new-content" {
-		t.Errorf("expected new-content, got %q", string(data))
-	}
-
-	// Backup should be removed
-	if _, err := os.Stat(oldBin + ".bak"); !os.IsNotExist(err) {
-		t.Error("expected backup file to be removed")
-	}
-}
-
-func TestReplaceBinary_OldNotFound(t *testing.T) {
-	dir := t.TempDir()
-	newBin := filepath.Join(dir, "new")
-	os.WriteFile(newBin, []byte("new-content"), 0755)
-
-	err := replaceBinary(newBin, filepath.Join(dir, "nonexistent"))
-	if err == nil {
-		t.Error("expected error when old binary doesn't exist")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// downloadFile (update.go)
-// ---------------------------------------------------------------------------
-
-func TestDownloadFile_InvalidURL(t *testing.T) {
-	err := downloadFile("http://localhost:1/nonexistent", filepath.Join(t.TempDir(), "out"))
-	if err == nil {
-		t.Error("expected error for invalid URL")
 	}
 }
 

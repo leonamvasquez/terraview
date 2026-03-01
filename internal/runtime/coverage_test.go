@@ -73,7 +73,7 @@ func TestMonitor_RunContextCancel(t *testing.T) {
 
 	m.Start(ctx)
 	time.Sleep(50 * time.Millisecond) // let goroutine start
-	cancel()                           // cancel context should cause run() to return
+	cancel()                          // cancel context should cause run() to return
 	time.Sleep(50 * time.Millisecond) // give time for cleanup
 
 	// Calling Stop after context cancel should still be safe

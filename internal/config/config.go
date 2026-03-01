@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/util"
-	"gopkg.in/yaml.v3"
 )
 
 const configFileName = ".terraview.yaml"
@@ -85,6 +86,8 @@ type LLMConfig struct {
 	Temperature    float64      `yaml:"temperature"`
 	MaxResources   int          `yaml:"max_resources"`
 	Ollama         OllamaConfig `yaml:"ollama"`
+	Cache          bool         `yaml:"cache"`
+	CacheTTLHours  int          `yaml:"cache_ttl_hours"`
 }
 
 // OllamaConfig holds Ollama-specific resource limits.
@@ -132,6 +135,7 @@ func DefaultConfig() Config {
 			URL:            util.DefaultOllamaURL,
 			TimeoutSeconds: 120,
 			Temperature:    0.2,
+			CacheTTLHours:  24,
 			Ollama: OllamaConfig{
 				MaxThreads:      0, // 0 = use all CPUs
 				MaxMemoryMB:     0, // 0 = no limit
@@ -227,6 +231,8 @@ type fileLLMConfig struct {
 	Temperature    *float64          `yaml:"temperature"`
 	MaxResources   *int              `yaml:"max_resources"`
 	Ollama         *fileOllamaConfig `yaml:"ollama"`
+	Cache          *bool             `yaml:"cache"`
+	CacheTTLHours  *int              `yaml:"cache_ttl_hours"`
 }
 
 type fileOllamaConfig struct {
@@ -277,6 +283,9 @@ func (f *fileConfig) validate() error {
 		}
 		if f.LLM.MaxResources != nil && *f.LLM.MaxResources < 0 {
 			return fmt.Errorf("llm.max_resources must be >= 0, got %d", *f.LLM.MaxResources)
+		}
+		if f.LLM.CacheTTLHours != nil && *f.LLM.CacheTTLHours <= 0 {
+			return fmt.Errorf("llm.cache_ttl_hours must be > 0, got %d", *f.LLM.CacheTTLHours)
 		}
 		if f.LLM.Ollama != nil {
 			if f.LLM.Ollama.NumCtx != nil && *f.LLM.Ollama.NumCtx < 0 {
@@ -364,6 +373,12 @@ func (f *fileConfig) merge(defaults Config) Config {
 			if f.LLM.Ollama.MinFreeMemoryMB != nil {
 				cfg.LLM.Ollama.MinFreeMemoryMB = *f.LLM.Ollama.MinFreeMemoryMB
 			}
+		}
+		if f.LLM.Cache != nil {
+			cfg.LLM.Cache = *f.LLM.Cache
+		}
+		if f.LLM.CacheTTLHours != nil {
+			cfg.LLM.CacheTTLHours = *f.LLM.CacheTTLHours
 		}
 	}
 

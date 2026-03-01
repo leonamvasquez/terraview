@@ -21,14 +21,13 @@ func init() {
 		DisplayName:  "OpenAI",
 		RequiresKey:  true,
 		EnvVarKey:    "OPENAI_API_KEY",
-		DefaultModel: "gpt-4o",
+		DefaultModel: "gpt-4o-mini",
 		SuggestedModels: []string{
-			"gpt-4o",
 			"gpt-4o-mini",
-			"gpt-4-turbo",
-			"o3-mini",
-			"o1",
-			"o1-mini",
+			"gpt-4o",
+			"gpt-4.1",
+			"gpt-5",
+			"gpt-5-mini",
 		},
 	})
 }
@@ -44,7 +43,7 @@ func NewOpenAI(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("OPENAI_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "gpt-4o"
+		cfg.Model = "gpt-4o-mini"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"

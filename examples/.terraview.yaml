@@ -1,85 +1,97 @@
 # =============================================================================
-# .terraview.yaml — Configuração do Terraview
+# .terraview.yaml — Terraview Configuration
 # =============================================================================
 #
-# Este arquivo pode ser colocado em dois locais:
-#   1. ~/.terraview/.terraview.yaml   (global, menor prioridade)
-#   2. <projeto>/.terraview.yaml      (local, maior prioridade)
+# This file can be placed in two locations:
+#   1. ~/.terraview/.terraview.yaml   (global, lower priority)
+#   2. <project>/.terraview.yaml      (local, higher priority)
 #
-# Valores locais sobrescrevem os globais. Campos omitidos usam o padrão.
+# Local values override global ones. Omitted fields use defaults.
 #
-# AVISO: Nunca commite api_key diretamente neste arquivo.
-#        Prefira variáveis de ambiente (ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)
-#        ou adicione .terraview.yaml ao seu .gitignore.
+# WARNING: Never commit api_key directly in this file.
+#          Prefer environment variables (ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)
+#          or add .terraview.yaml to your .gitignore.
 #
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# llm — Configuração do provider de IA
+# llm — AI provider configuration
 # ---------------------------------------------------------------------------
 llm:
-  # Habilita análise com IA (padrão: true).
-  # Use --static na CLI para desabilitar pontualmente.
+  # Enable AI analysis (default: true).
+  # Use --static on the CLI to disable on a per-run basis.
   enabled: true
 
-  # Provider de IA. Opções:
-  #   ollama      — inferência local (não requer API key)
+  # AI provider. Options:
+  #   ollama      — local inference (no API key required)
   #   gemini      — Google Gemini
   #   claude      — Anthropic Claude
-  #   openai      — OpenAI / compatíveis
+  #   openai      — OpenAI / compatible endpoints
   #   deepseek    — DeepSeek
-  #   openrouter  — OpenRouter (múltiplos modelos)
+  #   openrouter  — OpenRouter (multiple models)
   #   gemini-cli  — Gemini via CLI
   #   claude-code — Claude Code via CLI
   provider: ollama
 
-  # Modelo a ser usado. Cada provider tem um padrão:
-  #   ollama:      qwen3.5
-  #   gemini:      gemini-2.0-flash
-  #   claude:      claude-sonnet-4-5
-  #   openai:      gpt-4o
-  #   deepseek:    deepseek-chat
-  #   openrouter:  google/gemini-2.0-flash-001
+  # Model to use. Each provider has a cost-effective default:
+  #   ollama:      llama3.1:8b        (local, free)
+  #   gemini:      gemini-2.5-flash   ($0.15/$0.60 per 1M tokens)
+  #   claude:      claude-haiku-4-5   ($1/$5 per 1M tokens)
+  #   openai:      gpt-4o-mini        ($0.25/$2 per 1M tokens)
+  #   deepseek:    deepseek-v3.2      ($0.14/$0.28 per 1M tokens)
+  #   openrouter:  google/gemini-2.5-flash
+  #   gemini-cli:  gemini-2.5-flash
+  #   claude-code: claude-haiku-4-5
+  #
+  # For higher quality, override with premium models:
+  #   claude-sonnet-4-6, claude-opus-4-6, gpt-4o, gemini-2.5-pro
   model: ""
 
-  # URL base do provider (apenas para ollama ou endpoints customizados).
+  # Provider base URL (only for ollama or custom endpoints).
   url: "http://localhost:11434"
 
-  # Chave de API para providers que exigem autenticação.
-  # IMPORTANTE: Prefira variáveis de ambiente em vez de colocar a chave aqui:
+  # API key for providers that require authentication.
+  # IMPORTANT: Prefer environment variables instead of placing the key here:
   #   ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY,
   #   DEEPSEEK_API_KEY, OPENROUTER_API_KEY
   # api_key: ""
 
-  # Timeout em segundos para chamadas ao provider (padrão: 120).
+  # Timeout in seconds for provider calls (default: 120).
   timeout_seconds: 120
 
-  # Temperatura para geração de texto (0.0 a 1.0, padrão: 0.2).
-  # Valores mais baixos = respostas mais determinísticas.
+  # Temperature for text generation (0.0 to 1.0, default: 0.2).
+  # Lower values = more deterministic responses.
   temperature: 0.2
 
-  # Máximo de recursos incluídos no prompt de IA (padrão: 30).
-  # Planos com mais recursos são truncados para caber no contexto.
-  # Aumente para planos grandes se o modelo suportar contexto amplo.
+  # Maximum resources included in the AI prompt (default: 30).
+  # Plans with more resources are truncated to fit the context window.
+  # Increase for large plans if the model supports a wider context.
   # max_resources: 30
 
-  # Configurações específicas do Ollama
+  # Enable persistent AI response cache to avoid redundant API calls on reruns.
+  # Cache is stored at ~/.terraview/cache/ai-cache.json
+  # cache: false
+
+  # Cache TTL in hours (default: 24). Entries older than this are ignored.
+  # cache_ttl_hours: 24
+
+  # Ollama-specific settings
   ollama:
-    # Tamanho da janela de contexto (padrão: 4096).
-    # Aumente para modelos que suportam contextos maiores (ex: 8192, 32768).
+    # Context window size (default: 4096).
+    # Increase for models that support larger contexts (e.g., 8192, 32768).
     # num_ctx: 4096
 
-    # Limite de threads de CPU (0 = usar todos os cores).
+    # CPU thread limit (0 = use all cores).
     # max_threads: 0
 
-    # Limite de memória em MB (0 = sem limite).
+    # Memory limit in MB (0 = no limit).
     # max_memory_mb: 0
 
-    # Memória livre mínima em MB antes de cancelar a análise.
+    # Minimum free memory in MB before cancelling the analysis.
     min_free_memory_mb: 1024
 
 # ---------------------------------------------------------------------------
-# scoring — Pesos de severidade para cálculo do score
+# scoring — Severity weights for score calculation
 # ---------------------------------------------------------------------------
 scoring:
   severity_weights:
@@ -89,35 +101,35 @@ scoring:
     low: 0.5
 
 # ---------------------------------------------------------------------------
-# rules — Configuração de regras
+# rules — Rule configuration
 # ---------------------------------------------------------------------------
 rules:
-  # Tags obrigatórias em todos os recursos (ex: ["Environment", "Team"]).
+  # Required tags on all resources (e.g., ["Environment", "Team"]).
   # required_tags: []
 
-  # Pacotes de regras adicionais a carregar.
+  # Additional rule packs to load.
   # rule_packs: []
 
-  # Modo estrito via config (equivale a --strict na CLI).
+  # Strict mode via config (equivalent to --strict on the CLI).
   # strict_mode: false
 
-  # Regras desabilitadas por ID (ex: ["SEC001", "TAG002"]).
+  # Disabled rules by ID (e.g., ["SEC001", "TAG002"]).
   # disabled_rules: []
 
-  # Habilitar apenas estas regras (ignora todas as outras).
+  # Enable only these rules (ignores all others).
   # enabled_rules: []
 
 # ---------------------------------------------------------------------------
-# output — Formato de saída padrão
+# output — Default output format
 # ---------------------------------------------------------------------------
 output:
-  # Formato: pretty (padrão), compact, json, sarif
+  # Format: pretty (default), compact, json, sarif
   format: pretty
 
 # ---------------------------------------------------------------------------
-# scanner — Scanner de segurança padrão
+# scanner — Default security scanner
 # ---------------------------------------------------------------------------
 scanner:
-  # Scanner padrão: checkov, tfsec, terrascan
-  # Pode ser omitido — o primeiro argumento do 'scan' define o scanner.
+  # Default scanner: checkov, tfsec, terrascan
+  # Can be omitted — the first argument of 'scan' defines the scanner.
   # default: checkov

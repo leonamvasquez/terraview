@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/leonamvasquez/terraview/internal/installer"
 	"github.com/spf13/cobra"
+
+	"github.com/leonamvasquez/terraview/internal/installer"
 )
 
 var uninstallCmd = &cobra.Command{

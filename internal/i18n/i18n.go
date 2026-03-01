@@ -82,7 +82,7 @@ var en = Messages{
 	LblExitCode:      "Exit code",
 	LblFindings:      "findings",
 	LblResources:     "Resources analyzed",
-	LblTotalFindings:  "Total findings",
+	LblTotalFindings: "Total findings",
 }
 
 var br = Messages{
@@ -117,7 +117,7 @@ var br = Messages{
 	LblExitCode:      "Código de saída",
 	LblFindings:      "achados",
 	LblResources:     "Recursos analisados",
-	LblTotalFindings:  "Total de achados",
+	LblTotalFindings: "Total de achados",
 }
 
 // SetLang selects the active language. Use "pt-BR" for Portuguese.

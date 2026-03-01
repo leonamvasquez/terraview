@@ -6,11 +6,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
-	"github.com/spf13/cobra"
 )
 
 var (

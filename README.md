@@ -10,6 +10,7 @@
 [![Go](https://img.shields.io/badge/Go-1.26+-blue.svg)](https://golang.org)
 [![GitHub release](https://img.shields.io/github/v/release/leonamvasquez/terraview)](https://github.com/leonamvasquez/terraview/releases/latest)
 [![CI](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml/badge.svg)](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/leonamvasquez/terraview)](https://goreportcard.com/report/github.com/leonamvasquez/terraview)
 [![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 
@@ -68,7 +69,7 @@ O terraview roda como binário único sem dependências externas. Quando um prov
 - **CI/CD nativo** — exit codes semânticos (0/1/2) + saída SARIF, JSON, Markdown para GitHub Actions, GitLab CI e Azure DevOps
 - **Supply chain hardening** — SBOM (CycloneDX), assinatura cosign, SLSA Build Provenance Level 3 em cada release
 - **Bilíngue (en/pt-BR)** — flag `--br` disponível em todos os comandos
-- **Auto-atualização** via `terraview upgrade`
+- **Atualização** pelo gerenciador de pacotes (`brew upgrade terraview`, `scoop update terraview`, `apt upgrade terraview`, etc.)
 - **Alias `tv`** — symlink criado na instalação; `tv scan` = `terraview scan`
 - **Instalação cross-platform** dos scanners via `terraview scanners install --all` (Linux, macOS, Windows)
 
@@ -235,34 +236,19 @@ Compila o binário, instala em `~/.local/bin/terraview`, cria o symlink `tv` e c
 
 ## Atualização
 
-Se instalou via script ou download manual:
+Atualize o Terraview pelo seu gerenciador de pacotes:
 
 ```bash
-terraview upgrade
-terraview upgrade --force                   # forçar reinstalação mesmo se atualizado
-```
-
-Via Homebrew:
-
-```bash
+# Homebrew
 brew upgrade leonamvasquez/terraview/terraview
-```
 
-Via Scoop:
-
-```powershell
+# Scoop
 scoop update terraview
-```
 
-Via APT:
-
-```bash
+# APT
 sudo apt update && sudo apt upgrade terraview
-```
 
-Via DNF:
-
-```bash
+# DNF
 sudo dnf upgrade terraview
 ```
 
@@ -308,7 +294,6 @@ Scanner Management:
 
 Utilities:
   version     Show version information
-  upgrade     Upgrade to the latest version
   setup       Interactive environment setup
 
 Flags:
@@ -463,7 +448,6 @@ terraview scanners default                  # exibir scanner padrão atual
 ```bash
 terraview setup                             # diagnóstico do ambiente
 terraview version                           # versão, Go runtime, OS/arch
-terraview upgrade                           # auto-atualização via GitHub Releases
 ```
 
 ### Exit Codes

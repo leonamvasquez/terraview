@@ -21,12 +21,12 @@ func init() {
 		DisplayName:  "Google Gemini",
 		RequiresKey:  true,
 		EnvVarKey:    "GEMINI_API_KEY",
-		DefaultModel: "gemini-2.5-pro",
+		DefaultModel: "gemini-2.5-flash",
 		SuggestedModels: []string{
-			"gemini-3.0-pro",
-			"gemini-2.5-pro",
 			"gemini-2.5-flash",
 			"gemini-3.0-flash",
+			"gemini-2.5-pro",
+			"gemini-3.0-pro",
 		},
 	})
 }
@@ -75,7 +75,7 @@ func NewGemini(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "gemini-2.5-pro"
+		cfg.Model = "gemini-2.5-flash"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://generativelanguage.googleapis.com"

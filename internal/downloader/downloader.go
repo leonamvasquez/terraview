@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -37,7 +38,11 @@ func Download(url, destination string, opts Options) (int64, error) {
 
 	client := &http.Client{Timeout: opts.Timeout}
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("download failed: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("download failed: %w", err)
 	}

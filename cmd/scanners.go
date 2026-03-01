@@ -5,12 +5,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/bininstaller"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/platform"
 	"github.com/leonamvasquez/terraview/internal/scanner"
-	"github.com/spf13/cobra"
 )
 
 var scannersCmd = &cobra.Command{

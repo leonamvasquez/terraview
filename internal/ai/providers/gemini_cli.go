@@ -20,11 +20,15 @@ func init() {
 		DisplayName:  "Gemini CLI (subscription)",
 		RequiresKey:  false,
 		EnvVarKey:    "",
-		DefaultModel: "gemini-2.5-pro",
+		DefaultModel: "gemini-2.5-flash",
 		SuggestedModels: []string{
-			"gemini-3",
+			// Preview (latest)
+			"gemini-3.1-pro-preview",
+			"gemini-3-flash-preview",
+			// Stable
 			"gemini-2.5-pro",
 			"gemini-2.5-flash",
+			"gemini-2.5-flash-lite",
 		},
 		CLIBinary:   "gemini",
 		InstallHint: "npm install -g @google/gemini-cli",
@@ -39,7 +43,7 @@ type geminiCLIProvider struct {
 // Gemini CLI binary, using the user's Google subscription for billing.
 func NewGeminiCLI(cfg ai.ProviderConfig) (ai.Provider, error) {
 	if cfg.Model == "" {
-		cfg.Model = "gemini-2.5-pro"
+		cfg.Model = "gemini-2.5-flash"
 	}
 	if cfg.TimeoutSecs <= 0 {
 		cfg.TimeoutSecs = 300

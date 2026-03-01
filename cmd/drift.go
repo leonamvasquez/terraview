@@ -6,10 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/drift"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
-	"github.com/spf13/cobra"
 )
 
 var driftCmd = &cobra.Command{

@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 	planFile       string
 	outputDir      string
 	outputFormat   string
-	activeProvider     string
+	activeProvider string
 	activeModel    string
 	terragruntFlag bool   // --terragrunt: use terragrunt instead of terraform
 	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config
@@ -58,7 +59,6 @@ Scanner Management:
 
 Utilities:
   version     Show version information
-  upgrade     Upgrade to the latest version
   setup       Interactive environment setup
 
 Get started:
@@ -99,9 +99,9 @@ func init() {
 
 	// Utilities
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(upgradeCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(scannersCmd)
+	rootCmd.AddCommand(cacheCmd)
 
 	// Shell completions (bash, zsh, fish, powershell)
 	// Install: terraview completion bash | sudo tee /etc/bash_completion.d/terraview
@@ -151,7 +151,6 @@ Gerenciamento de Scanners:
 
 Utilitários:
   version     Exibir informações de versão
-  upgrade     Atualizar para a versão mais recente
   setup       Configuração interativa do ambiente
 
 Primeiros passos:
@@ -298,9 +297,8 @@ instalado simplesmente confirmará que não há nada a remover.
 Exemplos:
   terraview uninstall llm`
 
-	// version / upgrade / setup
+	// version / setup
 	versionCmd.Short = "Exibir a versão do terraview"
-	upgradeCmd.Short = "Atualizar terraview para a versão mais recente"
 	setupCmd.Short = "Configuração interativa do ambiente"
 	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe o status 
 do ambiente, scanner padrão configurado e providers disponíveis.
@@ -310,15 +308,6 @@ está disponível. Para instalar scanners, use 'terraview scanners install'.
 
 Exemplos:
   terraview setup`
-	upgradeCmd.Long = `Baixa e instala a versão mais recente do terraview via GitHub Releases.
-
-Detecta seu SO e arquitetura automaticamente.
-Também atualiza assets inclusos (prompts e regras).
-
-Exemplos:
-  terraview upgrade              # atualizar se versão mais nova disponível
-  terraview upgrade --force      # forçar reinstalação mesmo se atualizado`
-
 	// Translate persistent flag descriptions
 	rootCmd.PersistentFlags().Lookup("verbose").Usage = "Habilitar saída detalhada"
 	rootCmd.PersistentFlags().Lookup("dir").Usage = "Diretório do workspace Terraform"
@@ -354,10 +343,6 @@ Exemplos:
 	translateFlags(installLLMCmd, map[string]string{
 		"model": "Modelo a baixar (padrão da config ou llama3.1:8b)",
 	})
-	translateFlags(upgradeCmd, map[string]string{
-		"force": "Forçar atualização mesmo se já estiver na versão mais recente",
-	})
-
 	// Scanners subcommands
 	scannersCmd.Short = "Gerenciar scanners de segurança"
 	scannersCmd.Long = "Listar, instalar e gerenciar binários de scanners de segurança."
@@ -472,7 +457,7 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 // generatePlan creates the appropriate executor (terraform or terragrunt) and generates
 // the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
 // If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
-func generatePlan() (string, terraformexec.PlanExecutor, error) {
+func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unparam // executor used by apply command
 	var executor terraformexec.PlanExecutor
 	var err error
 

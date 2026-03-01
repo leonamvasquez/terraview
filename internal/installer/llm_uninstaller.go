@@ -83,7 +83,7 @@ func (u *Uninstaller) Uninstall() (*UninstallResult, error) {
 }
 
 // stopService attempts to stop the Ollama service.
-func (u *Uninstaller) stopService() error {
+func (u *Uninstaller) stopService() error { //nolint:unparam // error return kept for consistency with service management pattern
 	switch runtime.GOOS {
 	case "darwin":
 		// Try pkill first (works for both manual and launchd)

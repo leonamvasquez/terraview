@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -165,7 +166,16 @@ func buildSystemPrompt(prompts ai.Prompts) string {
 }
 
 If there are no findings, return: {"findings": [], "summary": "No issues found."}
-Do NOT include any text outside the JSON object.`)
+Do NOT include any text outside the JSON object.
+Respond with minified JSON only — no indentation, no extra whitespace, no markdown fences.
+
+## Examples of well-formed findings
+
+Input resource: aws_s3_bucket with acl="public-read"
+Output: {"severity":"HIGH","category":"security","resource":"aws_s3_bucket.example","message":"bucket allows public read access via ACL","remediation":"set acl to private and use bucket policies for controlled access"}
+
+Input resource: aws_security_group with ingress 0.0.0.0/0 on port 22
+Output: {"severity":"HIGH","category":"security","resource":"aws_security_group.example","message":"SSH port 22 open to the entire internet","remediation":"restrict ingress to known IP ranges or use a bastion host"}`)
 
 	return sb.String()
 }
@@ -181,15 +191,18 @@ func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]i
 	sb.WriteString("Review the following Terraform plan for security, architecture, and best practice issues.\n\n")
 
 	sb.WriteString("## Plan Summary\n\n")
-	summaryJSON, err := json.MarshalIndent(summary, "", "  ")
+	summaryJSON, err := json.Marshal(summary)
 	if err != nil {
 		return "", err
 	}
-	sb.WriteString("```json\n")
 	sb.Write(summaryJSON)
-	sb.WriteString("\n```\n\n")
+	sb.WriteString("\n\n")
 
 	sb.WriteString("## Resource Changes\n\n")
+
+	sort.SliceStable(resources, func(i, j int) bool {
+		return priorityTier(resources[i].Type) < priorityTier(resources[j].Type)
+	})
 
 	for i, r := range resources {
 		if i >= maxResources {
@@ -198,13 +211,12 @@ func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]i
 		}
 
 		sb.WriteString(fmt.Sprintf("### %s (%s)\n", r.Address, r.Action))
-		sb.WriteString(fmt.Sprintf("- Type: %s\n", r.Type))
-		sb.WriteString(fmt.Sprintf("- Provider: %s\n", r.Provider))
+		sb.WriteString(fmt.Sprintf("- Type: %s | Provider: %s\n", r.Type, r.Provider))
 
-		valJSON, err := json.MarshalIndent(r.Values, "", "  ")
+		valJSON, err := json.Marshal(r.Values)
 		if err == nil {
 			truncated := truncateJSON(string(valJSON), 2000)
-			sb.WriteString(fmt.Sprintf("- Values:\n```json\n%s\n```\n\n", truncated))
+			sb.WriteString(fmt.Sprintf("- Values: %s\n\n", truncated))
 		}
 	}
 
@@ -287,6 +299,38 @@ func truncateJSON(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "\n  ... (truncated)"
+}
+
+// priorityTier returns a sort priority for a given resource type.
+// Lower number = higher priority (processed first).
+func priorityTier(resourceType string) int {
+	high := []string{
+		"aws_iam_role", "aws_iam_policy", "aws_iam_user", "aws_iam_group",
+		"aws_security_group", "aws_security_group_rule",
+		"aws_s3_bucket", "aws_s3_bucket_policy", "aws_s3_bucket_acl",
+		"aws_kms_key", "aws_kms_alias",
+		"aws_rds_instance", "aws_db_instance",
+		"aws_secretsmanager_secret", "aws_ssm_parameter",
+		"google_iam_binding", "google_iam_member", "google_storage_bucket",
+		"azurerm_role_assignment", "azurerm_storage_account",
+	}
+	medium := []string{
+		"aws_lambda_function", "aws_api_gateway_rest_api",
+		"aws_eks_cluster", "aws_ecs_task_definition",
+		"aws_cloudtrail", "aws_config_rule",
+		"aws_vpc", "aws_subnet", "aws_internet_gateway",
+	}
+	for _, t := range high {
+		if t == resourceType {
+			return 1
+		}
+	}
+	for _, t := range medium {
+		if t == resourceType {
+			return 2
+		}
+	}
+	return 3
 }
 
 // safePrefix returns the first n characters of s, or s itself if shorter.

@@ -5,10 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/diagram"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/spf13/cobra"
 )
 
 var diagramCmd = &cobra.Command{

@@ -21,13 +21,12 @@ func init() {
 		DisplayName:  "Claude Code (subscription)",
 		RequiresKey:  false,
 		EnvVarKey:    "",
-		DefaultModel: "claude-sonnet-4-5",
+		DefaultModel: "claude-haiku-4-5",
 		SuggestedModels: []string{
-			"claude-sonnet-4-5",
-			"claude-opus-4-6",
-			"claude-opus-4-1",
-			"claude-sonnet-4-20250514",
 			"claude-haiku-4-5",
+			"claude-sonnet-4-5",
+			"claude-sonnet-4-6",
+			"claude-opus-4-6",
 		},
 		CLIBinary:   "claude",
 		InstallHint: "npm install -g @anthropic-ai/claude-code",
@@ -42,7 +41,7 @@ type claudeCodeProvider struct {
 // Claude Code CLI binary, using the user's Anthropic subscription for billing.
 func NewClaudeCode(cfg ai.ProviderConfig) (ai.Provider, error) {
 	if cfg.Model == "" {
-		cfg.Model = "claude-sonnet-4-5"
+		cfg.Model = "claude-haiku-4-5"
 	}
 	if cfg.TimeoutSecs <= 0 {
 		cfg.TimeoutSecs = 300

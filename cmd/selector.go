@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leonamvasquez/terraview/internal/output"
 	"golang.org/x/term"
+
+	"github.com/leonamvasquez/terraview/internal/output"
 )
 
 func strContainsFold(s, sub string) bool {

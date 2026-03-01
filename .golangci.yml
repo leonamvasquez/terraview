@@ -2,6 +2,7 @@ linters:
   enable:
     - errcheck
     - staticcheck
+    - gosimple
     - gosec
     - gocritic
     - ineffassign
@@ -10,10 +11,18 @@ linters:
     - typecheck
     - misspell
     - prealloc
+    - gofmt
+    - goimports
+    - unconvert
+    - unparam
+    - bodyclose
+    - noctx
 
 linters-settings:
   errcheck:
     check-type-assertions: true
+  goimports:
+    local-prefixes: github.com/leonamvasquez/terraview
   gosec:
     excludes:
       - G104  # unhandled errors on deferred Close()
@@ -48,6 +57,9 @@ linters-settings:
       - cancelling
       - cancelled
       - penalise
+      - persistente
+      - correspondente
+      - analyses
   prealloc:
     simple: true
 
@@ -59,6 +71,7 @@ issues:
         - errcheck
         - gosec
         - gocritic
+        - unparam
     # Generated or vendor code
     - path: vendor/
       linters:

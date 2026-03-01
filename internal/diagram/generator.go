@@ -529,7 +529,7 @@ func (g *Generator) renderElaborate(layers []Layer, edges map[string][]string, p
 }
 
 // renderLayerBoxes renders a layer as one or more side-by-side boxes.
-func (g *Generator) renderLayerBoxes(sb *strings.Builder, layer Layer, edges map[string][]string) {
+func (g *Generator) renderLayerBoxes(sb *strings.Builder, layer Layer, edges map[string][]string) { //nolint:unparam // edges reserved for future connection rendering
 	def, ok := layerDefs[layer.Name]
 	if !ok {
 		def = layerDefs["Other"]
@@ -656,7 +656,7 @@ func (g *Generator) renderDualColumnBox(sb *strings.Builder, title string, left,
 }
 
 // renderVPCSection renders the network/compute/data layers inside a VPC boundary.
-func (g *Generator) renderVPCSection(sb *strings.Builder, layers []Layer, edges map[string][]string, provider string) {
+func (g *Generator) renderVPCSection(sb *strings.Builder, layers []Layer, edges map[string][]string, provider string) { //nolint:unparam // edges reserved for future connection rendering
 	vpcLabel := "VPC"
 	if provider == "azure" {
 		vpcLabel = "Virtual Network"

@@ -21,13 +21,12 @@ func init() {
 		DisplayName:  "Anthropic Claude",
 		RequiresKey:  true,
 		EnvVarKey:    "ANTHROPIC_API_KEY",
-		DefaultModel: "claude-sonnet-4-5",
+		DefaultModel: "claude-haiku-4-5",
 		SuggestedModels: []string{
-			"claude-sonnet-4-5",
-			"claude-opus-4-6",
-			"claude-opus-4-1",
-			"claude-sonnet-4-20250514",
 			"claude-haiku-4-5",
+			"claude-sonnet-4-5",
+			"claude-sonnet-4-6",
+			"claude-opus-4-6",
 		},
 	})
 }
@@ -70,7 +69,7 @@ func NewClaude(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "claude-sonnet-4-5"
+		cfg.Model = "claude-haiku-4-5"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.anthropic.com"

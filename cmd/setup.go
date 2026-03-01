@@ -5,9 +5,10 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/scanner"
-	"github.com/spf13/cobra"
 )
 
 var setupCmd = &cobra.Command{

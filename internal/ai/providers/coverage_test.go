@@ -213,8 +213,8 @@ func TestNewOpenAI_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	o := p.(*openaiProvider)
-	if o.cfg.Model != "gpt-4o" {
-		t.Errorf("Model = %q, want gpt-4o", o.cfg.Model)
+	if o.cfg.Model != "gpt-4o-mini" {
+		t.Errorf("Model = %q, want gpt-4o-mini", o.cfg.Model)
 	}
 	if o.cfg.BaseURL != "https://api.openai.com" {
 		t.Errorf("BaseURL = %q, want default", o.cfg.BaseURL)
@@ -306,7 +306,7 @@ func TestNewGemini_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	g := p.(*geminiProvider)
-	if g.cfg.Model != "gemini-2.5-pro" {
+	if g.cfg.Model != "gemini-2.5-flash" {
 		t.Errorf("Model = %q", g.cfg.Model)
 	}
 }
@@ -384,7 +384,7 @@ func TestNewClaude_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	c := p.(*claudeProvider)
-	if c.cfg.Model != "claude-sonnet-4-5" {
+	if c.cfg.Model != "claude-haiku-4-5" {
 		t.Errorf("Model = %q", c.cfg.Model)
 	}
 }
@@ -494,7 +494,7 @@ func TestNewOpenRouter_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	o := p.(*openrouterProvider)
-	if o.cfg.Model != "anthropic/claude-opus-4.6" {
+	if o.cfg.Model != "google/gemini-2.5-flash" {
 		t.Errorf("Model = %q", o.cfg.Model)
 	}
 	if o.cfg.BaseURL != "https://openrouter.ai/api/v1" {

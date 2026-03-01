@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/topology"
 	"github.com/leonamvasquez/terraview/internal/util"
-	"github.com/spf13/cobra"
 )
 
 var explainCmd = &cobra.Command{

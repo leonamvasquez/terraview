@@ -6,9 +6,10 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/installer"
-	"github.com/spf13/cobra"
 )
 
 var installModel string

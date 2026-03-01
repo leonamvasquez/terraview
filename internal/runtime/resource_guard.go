@@ -88,7 +88,7 @@ func measureResources() (*SystemResources, error) {
 	return res, nil
 }
 
-func measureDarwin(res *SystemResources) error {
+func measureDarwin(res *SystemResources) error { //nolint:unparam // error return kept for platform-specific measure interface
 	// Total memory via sysctl
 	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
 	if err == nil {
@@ -113,7 +113,7 @@ func measureDarwin(res *SystemResources) error {
 	return nil
 }
 
-func measureLinux(res *SystemResources) error {
+func measureLinux(res *SystemResources) error { //nolint:unparam // error return kept for platform-specific measure interface
 	// /proc/meminfo
 	out, err := exec.Command("cat", "/proc/meminfo").Output()
 	if err == nil {
@@ -129,7 +129,7 @@ func measureLinux(res *SystemResources) error {
 	return nil
 }
 
-func measureWindows(res *SystemResources) error {
+func measureWindows(res *SystemResources) error { //nolint:unparam // error return kept for platform-specific measure interface
 	// Total and available memory via PowerShell (wmic is deprecated)
 	out, err := exec.Command("powershell", "-NoProfile", "-Command",
 		`$os = Get-CimInstance Win32_OperatingSystem; Write-Output "$($os.TotalVisibleMemorySize) $($os.FreePhysicalMemory)"`).Output()

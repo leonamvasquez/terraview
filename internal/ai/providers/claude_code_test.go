@@ -16,8 +16,8 @@ func TestNewClaudeCode_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	c := p.(*claudeCodeProvider)
-	if c.cfg.Model != "claude-sonnet-4-5" {
-		t.Errorf("default model: got %q, want %q", c.cfg.Model, "claude-sonnet-4-5")
+	if c.cfg.Model != "claude-haiku-4-5" {
+		t.Errorf("default model: got %q, want %q", c.cfg.Model, "claude-haiku-4-5")
 	}
 	if c.cfg.TimeoutSecs != 300 {
 		t.Errorf("default timeout: got %d, want 300", c.cfg.TimeoutSecs)

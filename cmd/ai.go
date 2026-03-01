@@ -8,12 +8,13 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/util"
-	"github.com/spf13/cobra"
 )
 
 // pick returns the English string by default, or the Brazilian Portuguese

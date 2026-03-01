@@ -2,8 +2,11 @@ package aicache
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/leonamvasquez/terraview/internal/feature"
 	"github.com/leonamvasquez/terraview/internal/riskvec"
@@ -219,5 +222,169 @@ func TestCache_Stats(t *testing.T) {
 	}
 	if size != 1 {
 		t.Errorf("expected size 1, got %d", size)
+	}
+}
+
+func TestDiskCache_HitWithoutProvider(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	// First cache instance: store a value
+	dc1 := NewDiskCache(path, "claude", "sonnet", 24)
+	dc1.Put("key1", `{"findings":[],"summary":"all good"}`)
+
+	// Second cache instance: same provider/model, should hit
+	dc2 := NewDiskCache(path, "claude", "sonnet", 24)
+	got, ok := dc2.Get("key1")
+	if !ok {
+		t.Fatal("expected cache hit on second instance with same provider/model")
+	}
+	if got != `{"findings":[],"summary":"all good"}` {
+		t.Errorf("unexpected cached value: %q", got)
+	}
+
+	// Third cache instance: different provider, should miss
+	dc3 := NewDiskCache(path, "ollama", "llama3.1:8b", 24)
+	_, ok = dc3.Get("key1")
+	if ok {
+		t.Error("expected cache miss for different provider")
+	}
+}
+
+func TestDiskCache_TTLExpiration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	now := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	// Store entry with a fixed "now"
+	dc1 := NewDiskCache(path, "claude", "sonnet", 24)
+	dc1.now = func() time.Time { return now }
+	dc1.Put("key1", `{"findings":[],"summary":"cached"}`)
+
+	// Read within TTL (12 hours later)
+	dc2 := NewDiskCache(path, "claude", "sonnet", 24)
+	dc2.now = func() time.Time { return now.Add(12 * time.Hour) }
+	_, ok := dc2.Get("key1")
+	if !ok {
+		t.Fatal("expected cache hit within TTL")
+	}
+
+	// Read after TTL (25 hours later)
+	dc3 := NewDiskCache(path, "claude", "sonnet", 24)
+	dc3.now = func() time.Time { return now.Add(25 * time.Hour) }
+	_, ok = dc3.Get("key1")
+	if ok {
+		t.Error("expected cache miss after TTL expiration")
+	}
+}
+
+func TestDiskCache_PersistsToDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	dc := NewDiskCache(path, "ollama", "llama3.1:8b", 24)
+	dc.Put("abc", "test-value")
+
+	// Verify file was written
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("cache file not written: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("cache file is empty")
+	}
+}
+
+func TestDiskCache_Stats(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	dc := NewDiskCache(path, "claude", "sonnet", 24)
+	dc.Put("k1", "v1")
+	dc.Get("k1") // hit
+	dc.Get("k2") // miss
+
+	hits, misses, size := dc.Stats()
+	if hits != 1 {
+		t.Errorf("expected 1 hit, got %d", hits)
+	}
+	if misses != 1 {
+		t.Errorf("expected 1 miss, got %d", misses)
+	}
+	if size != 1 {
+		t.Errorf("expected size 1, got %d", size)
+	}
+}
+
+func TestAnalysisKey_Deterministic(t *testing.T) {
+	data := []byte(`[{"type":"aws_s3_bucket"}]`)
+	k1 := AnalysisKey(data, "claude", "sonnet")
+	k2 := AnalysisKey(data, "claude", "sonnet")
+	if k1 != k2 {
+		t.Errorf("analysis keys should be deterministic: %q != %q", k1, k2)
+	}
+
+	// Different provider = different key
+	k3 := AnalysisKey(data, "ollama", "sonnet")
+	if k1 == k3 {
+		t.Error("different providers should produce different keys")
+	}
+}
+
+func TestClearDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	dc := NewDiskCache(path, "claude", "sonnet", 24)
+	dc.Put("k1", "v1")
+
+	if err := ClearDisk(path); err != nil {
+		t.Fatalf("ClearDisk failed: %v", err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("cache file should be deleted after ClearDisk")
+	}
+
+	// Clear on non-existent file should not error
+	if err := ClearDisk(path); err != nil {
+		t.Errorf("ClearDisk on non-existent file should not error: %v", err)
+	}
+}
+
+func TestDiskStats(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	// No file yet
+	_, _, _, _, err := DiskStats(path)
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+
+	// Write some entries
+	dc := NewDiskCache(path, "claude", "sonnet", 24)
+	now := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
+	dc.now = func() time.Time { return now }
+	dc.Put("k1", "v1")
+	dc.now = func() time.Time { return now.Add(2 * time.Hour) }
+	dc.Put("k2", "v2")
+
+	entries, fileSize, oldest, newest, err := DiskStats(path)
+	if err != nil {
+		t.Fatalf("DiskStats failed: %v", err)
+	}
+	if entries != 2 {
+		t.Errorf("expected 2 entries, got %d", entries)
+	}
+	if fileSize == 0 {
+		t.Error("expected non-zero file size")
+	}
+	if !oldest.Equal(now) {
+		t.Errorf("expected oldest=%v, got %v", now, oldest)
+	}
+	if !newest.Equal(now.Add(2 * time.Hour)) {
+		t.Errorf("expected newest=%v, got %v", now.Add(2*time.Hour), newest)
 	}
 }

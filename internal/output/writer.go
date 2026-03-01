@@ -520,8 +520,6 @@ func findingsPerResource(findings, resources int) int {
 	return findings / resources
 }
 
-
-
 func scoreEmoji(score float64) string {
 	switch {
 	case score >= 9.0:

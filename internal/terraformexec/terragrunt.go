@@ -197,7 +197,7 @@ func (e *TerragruntExecutor) run(args ...string) (string, error) {
 }
 
 // runPassthrough executes terragrunt with stdout/stderr connected to the terminal.
-func (e *TerragruntExecutor) runPassthrough(args ...string) (string, error) {
+func (e *TerragruntExecutor) runPassthrough(args ...string) (string, error) { //nolint:unparam // return value kept for interface consistency with runCapture
 	cmd := exec.Command(e.binaryPath, e.injectConfig(args)...)
 	cmd.Dir = e.workDir
 

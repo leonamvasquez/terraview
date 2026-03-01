@@ -75,7 +75,7 @@ com versionamento semântico [SemVer](https://semver.org/lang/pt-BR/).
 - Drift detection
 - Exit codes semânticos (0/1/2) para CI/CD
 - Saída SARIF para GitHub Actions
-- Auto-update via `terraview upgrade`
+- Atualização via gerenciador de pacotes (Homebrew, Scoop, APT, DNF)
 - Alias `tv`
 
 [Unreleased]: https://github.com/leonamvasquez/terraview/compare/v0.5.3...HEAD

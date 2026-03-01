@@ -9,9 +9,14 @@ import (
 
 	"time"
 
+	"encoding/json"
+
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
+	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/contextanalysis"
@@ -24,11 +29,10 @@ import (
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
-	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/topology"
-	"github.com/spf13/cobra"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 var (
@@ -170,11 +174,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 // reviewConfig holds the resolved configuration for a review pipeline run.
 type reviewConfig struct {
-	cfg            config.Config
-	scannerName    string
-	resolvedPlan   string
-	resolvedOutput string
-	effectiveAI    bool
+	cfg             config.Config
+	scannerName     string
+	resolvedPlan    string
+	resolvedOutput  string
+	effectiveAI     bool
 	effectiveFormat string
 
 	// AI settings
@@ -188,6 +192,12 @@ type reviewConfig struct {
 	aiNumCtx       int
 }
 
+// cachedAnalysis is the serialized form of an AI context analysis result.
+type cachedAnalysis struct {
+	Findings []rules.Finding `json:"findings"`
+	Summary  string          `json:"summary"`
+}
+
 // scanResult holds the output of the parallel scanner + AI phase.
 type scanResult struct {
 	hardFindings    []rules.Finding
@@ -198,7 +208,7 @@ type scanResult struct {
 
 // executeReview runs the full review pipeline and returns the plan path, exit code, and any error.
 // Pipeline: Parse → [Scanner ‖ AI Context] → Merge → Score → Output
-func executeReview(scannerName string) (string, int, error) {
+func executeReview(scannerName string) (string, int, error) { //nolint:unparam // planPath used by apply command
 	rc, err := resolveReviewConfig(scannerName)
 	if err != nil {
 		return "", 0, err
@@ -565,9 +575,17 @@ func runCodeContextAnalysis(
 		ollamaCleanup = cleanup
 	}
 
-	// Create cancellable context
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSecs+util.ContextTimeoutGraceSecs)*time.Second)
+	// Scale timeout with resource count: base + 3s per resource in the prompt.
+	// Large plans through proxy providers (OpenRouter) need more time.
+	effectiveResources := len(resources)
+	if maxResources > 0 && effectiveResources > maxResources {
+		effectiveResources = maxResources
+	}
+	scaledTimeout := timeoutSecs + effectiveResources*3 + util.ContextTimeoutGraceSecs
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(scaledTimeout)*time.Second)
 	defer cancel()
+	logVerbose("AI timeout: %ds (base %d + %d resources × 3s + %ds grace)",
+		scaledTimeout, timeoutSecs, effectiveResources, util.ContextTimeoutGraceSecs)
 
 	// Start resource monitor for Ollama
 	var monitor *runtime.Monitor
@@ -621,6 +639,34 @@ func runCodeContextAnalysis(
 
 	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt)
 
+	// Build cache key from resource data + provider + model
+	var diskCache *aicache.DiskCache
+	var cacheKey string
+	if cfg.LLM.Cache {
+		resourcesJSON, _ := json.Marshal(resources)
+		cacheKey = aicache.AnalysisKey(resourcesJSON, providerName, model)
+		ttl := cfg.LLM.CacheTTLHours
+		if ttl <= 0 {
+			ttl = 24
+		}
+		diskCache = aicache.NewDiskCache(aicache.DiskCachePath(), providerName, model, ttl)
+
+		if cached, ok := diskCache.Get(cacheKey); ok {
+			logVerbose("cache hit for AI context analysis (%s/%s)", providerName, model)
+			// Cleanup before returning
+			if monitor != nil {
+				monitor.Stop()
+			}
+			if ollamaCleanup != nil {
+				ollamaCleanup()
+			}
+			var cachedResult cachedAnalysis
+			if err := json.Unmarshal([]byte(cached), &cachedResult); err == nil {
+				return cachedResult.Findings, cachedResult.Summary, nil
+			}
+		}
+	}
+
 	displayModel := model
 	if providerName != "" && !strings.Contains(model, "/") {
 		displayModel = providerName + "/" + model
@@ -640,6 +686,15 @@ func runCodeContextAnalysis(
 
 	if err != nil {
 		return nil, "", err
+	}
+
+	// Store result in disk cache
+	if diskCache != nil {
+		cached := cachedAnalysis{Findings: result.Findings, Summary: result.Summary}
+		if data, err := json.Marshal(cached); err == nil {
+			diskCache.Put(cacheKey, string(data))
+			logVerbose("cached AI context analysis result (%s/%s)", providerName, model)
+		}
 	}
 
 	logVerbose("AI context (%s/%s): %d findings", providerName, model, len(result.Findings))

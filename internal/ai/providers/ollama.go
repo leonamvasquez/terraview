@@ -175,4 +175,3 @@ func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt
 
 	return parseResponse(ollamaResp.Response, ollamaName)
 }
-
