@@ -59,14 +59,11 @@ sboms:
 signs:
   - cmd: cosign
     artifacts: checksum
-    output: true
-    certificate: "${artifact}.pem"
-    signature: "${artifact}.sig"
+    signature: "${artifact}.bundle"
     args:
       - sign-blob
       - "--yes"
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - "--bundle=${signature}"
       - "${artifact}"
 
 # ── Native packages: deb, rpm, apk, archlinux ───────────────────────
