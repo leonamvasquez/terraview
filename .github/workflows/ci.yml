@@ -12,6 +12,10 @@ permissions:
   actions: read           # required by osv-scanner reusable workflow
 
 jobs:
+  # ════════════════════════════════════════════════════════════════════
+  # PR + PUSH — jobs leves que rodam em todo evento (feedback rápido)
+  # ════════════════════════════════════════════════════════════════════
+
   # ──────────────────────────────────────────────────────────────────
   # LINT — estilo, erros estáticos, padrões de código
   # ──────────────────────────────────────────────────────────────────
@@ -55,7 +59,56 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────
-  # SECRET SCAN — detecta chaves, tokens e credenciais no histórico git
+  # BUILD — compilação rápida (linux/amd64) para validar que compila
+  # Roda em PRs e push — feedback rápido sem desperdício de minutos
+  # ──────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build (linux/amd64)
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+          go build -ldflags "-s -w -X main.version=${VERSION}" -o /dev/null .
+
+  # ──────────────────────────────────────────────────────────────────
+  # BUILD MATRIX — compila para as 6 combinações de plataforma/arch
+  # Apenas em push para main/develop (não em PRs)
+  # ──────────────────────────────────────────────────────────────────
+  build-matrix:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [lint, test]
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+          go build -ldflags "-s -w -X main.version=${VERSION}" -o /dev/null .
+
+  # ──────────────────────────────────────────────────────────────────
+  # SECRET SCAN — detecta chaves, tokens e credenciais
   # ──────────────────────────────────────────────────────────────────
   secrets:
     name: Secret Scan
@@ -68,6 +121,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ════════════════════════════════════════════════════════════════════
+  # PUSH ONLY — jobs pesados que rodam apenas em push para main/develop
+  # Scans de segurança profundos já cobertos pelo weekly.yml em PRs
+  # ════════════════════════════════════════════════════════════════════
+
   # ──────────────────────────────────────────────────────────────────
   # SAST — análise estática de segurança do código-fonte (Semgrep)
   # Detecta: SQLi, path traversal, command injection, crypto fraca, etc.
@@ -75,6 +133,7 @@ jobs:
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - name: Run Semgrep
@@ -96,6 +155,7 @@ jobs:
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -109,6 +169,7 @@ jobs:
 
   osv-scan:
     name: OSV Scanner
+    if: github.event_name == 'push'
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.3
     with:
       scan-args: |-
@@ -121,6 +182,7 @@ jobs:
   licenses:
     name: License Audit
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -132,33 +194,6 @@ jobs:
         run: |
           go install github.com/google/go-licenses@latest
           go-licenses check ./... --disallowed_types=restricted
-
-  # ──────────────────────────────────────────────────────────────────
-  # BUILD — compila para as 6 combinações de plataforma/arquitetura
-  # Só roda após lint + test para não desperdiçar minutos em falhas
-  # ──────────────────────────────────────────────────────────────────
-  build:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: |
-          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
-          go build -ldflags "-s -w -X main.version=${VERSION}" -o /dev/null .
 
   # ──────────────────────────────────────────────────────────────────
   # FUZZ SMOKE — testa o parser com inputs aleatórios por 30s
