@@ -52,7 +52,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Install syft (gerador de SBOM)
         uses: anchore/sbom-action/download-syft@17ae1740179002c89186b61233e0f892c3118b11 # v0
       - name: GoReleaser
@@ -203,7 +203,7 @@ jobs:
           exit-code: false
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
 
       # Assinar imagem no GHCR (keyless via OIDC)
       - name: Sign GHCR image
