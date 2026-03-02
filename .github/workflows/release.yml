@@ -5,13 +5,7 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write        # GoReleaser: criar GitHub Release
-  packages: write        # push da imagem para GHCR
-  id-token: write        # cosign keyless signing via OIDC
-  attestations: write    # GitHub attestations API
-  security-events: write # upload SARIF ao Security tab
-  actions: read          # slsa-github-generator: leitura do contexto do workflow
+permissions: read-all
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
@@ -21,10 +15,10 @@ jobs:
     name: Gate (Test + Fuzz)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -44,22 +38,25 @@ jobs:
     name: GoReleaser
     runs-on: ubuntu-latest
     needs: gate
+    permissions:
+      contents: write   # criar GitHub Release e upload de assets
+      id-token: write   # cosign keyless signing via OIDC
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Install syft (gerador de SBOM)
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@17ae1740179002c89186b61233e0f892c3118b11 # v0
       - name: GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -81,8 +78,10 @@ jobs:
     name: Publish Packages (deb/rpm)
     runs-on: ubuntu-latest
     needs: release
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Cloudsmith CLI
         run: pip install cloudsmith-cli
@@ -122,24 +121,28 @@ jobs:
     name: Container
     runs-on: ubuntu-latest
     needs: release
+    permissions:
+      packages: write      # push para GHCR
+      id-token: write      # cosign keyless signing via OIDC
+      attestations: write  # GitHub attestations API
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       # Buildx para multi-plataforma (amd64 + arm64)
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # Tags e labels para ambos os registries
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: |
             ghcr.io/leonamvasquez/terraview
@@ -150,14 +153,14 @@ jobs:
             type=raw,value=latest
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -165,7 +168,7 @@ jobs:
       # Build multi-arch e push para GHCR + DockerHub simultaneamente
       - name: Build and push (linux/amd64 + linux/arm64)
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -183,7 +186,7 @@ jobs:
 
       # Docker Scout: CVEs CRÍTICOS/HIGH bloqueiam a release
       - name: Docker Scout — CVE scan
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1
         with:
           command: cves
           image: docker.io/leonamvasquez/terraview:latest
@@ -193,14 +196,14 @@ jobs:
 
       # Docker Scout: recomendações de melhoria da imagem
       - name: Docker Scout — recommendations
-        uses: docker/scout-action@v1
+        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1
         with:
           command: recommendations
           image: docker.io/leonamvasquez/terraview:latest
           exit-code: false
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       # Assinar imagem no GHCR (keyless via OIDC)
       - name: Sign GHCR image
