@@ -13,6 +13,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/leonamvasquez/terraview)](https://goreportcard.com/report/github.com/leonamvasquez/terraview)
 [![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
 
 Terraview is a security analysis tool for Terraform plans that combines static scanners (Checkov, tfsec, Terrascan) with AI contextual analysis running **in parallel**.
 
@@ -36,6 +37,7 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - [Drift](#drift)
 - [Provider Management](#provider-management)
 - [Scanner Management](#scanner-management)
+- [AI Cache](#ai-cache)
 - [Output Formats](#output-formats)
 - [Configuration](#configuration)
 - [Security Scanners](#security-scanners)
@@ -71,6 +73,7 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - **Bilingual (en/pt-BR)** — `--br` flag available on all commands
 - **Update** via your package manager (`brew upgrade terraview`, `scoop update terraview`, `apt upgrade terraview`, etc.)
 - **`tv` alias** — symlink created on install; `tv scan` = `terraview scan`
+- **Persistent AI cache** on disk — reruns with the same plan skip redundant API calls (`cache status | clear`)
 - **Cross-platform scanner install** via `terraview scanners install --all` (Linux, macOS, Windows)
 
 ## Examples
@@ -293,6 +296,8 @@ Scanner Management:
               scanners list | install | default
 
 Utilities:
+  cache       Manage the AI response cache
+              cache status | clear
   version     Show version information
   setup       Interactive environment setup
 
@@ -443,6 +448,23 @@ terraview scanners default checkov          # set default scanner
 terraview scanners default                  # show current default
 ```
 
+### AI Cache
+
+Terraview features a persistent AI response cache on disk (`~/.terraview/cache/`). When enabled, reruns with the same plan reuse the previous response without additional API calls.
+
+```bash
+terraview cache status                      # show cache statistics (entries, size, dates)
+terraview cache clear                       # clear all cached AI responses
+```
+
+Enable in `.terraview.yaml`:
+
+```yaml
+llm:
+  cache: true            # enable persistent cache
+  cache_ttl_hours: 24    # TTL in hours (default: 24)
+```
+
 ### Other commands
 
 ```bash
@@ -478,7 +500,9 @@ Terraview can be configured with a YAML file. By default, it looks for `.terravi
 2. Current working directory
 3. User home (`~/.terraview/.terraview.yaml`)
 
-Configuration example:
+Configuration example (see [`examples/.terraview.yaml`](examples/.terraview.yaml) for full reference with all documented fields):
+
+> **WARNING:** Never commit `api_key` directly in `.terraview.yaml`. Prefer environment variables (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.) or add `.terraview.yaml` to your `.gitignore`. Terraview emits a warning to stderr when it detects `api_key` in the config file.
 
 ```yaml
 llm:
@@ -486,10 +510,14 @@ llm:
   provider: ollama              # ollama, gemini, claude, openai, deepseek, openrouter, gemini-cli, claude-code
   model: llama3.1:8b            # provider-specific model
   url: http://localhost:11434   # custom URL (only relevant for ollama)
-  api_key: ""                   # for API providers (not needed for ollama or CLI providers)
+  # api_key: ""                 # prefer environment variables (see warning above)
   timeout_seconds: 120          # timeout for LLM calls
   temperature: 0.2              # 0.0 to 1.0 (lower = more deterministic)
+  max_resources: 30             # max resources in AI prompt (default: 30)
+  cache: false                  # enable persistent AI response cache
+  cache_ttl_hours: 24           # cache TTL in hours (default: 24)
   ollama:
+    num_ctx: 4096               # model context window (default: 4096)
     max_threads: 0              # 0 = use all CPUs
     max_memory_mb: 0            # 0 = no limit
     min_free_memory_mb: 1024    # minimum free memory to start Ollama
@@ -555,18 +583,18 @@ Terraview supports **8 AI providers** organized in three categories:
 
 | Provider | Environment variable | Default model | Example models |
 |----------|---------------------|---------------|----------------|
-| **gemini** | `GEMINI_API_KEY` | gemini-2.5-pro | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash |
-| **claude** | `ANTHROPIC_API_KEY` | claude-sonnet-4-5 | claude-sonnet-4-5, claude-opus-4-5, claude-haiku-4-5 |
-| **openai** | `OPENAI_API_KEY` | gpt-4o | gpt-4o, gpt-4o-mini, o3-mini |
+| **gemini** | `GEMINI_API_KEY` | gemini-2.5-flash | gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash |
+| **claude** | `ANTHROPIC_API_KEY` | claude-haiku-4-5 | claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-6 |
+| **openai** | `OPENAI_API_KEY` | gpt-4o-mini | gpt-4o-mini, gpt-4o, o3-mini |
 | **deepseek** | `DEEPSEEK_API_KEY` | deepseek-v3.2 | deepseek-chat, deepseek-reasoner |
-| **openrouter** | `OPENROUTER_API_KEY` | anthropic/claude-opus-4.6 | Any model available on OpenRouter |
+| **openrouter** | `OPENROUTER_API_KEY` | google/gemini-2.5-flash | Any model available on OpenRouter |
 
 ### CLI providers (subscription — no API key)
 
 | Provider | Required CLI | Installation | Default model |
 |----------|-------------|-------------|---------------|
-| **gemini-cli** | `gemini` | `npm install -g @google/gemini-cli` | gemini-2.5-pro |
-| **claude-code** | `claude` | `npm install -g @anthropic-ai/claude-code` | claude-sonnet-4-5 |
+| **gemini-cli** | `gemini` | `npm install -g @google/gemini-cli` | gemini-2.5-flash |
+| **claude-code** | `claude` | `npm install -g @anthropic-ai/claude-code` | claude-haiku-4-5 |
 
 These providers use your **personal subscription** (Google/Anthropic) for billing. No API key needed — just install the CLI and authenticate once.
 
@@ -706,10 +734,10 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                             terraview CLI                               │
-│  scan | apply | diagram | explain | drift | provider | scanners | ...  │
-└────────────────────────────────┬────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                              terraview CLI                                │
+│  scan | apply | diagram | explain | drift | provider | scanners | cache  │
+└────────────────────────────────┬──────────────────────────────────────────┘
                                  │
                         ┌────────┴────────┐
                         ▼                 ▼
@@ -724,38 +752,44 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
                    │   NormalizedResource[]   │
                    └────────────┬────────────┘
                                 │
-                   ┌────────────┴────────────┐
-                   ▼                         ▼
-          Topology Graph            Feature Extractor
-          (30+ ref fields)        (5 risk axes per resource)
-                   │                         │
-          ┌────────┴────────┐    ┌───────────┴──────────┐
-          ▼                 ▼    ▼                       ▼
-  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
-  │   Scanner    │  │  AI Context      │  │  Compress +      │
-  │  Checkov     │  │  Analysis        │  │  Cache           │
-  │  tfsec       │  │  (cross-resource │  │  (risk vectors   │
-  │  Terrascan   │  │   relationships) │  │   → LLM)         │
-  └──────┬───────┘  └────────┬─────────┘  └──────────────────┘
-         │                   │
-         └──────────┬────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Normalizer         │ deduplicate scanner + AI
-         │  Resolver           │ resolve conflicts with confidence
-         └──────────┬──────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Scorer             │ scores 0-10 (security, compliance, maint.)
-         │  Aggregator         │ verdict + exit code
-         │  Meta-analysis      │ cross-tool correlation
-         └──────────┬──────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Output             │
-         │  pretty | compact   │
-         │  json | sarif | md  │
-         └─────────────────────┘
+                                ▼
+                       Topology Graph
+                       (30+ ref fields)
+                                │
+               ┌────────────────┼────────────────┐
+               │           PARALLEL              │
+               ▼                                 ▼
+      ┌──────────────┐              ┌──────────────────┐
+      │   Scanner    │              │  AI Context      │
+      │  Checkov     │              │  Analysis        │
+      │  tfsec       │              │  (cross-resource │
+      │  Terrascan   │              │   relationships, │
+      │              │              │   risk vectors)  │
+      └──────┬───────┘              └────────┬─────────┘
+             │                               │
+             │                      ┌────────┴─────────┐
+             │                      │  AI Cache        │
+             │                      │  (disk, TTL 24h) │
+             │                      └────────┬─────────┘
+             │                               │
+             └──────────┬────────────────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Normalizer         │ deduplicate scanner + AI
+             │  Resolver           │ same resource+category → scanner wins
+             └──────────┬──────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Aggregator         │ scores 0-10 (security, compliance, maint.)
+             │  Scorer             │ verdict + exit code
+             │  Meta-analysis      │ cross-tool correlation
+             └──────────┬──────────┘
+                        ▼
+             ┌─────────────────────┐
+             │  Output             │
+             │  pretty | compact   │
+             │  json | sarif | md  │
+             └─────────────────────┘
 ```
 
 ## Development
