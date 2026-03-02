@@ -241,7 +241,7 @@ jobs:
       actions: read    # leitura do contexto do workflow
       id-token: write  # assinar provenance via GitHub OIDC
       packages: write  # upload attestation no GHCR
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ghcr.io/leonamvasquez/terraview
       digest: ${{ needs.container.outputs.digest }}
