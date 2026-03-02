@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Cloudsmith CLI
-        run: pip install cloudsmith-cli
+        run: pip install cloudsmith-cli==1.13.0
 
       - name: Download release artifacts
         env:
@@ -226,7 +226,7 @@ jobs:
       actions: read    # leitura do contexto do workflow
       id-token: write  # assinar provenance via GitHub OIDC
       contents: write  # upload do .intoto.jsonl na GitHub Release
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: "${{ needs.release.outputs.hashes }}"
       upload-assets: true
@@ -241,7 +241,7 @@ jobs:
       actions: read    # leitura do contexto do workflow
       id-token: write  # assinar provenance via GitHub OIDC
       packages: write  # upload attestation no GHCR
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       image: ghcr.io/leonamvasquez/terraview
       digest: ${{ needs.container.outputs.digest }}
