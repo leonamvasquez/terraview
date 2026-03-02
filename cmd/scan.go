@@ -29,6 +29,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/runtime"
+	"github.com/leonamvasquez/terraview/internal/sanitizer"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/topology"
@@ -44,6 +45,7 @@ var (
 	impactFlag   bool
 	findingsFile string
 	allFlag      bool
+	noRedactFlag bool // --no-redact: desabilita redação de dados sensíveis
 )
 
 var scanCmd = &cobra.Command{
@@ -94,6 +96,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
 	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
+	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -638,6 +641,37 @@ func runCodeContextAnalysis(
 	}
 
 	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt)
+
+	// ── Sanitização de dados sensíveis ─────────────────────────────────
+	// Redatar valores sensíveis (passwords, tokens, ARNs, PEM, etc.)
+	// antes de enviar os recursos ao provedor de IA.
+	// Ollama é local e não precisa de redação por padrão.
+	shouldRedact := cfg.LLM.Redact && !noRedactFlag
+	if providerName == "ollama" && !cfg.LLM.Redact {
+		shouldRedact = false
+	}
+
+	if shouldRedact {
+		sess := sanitizer.NewSession()
+		for i := range resources {
+			resources[i].Values = sess.SanitizeMap(resources[i].Values, resources[i].Address+".values")
+			if resources[i].BeforeValues != nil {
+				resources[i].BeforeValues = sess.SanitizeMap(resources[i].BeforeValues, resources[i].Address+".before_values")
+			}
+		}
+		manifest := sess.Manifest()
+		if manifest.Count() > 0 {
+			fmt.Fprintf(os.Stderr, "%s ⚠ Redatados %d valores sensíveis (%d únicos) antes do envio à IA\n",
+				output.Prefix(), manifest.Count(), manifest.UniqueCount())
+			if cfg.LLM.RedactLog {
+				for plac, paths := range manifest.Entries {
+					logVerbose("  %s → %v", plac, paths)
+				}
+			}
+		}
+	} else {
+		logVerbose("Redação de dados sensíveis desabilitada")
+	}
 
 	// Build cache key from resource data + provider + model
 	var diskCache *aicache.DiskCache

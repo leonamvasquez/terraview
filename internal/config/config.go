@@ -88,6 +88,8 @@ type LLMConfig struct {
 	Ollama         OllamaConfig `yaml:"ollama"`
 	Cache          bool         `yaml:"cache"`
 	CacheTTLHours  int          `yaml:"cache_ttl_hours"`
+	Redact         bool         `yaml:"redact"`      // redatar dados sensíveis antes de enviar à IA
+	RedactLog      bool         `yaml:"redact_log"`   // exibir manifest de redação em modo verbose
 }
 
 // OllamaConfig holds Ollama-specific resource limits.
@@ -136,6 +138,8 @@ func DefaultConfig() Config {
 			TimeoutSeconds: 120,
 			Temperature:    0.2,
 			CacheTTLHours:  24,
+			Redact:         true,
+			RedactLog:      false,
 			Ollama: OllamaConfig{
 				MaxThreads:      0, // 0 = use all CPUs
 				MaxMemoryMB:     0, // 0 = no limit
@@ -233,6 +237,8 @@ type fileLLMConfig struct {
 	Ollama         *fileOllamaConfig `yaml:"ollama"`
 	Cache          *bool             `yaml:"cache"`
 	CacheTTLHours  *int              `yaml:"cache_ttl_hours"`
+	Redact         *bool             `yaml:"redact"`
+	RedactLog      *bool             `yaml:"redact_log"`
 }
 
 type fileOllamaConfig struct {
@@ -379,6 +385,12 @@ func (f *fileConfig) merge(defaults Config) Config {
 		}
 		if f.LLM.CacheTTLHours != nil {
 			cfg.LLM.CacheTTLHours = *f.LLM.CacheTTLHours
+		}
+		if f.LLM.Redact != nil {
+			cfg.LLM.Redact = *f.LLM.Redact
+		}
+		if f.LLM.RedactLog != nil {
+			cfg.LLM.RedactLog = *f.LLM.RedactLog
 		}
 	}
 
