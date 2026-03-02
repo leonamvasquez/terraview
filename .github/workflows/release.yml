@@ -100,7 +100,7 @@ jobs:
         run: |
           for pkg in dist/*.deb; do
             echo "Publishing $pkg"
-            cloudsmith push deb workspace-for-leonam/terraview/any-distro/any-version "$pkg"
+            cloudsmith push deb --republish workspace-for-leonam/terraview/any-distro/any-version "$pkg"
           done
 
       - name: Publish .rpm packages
@@ -110,7 +110,7 @@ jobs:
         run: |
           for pkg in dist/*.rpm; do
             echo "Publishing $pkg"
-            cloudsmith push rpm workspace-for-leonam/terraview/any-distro/any-version "$pkg"
+            cloudsmith push rpm --republish workspace-for-leonam/terraview/any-distro/any-version "$pkg"
           done
 
   # ──────────────────────────────────────────────────────────────────
@@ -226,7 +226,8 @@ jobs:
       actions: read    # leitura do contexto do workflow
       id-token: write  # assinar provenance via GitHub OIDC
       contents: write  # upload do .intoto.jsonl na GitHub Release
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # NOTE: SLSA generators MUST use tag refs — SHA pins break self-verification (exit 27 in final step)
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.release.outputs.hashes }}"
       upload-assets: true
@@ -241,7 +242,8 @@ jobs:
       actions: read    # leitura do contexto do workflow
       id-token: write  # assinar provenance via GitHub OIDC
       packages: write  # upload attestation no GHCR
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # NOTE: SLSA generators MUST use tag refs — SHA pins break self-verification (exit 27 in final step)
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ghcr.io/leonamvasquez/terraview
       digest: ${{ needs.container.outputs.digest }}
