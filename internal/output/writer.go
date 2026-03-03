@@ -10,6 +10,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/util"
 )
 
@@ -22,9 +23,10 @@ const (
 
 // WriterConfig configures output behavior.
 type WriterConfig struct {
-	Format  string // "pretty", "compact", "json"
-	Lang    string // "pt-BR" for Brazilian Portuguese
-	Version string // application version for SARIF reports
+	Format        string // "pretty", "compact", "json"
+	Lang          string // "pt-BR" for Brazilian Portuguese
+	Version       string // application version for SARIF reports
+	ExplainScores bool   // show detailed score decomposition
 }
 
 // IsBR returns true if output should be in Brazilian Portuguese.
@@ -237,8 +239,160 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		fmt.Printf("  %s         %s\n", Header("Overall Score:"), ScoreColor(result.Score.OverallScore))
 	}
 	fmt.Println()
+
+	// Score Decomposition (--explain-scores)
+	if w.config.ExplainScores && result.ScoreDecomposition != nil {
+		w.printScoreDecomposition(result.ScoreDecomposition, br)
+	}
+
 	fmt.Printf("  %s: %d\n", m.LblExitCode, result.ExitCode)
 	fmt.Println(Bar())
+}
+
+// printScoreDecomposition imprime a decomposição detalhada do scoring.
+func (w *Writer) printScoreDecomposition(d *scoring.ScoreDecomposition, br bool) {
+	if br {
+		fmt.Printf("  %s\n", Header("Decomposição do Score"))
+	} else {
+		fmt.Printf("  %s\n", Header("Score Decomposition"))
+	}
+	fmt.Println()
+
+	categories := []struct {
+		nameBR string
+		nameEN string
+		decomp scoring.CategoryDecomposition
+	}{
+		{"Segurança", "Security", d.Security},
+		{"Conformidade", "Compliance", d.Compliance},
+		{"Manutenibilidade", "Maintainability", d.Maintainability},
+		{"Confiabilidade", "Reliability", d.Reliability},
+	}
+
+	for _, cat := range categories {
+		name := cat.nameEN
+		if br {
+			name = cat.nameBR
+		}
+		cd := cat.decomp
+
+		fmt.Printf("  %s: %.1f", Dimmed(name), cd.FinalScore)
+		if cd.FloorApplied != "" {
+			fmt.Printf(" [%s]", Dimmed(cd.FloorApplied))
+		}
+		if cd.BlendingNote != "" {
+			fmt.Printf(" (%s)", Dimmed(cd.BlendingNote))
+		}
+		fmt.Println()
+
+		if len(cd.FindingsImpact) > 0 {
+			if br {
+				fmt.Printf("    soma_ponderada=%.2f  penalidade=%.2f  recursos=%d\n",
+					cd.WeightedSum, cd.PenaltyRatio, cd.TotalResources)
+			} else {
+				fmt.Printf("    weighted_sum=%.2f  penalty=%.2f  resources=%d\n",
+					cd.WeightedSum, cd.PenaltyRatio, cd.TotalResources)
+			}
+			for _, fi := range cd.FindingsImpact {
+				fmt.Printf("    %s %s %-10s peso=%.1f impacto=%.2f  %s\n",
+					SevColor(fi.Severity), Dimmed(fi.RuleID),
+					util.Truncate(fi.Resource, 40),
+					fi.Weight, fi.ImpactOnScore,
+					Dimmed(fmt.Sprintf("[%s]", strings.Join(fi.RiskVectors, ","))))
+			}
+		}
+		fmt.Println()
+	}
+
+	// Overall
+	o := d.Overall
+	if br {
+		fmt.Printf("  %s: %.1f\n", Header("Score Geral"), o.FinalScore)
+		fmt.Printf("    Fórmula: %s\n", Dimmed(o.Formula))
+	} else {
+		fmt.Printf("  %s: %.1f\n", Header("Overall Score"), o.FinalScore)
+		fmt.Printf("    Formula: %s\n", Dimmed(o.Formula))
+	}
+	for _, c := range o.Components {
+		fmt.Printf("    %s: %.1f × %.1f = %.2f\n", c.Category, c.Score, c.Weight, c.Weighted)
+	}
+	fmt.Println()
+}
+
+// renderMarkdownDecomposition adiciona a decomposição do score ao Markdown.
+func (w *Writer) renderMarkdownDecomposition(sb *strings.Builder, d *scoring.ScoreDecomposition, br bool) {
+	if br {
+		sb.WriteString("### Decomposição do Score\n\n")
+	} else {
+		sb.WriteString("### Score Decomposition\n\n")
+	}
+
+	categories := []struct {
+		nameBR string
+		nameEN string
+		decomp scoring.CategoryDecomposition
+	}{
+		{"Segurança", "Security", d.Security},
+		{"Conformidade", "Compliance", d.Compliance},
+		{"Manutenibilidade", "Maintainability", d.Maintainability},
+		{"Confiabilidade", "Reliability", d.Reliability},
+	}
+
+	for _, cat := range categories {
+		name := cat.nameEN
+		if br {
+			name = cat.nameBR
+		}
+		cd := cat.decomp
+
+		sb.WriteString(fmt.Sprintf("**%s:** %.1f/10", name, cd.FinalScore))
+		if cd.FloorApplied != "" {
+			sb.WriteString(fmt.Sprintf(" _%s_", cd.FloorApplied))
+		}
+		if cd.BlendingNote != "" {
+			sb.WriteString(fmt.Sprintf(" (%s)", cd.BlendingNote))
+		}
+		sb.WriteString("\n\n")
+
+		if len(cd.FindingsImpact) > 0 {
+			if br {
+				sb.WriteString("| Regra | Recurso | Severidade | Peso | Impacto | Vetores |\n")
+				sb.WriteString("|-------|---------|------------|------|---------|---------|\n")
+			} else {
+				sb.WriteString("| Rule | Resource | Severity | Weight | Impact | Vectors |\n")
+				sb.WriteString("|------|----------|----------|--------|--------|---------|\n")
+			}
+			for _, fi := range cd.FindingsImpact {
+				sb.WriteString(fmt.Sprintf("| `%s` | `%s` | %s | %.1f | %.2f | %s |\n",
+					fi.RuleID, fi.Resource, fi.Severity, fi.Weight, fi.ImpactOnScore,
+					strings.Join(fi.RiskVectors, ", ")))
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	// Overall
+	o := d.Overall
+	if br {
+		sb.WriteString(fmt.Sprintf("**Score Geral:** %.1f/10\n\n", o.FinalScore))
+		sb.WriteString(fmt.Sprintf("Fórmula: `%s`\n\n", o.Formula))
+	} else {
+		sb.WriteString(fmt.Sprintf("**Overall Score:** %.1f/10\n\n", o.FinalScore))
+		sb.WriteString(fmt.Sprintf("Formula: `%s`\n\n", o.Formula))
+	}
+
+	if br {
+		sb.WriteString("| Categoria | Score | Peso | Ponderado |\n")
+		sb.WriteString("|-----------|-------|------|-----------|\n")
+	} else {
+		sb.WriteString("| Category | Score | Weight | Weighted |\n")
+		sb.WriteString("|----------|-------|--------|----------|\n")
+	}
+	for _, c := range o.Components {
+		sb.WriteString(fmt.Sprintf("| %s | %.1f | %.1f | %.2f |\n",
+			c.Category, c.Score, c.Weight, c.Weighted))
+	}
+	sb.WriteString("\n")
 }
 
 func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
@@ -356,6 +510,11 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 		sb.WriteString(fmt.Sprintf("| Compliance | %s %.1f/10 |\n", scoreEmoji(result.Score.ComplianceScore), result.Score.ComplianceScore))
 		sb.WriteString(fmt.Sprintf("| Maintainability | %s %.1f/10 |\n", scoreEmoji(result.Score.MaintainabilityScore), result.Score.MaintainabilityScore))
 		sb.WriteString(fmt.Sprintf("| **Overall** | **%s %.1f/10** |\n\n", scoreEmoji(result.Score.OverallScore), result.Score.OverallScore))
+	}
+
+	// Score Decomposition in Markdown (--explain-scores)
+	if w.config.ExplainScores && result.ScoreDecomposition != nil {
+		w.renderMarkdownDecomposition(&sb, result.ScoreDecomposition, br)
 	}
 
 	// Summary

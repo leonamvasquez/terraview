@@ -38,14 +38,15 @@ import (
 
 var (
 	// Scan-local flags
-	staticOnly   bool // --static: disable AI contextual analysis
-	strict       bool
-	explainFlag  bool
-	diagramFlag  bool
-	impactFlag   bool
-	findingsFile string
-	allFlag      bool
-	noRedactFlag bool // --no-redact: desabilita redação de dados sensíveis
+	staticOnly       bool // --static: disable AI contextual analysis
+	strict           bool
+	explainFlag      bool
+	diagramFlag      bool
+	impactFlag       bool
+	explainScoresFlag bool // --explain-scores: mostra decomposição do scoring
+	findingsFile     string
+	allFlag          bool
+	noRedactFlag     bool // --no-redact: desabilita redação de dados sensíveis
 )
 
 var scanCmd = &cobra.Command{
@@ -95,6 +96,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
 	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
+	scanCmd.Flags().BoolVar(&explainScoresFlag, "explain-scores", false, "Show detailed score decomposition for audit")
 	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
 	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
 }
@@ -450,6 +452,13 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 	agg := aggregator.NewAggregator(scorer)
 	result := agg.Aggregate(rc.resolvedPlan, len(resources), hardFindings, nil, sr.contextSummary, strict)
 
+	// Score decomposition for audit (--explain-scores)
+	if explainScoresFlag {
+		decomp := scorer.Decompose(result.Findings, len(resources))
+		result.ScoreDecomposition = &decomp
+		logVerbose("Score decomposition computed for %d findings", len(result.Findings))
+	}
+
 	// Apply rule filtering from config
 	if len(rc.cfg.Rules.DisabledRules) > 0 {
 		result.Findings = filterDisabledRules(result.Findings, rc.cfg.Rules.DisabledRules)
@@ -489,9 +498,10 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		langCode = "pt-BR"
 	}
 	writer := output.NewWriterWithConfig(output.WriterConfig{
-		Format:  rc.effectiveFormat,
-		Lang:    langCode,
-		Version: Version,
+		Format:        rc.effectiveFormat,
+		Lang:          langCode,
+		Version:       Version,
+		ExplainScores: explainScoresFlag,
 	})
 
 	jsonPath := filepath.Join(rc.resolvedOutput, "review.json")

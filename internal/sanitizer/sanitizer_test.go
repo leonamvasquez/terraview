@@ -531,9 +531,9 @@ func TestSession_SanitizeMap(t *testing.T) {
 
 	// Simula NormalizedResource.Values
 	values := map[string]interface{}{
-		"engine":       "postgres",
-		"password":     "SuperSecret123!",
-		"private_key":  "-----BEGIN RSA PRIVATE KEY-----\ndata",
+		"engine":        "postgres",
+		"password":      "SuperSecret123!",
+		"private_key":   "-----BEGIN RSA PRIVATE KEY-----\ndata",
 		"instance_type": "t3.micro",
 	}
 

@@ -22,20 +22,21 @@ type Verdict struct {
 
 // ReviewResult is the final aggregated result of a review.
 type ReviewResult struct {
-	PlanFile       string               `json:"plan_file"`
-	TotalResources int                  `json:"total_resources"`
-	Verdict        Verdict              `json:"verdict"`
-	Findings       []rules.Finding      `json:"findings"`
-	Score          scoring.Score        `json:"score"`
-	Summary        string               `json:"summary,omitempty"`
-	Explanation    *explain.Explanation `json:"explanation,omitempty"`
-	Diagram        string               `json:"diagram,omitempty"`
-	BlastRadius    *blast.BlastResult   `json:"blast_radius,omitempty"`
-	MetaAnalysis   *meta.MetaResult     `json:"meta_analysis,omitempty"`
-	SeverityCounts map[string]int       `json:"severity_counts"`
-	CategoryCounts map[string]int       `json:"category_counts"`
-	MaxSeverity    string               `json:"max_severity"`
-	ExitCode       int                  `json:"exit_code"`
+	PlanFile           string                    `json:"plan_file"`
+	TotalResources     int                       `json:"total_resources"`
+	Verdict            Verdict                   `json:"verdict"`
+	Findings           []rules.Finding           `json:"findings"`
+	Score              scoring.Score             `json:"score"`
+	ScoreDecomposition *scoring.ScoreDecomposition `json:"score_decomposition,omitempty"`
+	Summary            string                    `json:"summary,omitempty"`
+	Explanation        *explain.Explanation      `json:"explanation,omitempty"`
+	Diagram            string                    `json:"diagram,omitempty"`
+	BlastRadius        *blast.BlastResult        `json:"blast_radius,omitempty"`
+	MetaAnalysis       *meta.MetaResult          `json:"meta_analysis,omitempty"`
+	SeverityCounts     map[string]int            `json:"severity_counts"`
+	CategoryCounts     map[string]int            `json:"category_counts"`
+	MaxSeverity        string                    `json:"max_severity"`
+	ExitCode           int                       `json:"exit_code"`
 }
 
 // Aggregator combines findings from multiple sources and computes the final result.
