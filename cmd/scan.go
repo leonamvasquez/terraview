@@ -38,15 +38,15 @@ import (
 
 var (
 	// Scan-local flags
-	staticOnly       bool // --static: disable AI contextual analysis
-	strict           bool
-	explainFlag      bool
-	diagramFlag      bool
-	impactFlag       bool
+	staticOnly        bool // --static: disable AI contextual analysis
+	strict            bool
+	explainFlag       bool
+	diagramFlag       bool
+	impactFlag        bool
 	explainScoresFlag bool // --explain-scores: mostra decomposição do scoring
-	findingsFile     string
-	allFlag          bool
-	noRedactFlag     bool // --no-redact: desabilita redação de dados sensíveis
+	findingsFile      string
+	allFlag           bool
+	noRedactFlag      bool // --no-redact: desabilita redação de dados sensíveis
 )
 
 var scanCmd = &cobra.Command{
@@ -382,7 +382,8 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 				resources, topoGraph,
 				rc.aiProvider, rc.aiURL, rc.aiModel,
 				rc.aiTimeout, rc.aiTemperature, rc.aiAPIKey,
-				rc.aiMaxResources, rc.aiNumCtx, rc.cfg)
+				rc.aiMaxResources, rc.aiNumCtx, rc.cfg,
+				rc.resolvedPlan, rc.scannerName)
 			contextCh <- contextOutput{findings: ctxFindings, summary: ctxSummary, err: ctxErr}
 		}()
 	} else {
@@ -571,6 +572,7 @@ func runCodeContextAnalysis(
 	timeoutSecs int, temp float64,
 	apiKey string, maxResources, numCtx int,
 	cfg config.Config,
+	planPath, scannerName string,
 ) ([]rules.Finding, string, error) {
 
 	logVerbose("AI context analysis: %s (model: %s)", providerName, model)
@@ -683,30 +685,36 @@ func runCodeContextAnalysis(
 		logVerbose("Redação de dados sensíveis desabilitada")
 	}
 
-	// Build cache key from resource data + provider + model
+	// Construir chave de cache baseada no hash SHA-256 do conteúdo do plano
 	var diskCache *aicache.DiskCache
-	var cacheKey string
+	var planHash string
 	if cfg.LLM.Cache {
-		resourcesJSON, _ := json.Marshal(resources)
-		cacheKey = aicache.AnalysisKey(resourcesJSON, providerName, model)
+		rawPlan, readErr := os.ReadFile(planPath)
+		if readErr != nil {
+			logVerbose("cache: falha ao ler plano %s: %v", planPath, readErr)
+		} else {
+			planHash = aicache.PlanHash(rawPlan)
+		}
 		ttl := cfg.LLM.CacheTTLHours
 		if ttl <= 0 {
 			ttl = 24
 		}
-		diskCache = aicache.NewDiskCache(aicache.DiskCachePath(), providerName, model, ttl)
+		diskCache = aicache.NewDiskCache(aicache.DiskCacheDir(), providerName, model, scannerName, ttl)
 
-		if cached, ok := diskCache.Get(cacheKey); ok {
-			logVerbose("cache hit for AI context analysis (%s/%s)", providerName, model)
-			// Cleanup before returning
-			if monitor != nil {
-				monitor.Stop()
-			}
-			if ollamaCleanup != nil {
-				ollamaCleanup()
-			}
-			var cachedResult cachedAnalysis
-			if err := json.Unmarshal([]byte(cached), &cachedResult); err == nil {
-				return cachedResult.Findings, cachedResult.Summary, nil
+		if planHash != "" {
+			if cached, ok := diskCache.Get(planHash); ok {
+				logVerbose("cache hit para análise de contexto IA (%s/%s, hash=%s)", providerName, model, planHash[:12])
+				// Limpar antes de retornar
+				if monitor != nil {
+					monitor.Stop()
+				}
+				if ollamaCleanup != nil {
+					ollamaCleanup()
+				}
+				var cachedResult cachedAnalysis
+				if err := json.Unmarshal([]byte(cached), &cachedResult); err == nil {
+					return cachedResult.Findings, cachedResult.Summary, nil
+				}
 			}
 		}
 	}
@@ -733,11 +741,11 @@ func runCodeContextAnalysis(
 	}
 
 	// Store result in disk cache
-	if diskCache != nil {
+	if diskCache != nil && planHash != "" {
 		cached := cachedAnalysis{Findings: result.Findings, Summary: result.Summary}
 		if data, err := json.Marshal(cached); err == nil {
-			diskCache.Put(cacheKey, string(data))
-			logVerbose("cached AI context analysis result (%s/%s)", providerName, model)
+			diskCache.Put(planHash, string(data))
+			logVerbose("resultado da análise IA cacheado (%s/%s, hash=%s)", providerName, model, planHash[:12])
 		}
 	}
 

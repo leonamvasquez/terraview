@@ -139,7 +139,8 @@ func (c *Cache) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.entries)
 }
 
-// diskEntry is the on-disk representation of a cached AI response.
+// diskEntry é a representação legada de uma entrada de cache (formato antigo).
+// Mantido apenas para leitura de estatísticas do arquivo ai-cache.json legado.
 type diskEntry struct {
 	Response string    `json:"response"`
 	CachedAt time.Time `json:"cached_at"`
@@ -147,43 +148,67 @@ type diskEntry struct {
 	Model    string    `json:"model"`
 }
 
-// DiskCache provides persistent AI response caching with TTL expiration.
-// On first access it lazily loads entries from disk into an in-memory map.
-type DiskCache struct {
-	mu       sync.Mutex
-	path     string
-	ttl      time.Duration
-	memory   map[string]diskEntry
-	loaded   bool
-	provider string
-	model    string
-	hits     int
-	misses   int
-	now      func() time.Time // for testing
+// CacheMeta armazena metadados de uma entrada de cache em disco.
+// Cada entrada possui um arquivo .meta com estes campos e um .json com a resposta.
+type CacheMeta struct {
+	CreatedAt time.Time `json:"created_at"`
+	PlanHash  string    `json:"plan_hash"`
+	Provider  string    `json:"provider"`
+	Model     string    `json:"model"`
+	Scanner   string    `json:"scanner"`
+	TTLHours  int       `json:"ttl_hours"`
 }
 
-// DiskCachePath returns the default disk cache file path.
-func DiskCachePath() string {
+// DiskCache implementa cache persistente de respostas IA com hash de conteúdo.
+// Cada entrada é armazenada como <hash>.json + <hash>.meta no diretório de cache.
+type DiskCache struct {
+	mu       sync.Mutex
+	dir      string
+	ttl      time.Duration
+	provider string
+	model    string
+	scanner  string
+	hits     int
+	misses   int
+	now      func() time.Time // injetável para testes
+}
+
+// DiskCacheDir retorna o diretório padrão do cache em disco.
+func DiskCacheDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		home = os.TempDir()
 	}
-	return filepath.Join(home, ".terraview", "cache", "ai-cache.json")
+	return filepath.Join(home, ".terraview", "cache")
 }
 
-// NewDiskCache creates a new disk-backed cache.
-func NewDiskCache(path, provider, model string, ttlHours int) *DiskCache {
+// DiskCachePath retorna o caminho legado do arquivo de cache (ai-cache.json).
+// Deprecated: use DiskCacheDir para o novo formato baseado em hash.
+func DiskCachePath() string {
+	return filepath.Join(DiskCacheDir(), "ai-cache.json")
+}
+
+// PlanHash calcula o SHA-256 do conteúdo do plano para uso como chave de cache.
+func PlanHash(planData []byte) string {
+	sum := sha256.Sum256(planData)
+	return hex.EncodeToString(sum[:])
+}
+
+// NewDiskCache cria um novo cache em disco com hash de conteúdo.
+// dir é o diretório de cache (ex.: ~/.terraview/cache/).
+func NewDiskCache(dir, provider, model, scanner string, ttlHours int) *DiskCache {
 	return &DiskCache{
-		path:     path,
+		dir:      dir,
 		ttl:      time.Duration(ttlHours) * time.Hour,
-		memory:   make(map[string]diskEntry),
 		provider: provider,
 		model:    model,
+		scanner:  scanner,
 		now:      time.Now,
 	}
 }
 
-// AnalysisKey computes a cache key from resource data, provider, and model.
+// AnalysisKey calcula uma chave de cache legada a partir de dados, provider e model.
+// Deprecated: use PlanHash para o novo formato baseado em hash de conteúdo.
 func AnalysisKey(resourcesJSON []byte, provider, model string) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "provider=%s\n", provider)
@@ -192,116 +217,171 @@ func AnalysisKey(resourcesJSON []byte, provider, model string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// load reads the disk cache file into memory (lazy, called once on first access).
-// Must be called with dc.mu held.
-func (dc *DiskCache) load() {
-	if dc.loaded {
-		return
-	}
-	dc.loaded = true
-
-	data, err := os.ReadFile(dc.path)
-	if err != nil {
-		return
-	}
-
-	var entries map[string]diskEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return
-	}
-	dc.memory = entries
+// metaPath retorna o caminho do arquivo de metadados para um hash de plano.
+func (dc *DiskCache) metaPath(planHash string) string {
+	return filepath.Join(dc.dir, planHash+".meta")
 }
 
-// Get checks the cache for a key, returning the stored response string.
-// Entries are filtered by provider, model, and TTL.
-func (dc *DiskCache) Get(key string) (string, bool) {
+// dataPath retorna o caminho do arquivo de dados para um hash de plano.
+func (dc *DiskCache) dataPath(planHash string) string {
+	return filepath.Join(dc.dir, planHash+".json")
+}
+
+// Get verifica o cache para um hash de plano, retornando a resposta armazenada.
+// Verifica: existência do arquivo, provider/model, e TTL.
+func (dc *DiskCache) Get(planHash string) (string, bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
-	dc.load()
+	// Ler metadados
+	metaData, err := os.ReadFile(dc.metaPath(planHash))
+	if err != nil {
+		dc.misses++
+		return "", false
+	}
 
-	entry, ok := dc.memory[key]
-	if !ok {
+	var meta CacheMeta
+	if err := json.Unmarshal(metaData, &meta); err != nil {
 		dc.misses++
 		return "", false
 	}
-	if entry.Provider != dc.provider || entry.Model != dc.model {
+
+	// Verificar provider e model
+	if meta.Provider != dc.provider || meta.Model != dc.model {
 		dc.misses++
 		return "", false
 	}
-	if dc.now().Sub(entry.CachedAt) > dc.ttl {
+
+	// Verificar TTL
+	if dc.now().Sub(meta.CreatedAt) > dc.ttl {
+		dc.misses++
+		return "", false
+	}
+
+	// Ler dados da resposta
+	data, err := os.ReadFile(dc.dataPath(planHash))
+	if err != nil {
 		dc.misses++
 		return "", false
 	}
 
 	dc.hits++
-	return entry.Response, true
+	return string(data), true
 }
 
-// Put stores a response string and persists the full cache to disk.
-func (dc *DiskCache) Put(key, response string) {
+// Put armazena uma resposta e seus metadados em disco atomicamente.
+func (dc *DiskCache) Put(planHash, response string) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
-	dc.load()
-
-	dc.memory[key] = diskEntry{
-		Response: response,
-		CachedAt: dc.now(),
-		Provider: dc.provider,
-		Model:    dc.model,
+	if err := os.MkdirAll(dc.dir, 0755); err != nil {
+		return
 	}
 
-	dc.writeDisk()
-}
+	meta := CacheMeta{
+		CreatedAt: dc.now(),
+		PlanHash:  planHash,
+		Provider:  dc.provider,
+		Model:     dc.model,
+		Scanner:   dc.scanner,
+		TTLHours:  int(dc.ttl.Hours()),
+	}
 
-// writeDisk atomically writes the cache map to the disk file.
-// Must be called with dc.mu held.
-func (dc *DiskCache) writeDisk() {
-	data, err := json.Marshal(dc.memory)
+	metaJSON, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return
 	}
 
-	dir := filepath.Dir(dc.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	// Escrita atômica: arquivo temporário + rename
+	metaTmp := dc.metaPath(planHash) + ".tmp"
+	if err := os.WriteFile(metaTmp, metaJSON, 0600); err != nil {
+		return
+	}
+	if err := os.Rename(metaTmp, dc.metaPath(planHash)); err != nil {
+		os.Remove(metaTmp)
 		return
 	}
 
-	// Atomic write: temp file + rename
-	tmp := dc.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	dataTmp := dc.dataPath(planHash) + ".tmp"
+	if err := os.WriteFile(dataTmp, []byte(response), 0600); err != nil {
 		return
 	}
-	_ = os.Rename(tmp, dc.path)
+	if err := os.Rename(dataTmp, dc.dataPath(planHash)); err != nil {
+		os.Remove(dataTmp)
+		return
+	}
 }
 
-// Stats returns cache hit/miss/size statistics.
+// Stats retorna estatísticas de hits/misses/tamanho do cache na sessão atual.
 func (dc *DiskCache) Stats() (hits, misses, size int) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
-	return dc.hits, dc.misses, len(dc.memory)
+	entries, _ := filepath.Glob(filepath.Join(dc.dir, "*.meta"))
+	return dc.hits, dc.misses, len(entries)
 }
 
-// DiskStats returns information about the disk cache file.
-func DiskStats(path string) (entries int, fileSize int64, oldest, newest time.Time, err error) {
+// DiskStats retorna informações sobre o cache em disco (entradas, tamanho, datas).
+// dir é o diretório de cache (ex.: ~/.terraview/cache/).
+func DiskStats(dir string) (entries int, totalSize int64, oldest, newest time.Time, err error) {
+	metas, globErr := filepath.Glob(filepath.Join(dir, "*.meta"))
+	if globErr != nil {
+		return 0, 0, time.Time{}, time.Time{}, globErr
+	}
+
+	// Se não há arquivos .meta, verificar formato legado (ai-cache.json)
+	if len(metas) == 0 {
+		legacyPath := filepath.Join(dir, "ai-cache.json")
+		return legacyDiskStats(legacyPath)
+	}
+
+	entries = len(metas)
+	for _, mp := range metas {
+		if info, statErr := os.Stat(mp); statErr == nil {
+			totalSize += info.Size()
+		}
+		// Somar tamanho do .json correspondente
+		jp := strings.TrimSuffix(mp, ".meta") + ".json"
+		if info, statErr := os.Stat(jp); statErr == nil {
+			totalSize += info.Size()
+		}
+		// Ler metadados para datas
+		data, readErr := os.ReadFile(mp)
+		if readErr != nil {
+			continue
+		}
+		var meta CacheMeta
+		if json.Unmarshal(data, &meta) != nil {
+			continue
+		}
+		if oldest.IsZero() || meta.CreatedAt.Before(oldest) {
+			oldest = meta.CreatedAt
+		}
+		if newest.IsZero() || meta.CreatedAt.After(newest) {
+			newest = meta.CreatedAt
+		}
+	}
+
+	return entries, totalSize, oldest, newest, nil
+}
+
+// legacyDiskStats lê estatísticas do formato antigo (ai-cache.json).
+func legacyDiskStats(path string) (int, int64, time.Time, time.Time, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0, 0, time.Time{}, time.Time{}, err
 	}
-	fileSize = info.Size()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fileSize, time.Time{}, time.Time{}, err
+		return 0, info.Size(), time.Time{}, time.Time{}, err
 	}
 
 	var disk map[string]diskEntry
 	if err := json.Unmarshal(data, &disk); err != nil {
-		return 0, fileSize, time.Time{}, time.Time{}, err
+		return 0, info.Size(), time.Time{}, time.Time{}, err
 	}
 
-	entries = len(disk)
+	var oldest, newest time.Time
 	for _, e := range disk {
 		if oldest.IsZero() || e.CachedAt.Before(oldest) {
 			oldest = e.CachedAt
@@ -310,14 +390,59 @@ func DiskStats(path string) (entries int, fileSize int64, oldest, newest time.Ti
 			newest = e.CachedAt
 		}
 	}
-	return entries, fileSize, oldest, newest, nil
+	return len(disk), info.Size(), oldest, newest, nil
 }
 
-// ClearDisk deletes the disk cache file.
-func ClearDisk(path string) error {
-	err := os.Remove(path)
-	if os.IsNotExist(err) {
-		return nil
+// ClearDisk remove todos os arquivos de cache do diretório.
+// Remove arquivos .json, .meta e .tmp gerados pelo cache.
+func ClearDisk(dir string) error {
+	// Limpar arquivos do novo formato
+	for _, pattern := range []string{"*.json", "*.meta", "*.tmp"} {
+		files, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			os.Remove(f)
+		}
 	}
-	return err
+	return nil
+}
+
+// LookupPlanHash verifica se existe uma entrada de cache para o hash de plano informado.
+// Retorna os metadados da entrada ou erro se não encontrada.
+func LookupPlanHash(dir, planHash string) (*CacheMeta, error) {
+	metaPath := filepath.Join(dir, planHash+".meta")
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var meta CacheMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
+// ListEntries retorna os metadados de todas as entradas de cache no diretório.
+func ListEntries(dir string) ([]CacheMeta, error) {
+	metas, err := filepath.Glob(filepath.Join(dir, "*.meta"))
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []CacheMeta
+	for _, mp := range metas {
+		data, err := os.ReadFile(mp)
+		if err != nil {
+			continue
+		}
+		var meta CacheMeta
+		if json.Unmarshal(data, &meta) != nil {
+			continue
+		}
+		entries = append(entries, meta)
+	}
+	return entries, nil
 }
