@@ -175,7 +175,7 @@ func TestSanitize_RealisticPlan(t *testing.T) {
 		}
 	}
 
-	// Verificar que placeholders estão presentes
+	// Verify that placeholders are present
 	if !strings.Contains(sanitizedStr, "[REDACTED-") {
 		t.Error("nenhum placeholder [REDACTED-NNN] encontrado no JSON sanitizado")
 	}

@@ -85,7 +85,7 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 		compDecomp.BlendingNote = "Blended com reliability: (comp×2 + rel) / 3"
 	}
 
-	// Calcular Overall
+	// Calculate Overall
 	secScore := secDecomp.FinalScore
 	compScore := compDecomp.FinalScore
 	maintScore := maintDecomp.FinalScore
@@ -214,7 +214,7 @@ func inferRiskVectors(f rules.Finding) []string {
 
 	switch {
 	case strings.Contains(cat, "security"):
-		// Inferir vetor específico pela mensagem/rule
+		// Infer specific vector from message/rule
 		if containsAny(msg, "encrypt", "kms", "ssl", "tls", "at-rest", "in-transit") ||
 			containsAny(ruleID, "encrypt") {
 			vectors = append(vectors, "encryption")

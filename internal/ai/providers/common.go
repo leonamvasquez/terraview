@@ -44,8 +44,8 @@ func backoffWithJitter(attempt int) time.Duration {
 	return result
 }
 
-// retryAnalyze executa fn com backoff exponencial, retentando apenas erros transientes.
-// Erros permanentes (401, 403, 400) causam falha imediata sem retentativa.
+// retryAnalyze executes fn with exponential backoff, retrying only transient errors.
+// Permanent errors (401, 403, 400) cause immediate failure without retry.
 func retryAnalyze(
 	ctx context.Context,
 	cfg ai.ProviderConfig,

@@ -1,12 +1,12 @@
-// Package validator valida findings gerados por IA contra o grafo de topologia,
-// descartando achados alucinados ou inválidos antes da etapa de merge.
+// Package validator validates AI-generated findings against the topology graph,
+// discarding hallucinated or invalid findings before the merge stage.
 //
-// Regras de validação:
-//   - Existência do recurso no grafo
-//   - Correspondência de tipo do recurso
-//   - Severidade válida (CRITICAL|HIGH|MEDIUM|LOW|INFO)
-//   - Detecção de duplicatas (mesmo recurso + mesma categoria/descrição)
-//   - Campos obrigatórios preenchidos (ResourceID, Description)
+// Validation rules:
+//   - Resource existence in the graph
+//   - Resource type matching
+//   - Valid severity (CRITICAL|HIGH|MEDIUM|LOW|INFO)
+//   - Duplicate detection (same resource + same category/description)
+//   - Required fields populated (ResourceID, Description)
 package validator
 
 import (
@@ -73,7 +73,7 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 	// Construir índice de nós do grafo: address → Node
 	nodeIndex := buildNodeIndex(graph)
 
-	// Rastrear duplicatas: chave = resource|category|descNorm
+	// Track duplicates: key = resource|category|descNorm
 	seen := make(map[string]bool)
 
 	for _, f := range findings {

@@ -1,11 +1,11 @@
-// Package sanitizer redige dados sensíveis de planos Terraform antes do envio
-// a provedores de IA externos. Preserva a estrutura JSON, chaves, tipos de
-// recurso e nomes — substituindo apenas valores que correspondam a padrões
-// conhecidos de segredos (passwords, tokens, ARNs, PEM, JWT, base64 longos).
+// Package sanitizer redacts sensitive data from Terraform plans before sending
+// them to external AI providers. It preserves JSON structure, keys, resource
+// types and names — replacing only values that match known secret patterns
+// (passwords, tokens, ARNs, PEM, JWT, long base64 strings).
 //
-// Cada valor único recebe um placeholder determinístico ([REDACTED-001], etc.)
-// para que relações estruturais sejam preservadas na análise da IA.
-// O RedactionManifest registra tudo que foi redatado para auditoria.
+// Each unique value receives a deterministic placeholder ([REDACTED-001], etc.)
+// so that structural relationships are preserved for AI analysis.
+// The RedactionManifest records everything that was redacted for auditing.
 package sanitizer
 
 import (
@@ -53,8 +53,8 @@ var sensitiveFieldNames = map[string]bool{
 	"credentials":       true,
 }
 
-// sensitiveFieldSubstrings são substrings que, presentes no nome do campo,
-// indicam que o valor deve ser redatado.
+// sensitiveFieldSubstrings are substrings that, when present in a field name,
+// indicate the value should be redacted.
 var sensitiveFieldSubstrings = []string{
 	"sensitive",
 	"secret",
@@ -67,9 +67,6 @@ var sensitiveFieldSubstrings = []string{
 var (
 	// AWS ARN: arn:aws[-partition]:service:region:account-id:...
 	arnPattern = regexp.MustCompile(`arn:aws[a-zA-Z-]*:[a-zA-Z0-9-]+:\S*:\d{12}`)
-
-	// AWS Account ID isolado (12 dígitos exatos, delimitado por word boundary)
-	awsAccountIDPattern = regexp.MustCompile(`\b\d{12}\b`)
 
 	// PEM private key blocks
 	pemPattern = regexp.MustCompile(`-----BEGIN\s[A-Z\s]*PRIVATE\sKEY-----`)
@@ -193,7 +190,7 @@ func (s *sanitizer) walk(node interface{}, path string) interface{} {
 	case []interface{}:
 		return s.walkSlice(v, path)
 	case string:
-		// Verificação por valor — padrões conhecidos independente do campo
+		// Value-based check — known patterns regardless of field name
 		if isSensitiveValue(v) {
 			return s.redact(v, path)
 		}
