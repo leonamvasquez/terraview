@@ -34,6 +34,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/topology"
 	"github.com/leonamvasquez/terraview/internal/util"
+	"github.com/leonamvasquez/terraview/internal/validator"
 )
 
 var (
@@ -528,9 +529,46 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph, sr scanResult) aggregator.ReviewResult {
 	hardFindings := sr.hardFindings
 
-	// Merge all findings: scanner + AI context
-	if len(hardFindings) > 0 || len(sr.contextFindings) > 0 {
-		dr := normalizer.Deduplicate(hardFindings, sr.contextFindings)
+	// Validar findings da IA contra o grafo de topologia (descartar alucinações)
+	var aiValidationReport *aggregator.AIValidationReport
+	validatedAIFindings := sr.contextFindings
+	if len(sr.contextFindings) > 0 && topoGraph != nil {
+		valid, discarded, report := validator.ValidateAIFindings(sr.contextFindings, topoGraph)
+		validatedAIFindings = valid
+
+		if report.TotalDiscard > 0 {
+			fmt.Fprintf(os.Stderr, "%s ⚠ Descartados %d findings da IA (alucinados/inválidos)\n",
+				output.Prefix(), report.TotalDiscard)
+
+			// Em modo verbose, logar cada finding descartado com motivo
+			for _, d := range discarded {
+				logVerbose("  ✗ [%s] %s: %s — %s", d.Reason, d.Finding.Resource, d.Finding.Message, d.Detail)
+			}
+
+			// Montar relatório para JSON de saída
+			aiReport := &aggregator.AIValidationReport{
+				TotalReceived: report.TotalReceived,
+				TotalValid:    report.TotalValid,
+				TotalDiscard:  report.TotalDiscard,
+			}
+			for _, d := range discarded {
+				aiReport.Discarded = append(aiReport.Discarded, aggregator.AIDiscardedFinding{
+					Resource: d.Finding.Resource,
+					Message:  d.Finding.Message,
+					Reason:   string(d.Reason),
+					Detail:   d.Detail,
+				})
+			}
+			aiValidationReport = aiReport
+		}
+
+		logVerbose("Validação IA: %d recebidos, %d válidos, %d descartados",
+			report.TotalReceived, report.TotalValid, report.TotalDiscard)
+	}
+
+	// Merge all findings: scanner + AI context (já validados)
+	if len(hardFindings) > 0 || len(validatedAIFindings) > 0 {
+		dr := normalizer.Deduplicate(hardFindings, validatedAIFindings)
 		hardFindings = dr.Findings
 		logVerbose("Dedup: %s", dr.Summary)
 	}
@@ -543,6 +581,9 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 
 	// Attach pipeline status for observability
 	result.PipelineStatus = sr.pipelineStatus
+
+	// Attach AI validation report (findings descartados por alucinação/invalidez)
+	result.AIValidation = aiValidationReport
 
 	// Score decomposition for audit (--explain-scores)
 	if explainScoresFlag {
