@@ -1,0 +1,165 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [],
+    "failed_checks": [
+      {
+        "check_id": "CKV_AWS_18",
+        "check_name": "Ensure the S3 bucket has access logging enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_18",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_24",
+        "check_name": "Ensure no security groups allow ingress from 0.0.0.0/0 to port 22",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_security_group.allow_ssh",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_24",
+        "file_path": "/main.tf",
+        "file_line_range": [12, 25]
+      },
+      {
+        "check_id": "CKV_AWS_79",
+        "check_name": "Ensure Instance Metadata Service Version 1 is not enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.web",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_79",
+        "file_path": "/main.tf",
+        "file_line_range": [27, 40]
+      },
+      {
+        "check_id": "CKV_AWS_8",
+        "check_name": "Ensure all data stored in the Launch configuration EBS is securely encrypted",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_launch_configuration.web_lc",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_8",
+        "file_path": "/main.tf",
+        "file_line_range": [42, 55]
+      },
+      {
+        "check_id": "CKV_AWS_23",
+        "check_name": "Ensure every security group and rule has a description",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_security_group.allow_ssh",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_23",
+        "file_path": "/main.tf",
+        "file_line_range": [12, 25]
+      },
+      {
+        "check_id": "CKV_AWS_88",
+        "check_name": "Ensure that EC2 instance does not have a public IP",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.web",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_88",
+        "file_path": "/main.tf",
+        "file_line_range": [27, 40]
+      },
+      {
+        "check_id": "CKV_AWS_126",
+        "check_name": "Ensure that detailed monitoring is enabled for EC2 instances",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.web",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_126",
+        "file_path": "/main.tf",
+        "file_line_range": [27, 40]
+      },
+      {
+        "check_id": "CKV_AWS_135",
+        "check_name": "Ensure that EC2 is EBS optimized",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.web",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_135",
+        "file_path": "/main.tf",
+        "file_line_range": [27, 40]
+      },
+      {
+        "check_id": "CKV_AWS_40",
+        "check_name": "Ensure IAM policy does not allow full '*' administrative privileges",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_iam_policy.admin",
+        "severity": "MEDIUM",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_40",
+        "file_path": "/iam.tf",
+        "file_line_range": [1, 15]
+      },
+      {
+        "check_id": "CKV_AWS_145",
+        "check_name": "Ensure that S3 buckets are encrypted with KMS by default",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "MEDIUM",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_145",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_19",
+        "check_name": "Ensure the S3 bucket has server-side-encryption enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "MEDIUM",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_19",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_53",
+        "check_name": "Ensure S3 bucket has block public ACLS enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "MEDIUM",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_53",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_54",
+        "check_name": "Ensure S3 bucket has block public policy enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "MEDIUM",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_54",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_20",
+        "check_name": "Ensure the S3 bucket does not have a public ACL",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "LOW",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_20",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_57",
+        "check_name": "Ensure S3 bucket does not have a permissive cross-account policy",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket_policy.data_policy",
+        "severity": "LOW",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_57",
+        "file_path": "/main.tf",
+        "file_line_range": [56, 70]
+      }
+    ],
+    "skipped_checks": []
+  },
+  "summary": {
+    "passed": 0,
+    "failed": 15,
+    "skipped": 0,
+    "parsing_errors": 0
+  }
+}

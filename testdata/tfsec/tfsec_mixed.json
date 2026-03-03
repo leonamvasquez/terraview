@@ -1,0 +1,172 @@
+{
+  "results": [
+    {
+      "rule_id": "aws-s3-enable-bucket-encryption",
+      "long_id": "aws-s3-enable-bucket-encryption",
+      "rule_description": "S3 Buckets should have server-side encryption enabled",
+      "description": "Bucket does not have encryption enabled",
+      "impact": "The bucket objects could be read if compromised",
+      "resolution": "Configure server-side encryption for S3 bucket",
+      "severity": "CRITICAL",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/enable-bucket-encryption"]
+    },
+    {
+      "rule_id": "aws-iam-no-policy-wildcards",
+      "long_id": "aws-iam-no-policy-wildcards",
+      "rule_description": "IAM policy should avoid use of wildcards",
+      "description": "IAM policy document uses a wildcard action '*'",
+      "impact": "Overly permissive IAM policy",
+      "resolution": "Restrict IAM actions to specific resources",
+      "severity": "CRITICAL",
+      "resource": "aws_iam_policy.admin",
+      "location": {"filename": "iam.tf", "start_line": 1, "end_line": 15},
+      "links": ["https://tfsec.dev/docs/aws/iam/no-policy-wildcards"]
+    },
+    {
+      "rule_id": "aws-ec2-enforce-http-token-imds",
+      "long_id": "aws-ec2-enforce-http-token-imds",
+      "rule_description": "EC2 instances should use IMDSv2",
+      "description": "Instance has IMDSv1 enabled",
+      "impact": "SSRF attacks can exploit IMDSv1",
+      "resolution": "Enable IMDSv2 for EC2 instances",
+      "severity": "CRITICAL",
+      "resource": "aws_instance.web",
+      "location": {"filename": "main.tf", "start_line": 12, "end_line": 25},
+      "links": ["https://tfsec.dev/docs/aws/ec2/enforce-http-token-imds"]
+    },
+    {
+      "rule_id": "aws-vpc-no-public-ingress-sgr",
+      "long_id": "aws-vpc-no-public-ingress-sgr",
+      "rule_description": "Security group rule should not allow ingress from 0.0.0.0/0",
+      "description": "Security group allows ingress from public internet",
+      "impact": "Network exposure",
+      "resolution": "Restrict ingress to known CIDR blocks",
+      "severity": "HIGH",
+      "resource": "aws_security_group.allow_ssh",
+      "location": {"filename": "main.tf", "start_line": 27, "end_line": 40},
+      "links": ["https://tfsec.dev/docs/aws/vpc/no-public-ingress-sgr"]
+    },
+    {
+      "rule_id": "aws-s3-enable-bucket-logging",
+      "long_id": "aws-s3-enable-bucket-logging",
+      "rule_description": "S3 bucket should have access logging enabled",
+      "description": "Bucket does not have logging enabled",
+      "impact": "No access logs for forensic analysis",
+      "resolution": "Enable access logging for S3 bucket",
+      "severity": "HIGH",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/enable-bucket-logging"]
+    },
+    {
+      "rule_id": "aws-ec2-no-public-ip",
+      "long_id": "aws-ec2-no-public-ip",
+      "rule_description": "EC2 instance should not have public IP",
+      "description": "Instance has associate_public_ip_address set to true",
+      "impact": "Direct internet exposure",
+      "resolution": "Remove public IP association",
+      "severity": "HIGH",
+      "resource": "aws_instance.web",
+      "location": {"filename": "main.tf", "start_line": 12, "end_line": 25},
+      "links": ["https://tfsec.dev/docs/aws/ec2/no-public-ip"]
+    },
+    {
+      "rule_id": "aws-iam-enforce-mfa",
+      "long_id": "aws-iam-enforce-mfa",
+      "rule_description": "IAM policies should enforce MFA",
+      "description": "IAM policy does not require MFA",
+      "impact": "Account compromise risk without MFA",
+      "resolution": "Add MFA condition to IAM policies",
+      "severity": "HIGH",
+      "resource": "aws_iam_policy.admin",
+      "location": {"filename": "iam.tf", "start_line": 1, "end_line": 15},
+      "links": ["https://tfsec.dev/docs/aws/iam/enforce-mfa"]
+    },
+    {
+      "rule_id": "aws-ec2-enable-at-rest-encryption",
+      "long_id": "aws-ec2-enable-at-rest-encryption",
+      "rule_description": "EBS volumes should be encrypted",
+      "description": "Root block device is not encrypted",
+      "impact": "Data at rest is not protected",
+      "resolution": "Enable EBS encryption",
+      "severity": "HIGH",
+      "resource": "aws_instance.web",
+      "location": {"filename": "main.tf", "start_line": 12, "end_line": 25},
+      "links": ["https://tfsec.dev/docs/aws/ec2/enable-at-rest-encryption"]
+    },
+    {
+      "rule_id": "aws-s3-block-public-acls",
+      "long_id": "aws-s3-block-public-acls",
+      "rule_description": "S3 bucket should block public ACLs",
+      "description": "Bucket does not block public ACLs",
+      "impact": "Data exposure via public ACLs",
+      "resolution": "Enable block public ACLs",
+      "severity": "MEDIUM",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/block-public-acls"]
+    },
+    {
+      "rule_id": "aws-s3-block-public-policy",
+      "long_id": "aws-s3-block-public-policy",
+      "rule_description": "S3 bucket should block public policy",
+      "description": "Bucket does not block public policy",
+      "impact": "Data exposure via public bucket policy",
+      "resolution": "Enable block public policy",
+      "severity": "MEDIUM",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/block-public-policy"]
+    },
+    {
+      "rule_id": "aws-s3-enable-versioning",
+      "long_id": "aws-s3-enable-versioning",
+      "rule_description": "S3 bucket should have versioning enabled",
+      "description": "Bucket does not have versioning enabled",
+      "impact": "No recovery from accidental deletions",
+      "resolution": "Enable versioning",
+      "severity": "MEDIUM",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/enable-versioning"]
+    },
+    {
+      "rule_id": "aws-ec2-add-description-to-security-group",
+      "long_id": "aws-ec2-add-description-to-security-group",
+      "rule_description": "Security group should have a description",
+      "description": "Security group does not have a description",
+      "impact": "Reduced auditability",
+      "resolution": "Add a description to the security group",
+      "severity": "MEDIUM",
+      "resource": "aws_security_group.allow_ssh",
+      "location": {"filename": "main.tf", "start_line": 27, "end_line": 40},
+      "links": ["https://tfsec.dev/docs/aws/ec2/add-description-to-security-group"]
+    },
+    {
+      "rule_id": "aws-ec2-enable-detailed-monitoring",
+      "long_id": "aws-ec2-enable-detailed-monitoring",
+      "rule_description": "EC2 instance should have detailed monitoring enabled",
+      "description": "Instance does not have detailed monitoring enabled",
+      "impact": "Insufficient monitoring granularity",
+      "resolution": "Enable detailed monitoring",
+      "severity": "LOW",
+      "resource": "aws_instance.web",
+      "location": {"filename": "main.tf", "start_line": 12, "end_line": 25},
+      "links": ["https://tfsec.dev/docs/aws/ec2/enable-detailed-monitoring"]
+    },
+    {
+      "rule_id": "aws-s3-no-public-access-with-acl",
+      "long_id": "aws-s3-no-public-access-with-acl",
+      "rule_description": "S3 bucket should not have public ACL grants",
+      "description": "Bucket ACL allows public access",
+      "impact": "Public data exposure",
+      "resolution": "Remove public ACL grants",
+      "severity": "LOW",
+      "resource": "aws_s3_bucket.data",
+      "location": {"filename": "main.tf", "start_line": 1, "end_line": 10},
+      "links": ["https://tfsec.dev/docs/aws/s3/no-public-access-with-acl"]
+    }
+  ]
+}

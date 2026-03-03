@@ -1,0 +1,45 @@
+{
+  "Results": [
+    {
+      "Target": "main.tf",
+      "Misconfigurations": [
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0086",
+          "AVDID": "AVD-AWS-0086",
+          "Title": "S3 Public Access Block",
+          "Description": "S3 bucket missing public access block",
+          "Message": "Public access is not blocked",
+          "Resolution": "Add public access block",
+          "Severity": "CRITICAL",
+          "Status": "FAIL",
+          "CauseMetadata": {"Resource": "aws_s3_bucket.secrets", "StartLine": 1, "EndLine": 5}
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0132",
+          "AVDID": "AVD-AWS-0132",
+          "Title": "IMDSv2 Required",
+          "Description": "IMDSv2 not enforced",
+          "Message": "Instance does not enforce IMDSv2",
+          "Resolution": "Set http_tokens to required",
+          "Severity": "CRITICAL",
+          "Status": "FAIL",
+          "CauseMetadata": {"Resource": "aws_instance.api", "StartLine": 10, "EndLine": 20}
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0057",
+          "AVDID": "AVD-AWS-0057",
+          "Title": "IAM Wildcards",
+          "Description": "IAM uses wildcards",
+          "Message": "Wildcard actions in policy",
+          "Resolution": "Use specific actions",
+          "Severity": "CRITICAL",
+          "Status": "FAIL",
+          "CauseMetadata": {"Resource": "aws_iam_policy.root", "StartLine": 1, "EndLine": 10}
+        }
+      ]
+    }
+  ]
+}

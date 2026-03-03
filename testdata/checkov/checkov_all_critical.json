@@ -1,0 +1,55 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [],
+    "failed_checks": [
+      {
+        "check_id": "CKV_AWS_18",
+        "check_name": "Ensure the S3 bucket has access logging enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_s3_bucket.sensitive",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_18",
+        "file_path": "/main.tf",
+        "file_line_range": [1, 10]
+      },
+      {
+        "check_id": "CKV_AWS_79",
+        "check_name": "Ensure Instance Metadata Service Version 1 is not enabled",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.prod",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_79",
+        "file_path": "/main.tf",
+        "file_line_range": [12, 25]
+      },
+      {
+        "check_id": "CKV_AWS_24",
+        "check_name": "Ensure no security groups allow ingress from 0.0.0.0/0 to port 22",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_security_group.wide_open",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_24",
+        "file_path": "/main.tf",
+        "file_line_range": [27, 40]
+      },
+      {
+        "check_id": "CKV_AWS_46",
+        "check_name": "Ensure no hard-coded credentials exist in EC2 user data",
+        "check_result": {"result": "FAILED"},
+        "resource_address": "aws_instance.prod",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_46",
+        "file_path": "/main.tf",
+        "file_line_range": [12, 25]
+      }
+    ],
+    "skipped_checks": []
+  },
+  "summary": {
+    "passed": 0,
+    "failed": 4,
+    "skipped": 0,
+    "parsing_errors": 0
+  }
+}

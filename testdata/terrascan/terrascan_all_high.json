@@ -1,0 +1,45 @@
+{
+  "results": {
+    "violations": [
+      {
+        "rule_name": "s3BucketEncryption",
+        "description": "Ensure S3 bucket encryption is enabled",
+        "rule_id": "AC_AWS_0207",
+        "severity": "HIGH",
+        "category": "Security Best Practices",
+        "resource_name": "aws_s3_bucket.secrets",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "iamPolicyWildcard",
+        "description": "IAM policy allows full administrative access",
+        "rule_id": "AC_AWS_0270",
+        "severity": "HIGH",
+        "category": "IAM Policies",
+        "resource_name": "aws_iam_policy.root",
+        "resource_type": "aws_iam_policy",
+        "file": "iam.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "securityGroupOpenAll",
+        "description": "Security group allows all ingress traffic",
+        "rule_id": "AC_AWS_0229",
+        "severity": "HIGH",
+        "category": "Security Best Practices",
+        "resource_name": "aws_security_group.open_all",
+        "resource_type": "aws_security_group",
+        "file": "main.tf",
+        "line": 10
+      }
+    ],
+    "count": {
+      "low": 0,
+      "medium": 0,
+      "high": 3,
+      "total": 3
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "Results": [
+    {
+      "Target": "main.tf",
+      "Misconfigurations": []
+    }
+  ]
+}
