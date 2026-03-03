@@ -7,6 +7,28 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.4.0] — 2026-03-03
+
+### Added
+- **AI Findings Validator**: validação automática de findings IA contra grafo de topologia com 5 regras (existência de recurso, tipo, severidade, duplicatas, campos vazios)
+- **Graceful degradation & retry**: pipeline continua com resultados parciais quando IA ou scanners falham; retry inteligente com backoff exponencial para erros transientes
+- **SHA-256 plan hash cache**: cache de respostas IA usa hash do plano como chave primária para invalidação precisa
+- **MkDocs Material documentation site**: documentação completa migrada para site estático com tema Material, toggle dark/light, navegação em pt-BR
+- **Scoring methodology docs**: `SCORING.md` com metodologia detalhada e flag `--explain-scores` para decomposição de scores
+- **Integration test fixtures**: 20 fixtures de saída de scanners (checkov, tfsec, terrascan) com 29 testes de integração
+- **Sensitive data sanitizer**: redação automática de dados sensíveis (API keys, tokens, passwords) antes do envio para análise IA
+
+### Changed
+- `gemini-cli` default model: `gemini-2.5-flash` → `gemini-2.5-pro` (mais confiável)
+- `gemini-cli` suggested models: removidos `gemini-2.5-flash` e `gemini-3.1-pro-preview` (instáveis/timeout)
+- `openrouter` default model: `google/gemini-2.5-flash` → `google/gemini-2.5-pro`
+
+### Fixed
+- Gemini CLI model resolution errors (`ModelNotFoundError`) resolved by updating default model
+- `gemini-3.1-pro-preview` removed due to persistent context deadline timeouts
+
+---
+
 ## [0.3.0] — 2026-03-01
 
 ### Added
@@ -97,6 +119,7 @@ with [SemVer](https://semver.org/) versioning.
 - Package manager updates (Homebrew, Scoop, APT, DNF)
 - `tv` alias
 
+[0.4.0]: https://github.com/leonamvasquez/terraview/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leonamvasquez/terraview/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/leonamvasquez/terraview/compare/v0.2.0...v0.2.5
 [0.2.0]: https://github.com/leonamvasquez/terraview/compare/v0.1.0...v0.2.0
