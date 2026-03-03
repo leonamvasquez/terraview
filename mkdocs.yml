@@ -1,0 +1,62 @@
+site_name: TerraView
+site_description: Análise de segurança Terraform com scanning contextual por IA
+site_url: https://leonamvasquez.github.io/terraview/
+repo_url: https://github.com/leonamvasquez/terraview
+repo_name: leonamvasquez/terraview
+
+theme:
+  name: material
+  language: pt-BR
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Modo escuro
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Modo claro
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Início: index.md
+  - Primeiros Passos:
+    - Instalação: getting-started/installation.md
+    - Configuração Rápida: getting-started/quickstart.md
+  - Uso:
+    - Comandos: usage/commands.md
+    - Configuração: usage/configuration.md
+    - AI Providers: usage/ai-providers.md
+    - Scanners: usage/scanners.md
+    - Cache: usage/cache.md
+  - Integração:
+    - CI/CD: integration/cicd.md
+    - Docker: integration/docker.md
+  - Referência:
+    - Metodologia de Scoring: reference/scoring.md
+    - Arquitetura: reference/architecture.md
+    - Variáveis de Ambiente: reference/environment.md
+  - Contribuindo: contributing.md
+  - Segurança: security.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html

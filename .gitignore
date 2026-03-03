@@ -1,6 +1,7 @@
 # Build artifacts
 build/
 dist/
+site/
 *.exe
 *.exe~
 *.dll
