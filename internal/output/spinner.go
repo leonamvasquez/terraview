@@ -10,7 +10,6 @@ import (
 	"golang.org/x/term"
 )
 
-// ── Global spinner manager ─────────────────────────────────────────────
 // Only ONE spinner renders at a time. When a new spinner starts while
 // another is already running, the previous one is silently paused (its
 // goroutine keeps ticking but skips writes). When the top spinner stops,
@@ -50,8 +49,6 @@ func (m *spinnerManager) isActive(s *Spinner) bool {
 	return active
 }
 
-// ── Spinner ────────────────────────────────────────────────────────────
-
 // Spinner displays an animated spinner in the terminal while a long-running
 // operation is executing. It respects the global ColorEnabled flag.
 type Spinner struct {
@@ -65,10 +62,8 @@ type Spinner struct {
 	done    chan struct{}
 }
 
-// Unicode braille-dot frames (smooth rotation).
 var unicodeFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// ASCII fallback frames for --no-color / dumb terminals.
 var asciiFrames = []string{"|", "/", "-", "\\"}
 
 // NewSpinner creates a Spinner with the given status message.
@@ -177,8 +172,6 @@ func (s *Spinner) loop() {
 	}
 }
 
-// clearLineSeq returns the escape sequence to move cursor to column 0
-// and erase the entire line.
 func clearLineSeq() string {
 	if ColorEnabled {
 		return "\r\033[K"
@@ -192,7 +185,6 @@ func writeRaw(s string) {
 	os.Stderr.WriteString(s) //nolint:errcheck
 }
 
-// termWidth returns the current terminal width, or 80 as a safe fallback.
 func termWidth() int {
 	w, _, err := term.GetSize(int(os.Stderr.Fd()))
 	if err != nil || w <= 0 {
@@ -201,8 +193,6 @@ func termWidth() int {
 	return w
 }
 
-// truncateToTermWidth truncates s so its visible (non-ANSI) length fits within
-// the terminal width. It strips characters from the end when necessary.
 func truncateToTermWidth(s string) string {
 	tw := termWidth() - 1 // leave 1 col margin to avoid wrap on some terminals
 	if tw <= 0 {

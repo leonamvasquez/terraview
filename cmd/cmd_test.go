@@ -38,10 +38,6 @@ func captureStdout(fn func()) string {
 	return buf.String()
 }
 
-// ---------------------------------------------------------------------------
-// lastN (ai.go)
-// ---------------------------------------------------------------------------
-
 func TestLastN(t *testing.T) {
 	cases := []struct {
 		s    string
@@ -61,10 +57,6 @@ func TestLastN(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// ExitError (root.go)
-// ---------------------------------------------------------------------------
-
 func TestExitError_Error(t *testing.T) {
 	e := &ExitError{Code: 2}
 	got := e.Error()
@@ -79,10 +71,6 @@ func TestExitError_Code0(t *testing.T) {
 		t.Errorf("Error() = %q, expected to contain 0", e.Error())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// filterDisabledRules (scan.go)
-// ---------------------------------------------------------------------------
 
 func TestFilterDisabledRules_Empty(t *testing.T) {
 	findings := []rules.Finding{
@@ -145,10 +133,6 @@ func TestFilterDisabledRules_NoFindings(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// buildResourceLimits (scan.go)
-// ---------------------------------------------------------------------------
-
 func TestBuildResourceLimits_SafeMode(t *testing.T) {
 	cfg := config.Config{}
 	limits := buildResourceLimits(cfg, true)
@@ -185,10 +169,6 @@ func TestBuildResourceLimits_WithOllamaConfig(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// infraToStringSlice (explain_cmd.go)
-// ---------------------------------------------------------------------------
-
 func TestInfraToStringSlice_Normal(t *testing.T) {
 	input := []interface{}{"a", "b", "c"}
 	got := infraToStringSlice(input)
@@ -222,10 +202,6 @@ func TestInfraToStringSlice_NotSlice(t *testing.T) {
 		t.Errorf("expected nil, got %v", got)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// infraExplFromMap (explain_cmd.go)
-// ---------------------------------------------------------------------------
 
 func TestInfraExplFromMap_FullMap(t *testing.T) {
 	m := map[string]interface{}{
@@ -293,10 +269,6 @@ func TestInfraExplFromMap_EmptyMap(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// parseInfraExplanation (explain_cmd.go)
-// ---------------------------------------------------------------------------
-
 func TestParseInfraExplanation_DirectJSON(t *testing.T) {
 	raw := `{"overview":"test overview","architecture":"monolith","components":[],"connections":[],"patterns":[]}`
 	expl := parseInfraExplanation(raw)
@@ -327,10 +299,6 @@ func TestParseInfraExplanation_FallbackPlainText(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// buildInfraExplainPrompt (explain_cmd.go)
-// ---------------------------------------------------------------------------
-
 func TestBuildInfraExplainPrompt(t *testing.T) {
 	resources := []parser.NormalizedResource{
 		{Address: "aws_instance.web", Type: "aws_instance", Action: "create"},
@@ -350,10 +318,6 @@ func TestBuildInfraExplainPrompt(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// strContainsFold (selector.go)
-// ---------------------------------------------------------------------------
 
 func TestStrContainsFold(t *testing.T) {
 	tests := []struct {
@@ -375,10 +339,6 @@ func TestStrContainsFold(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// pluralS (setup.go)
-// ---------------------------------------------------------------------------
-
 func TestPluralS(t *testing.T) {
 	tests := []struct {
 		n    int
@@ -395,10 +355,6 @@ func TestPluralS(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// commandAvailable (setup.go)
-// ---------------------------------------------------------------------------
 
 func TestCommandAvailable_True(t *testing.T) {
 	old := execLookPath
@@ -421,10 +377,6 @@ func TestCommandAvailable_False(t *testing.T) {
 		t.Error("expected commandAvailable to return false")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// sortedScannerNames (scanners.go)
-// ---------------------------------------------------------------------------
 
 // stubScanner implements scanner.Scanner for testing.
 type stubScanner struct{ name string }
@@ -474,10 +426,6 @@ func TestSortedScannerNames_Single(t *testing.T) {
 		t.Errorf("expected [checkov], got %v", got)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// printDriftSummary (drift.go)
-// ---------------------------------------------------------------------------
 
 func TestPrintDriftSummary_Compact_NoChanges(t *testing.T) {
 	result := drift.DriftResult{TotalChanges: 0}
@@ -581,10 +529,6 @@ func TestParseInfraExplanation_OverviewAsMap(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// infraExplFromMap (explain_cmd.go)
-// ---------------------------------------------------------------------------
-
 func TestInfraExplFromMap_Full(t *testing.T) {
 	m := map[string]interface{}{
 		"overview":     "my overview",
@@ -623,10 +567,6 @@ func TestInfraExplFromMap_EmptyOverview(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// infraToStringSlice (explain_cmd.go)
-// ---------------------------------------------------------------------------
-
 func TestInfraToStringSlice(t *testing.T) {
 	cases := []struct {
 		name string
@@ -648,10 +588,6 @@ func TestInfraToStringSlice(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// printInfraExplanation (explain_cmd.go)
-// ---------------------------------------------------------------------------
 
 func TestPrintInfraExplanation_EN(t *testing.T) {
 	old := brFlag
@@ -710,10 +646,6 @@ func TestPrintInfraExplanation_BR(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// filterDisabledRules (scan.go)
-// ---------------------------------------------------------------------------
-
 func TestFilterDisabledRules_NoDisabled(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "TV001", Severity: "HIGH"},
@@ -724,10 +656,6 @@ func TestFilterDisabledRules_NoDisabled(t *testing.T) {
 		t.Errorf("expected 2 findings, got %d", len(got))
 	}
 }
-
-// ---------------------------------------------------------------------------
-// filterItems (selector.go)
-// ---------------------------------------------------------------------------
 
 func TestFilterItems_EmptyQuery(t *testing.T) {
 	items := []selectItem{{Label: "a"}, {Label: "b"}}
@@ -757,10 +685,6 @@ func TestFilterItems_NoMatch(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// ExitError (root.go)
-// ---------------------------------------------------------------------------
-
 func TestExitError(t *testing.T) {
 	e := &ExitError{Code: 2}
 	if e.Error() != "exit code 2" {
@@ -769,10 +693,6 @@ func TestExitError(t *testing.T) {
 }
 
 // (buildInfraExplainPrompt already tested above)
-
-// ---------------------------------------------------------------------------
-// logVerbose
-// ---------------------------------------------------------------------------
 
 func TestLogVerbose_Enabled(t *testing.T) {
 	old := verbose
@@ -827,10 +747,6 @@ func TestLogVerbose_Disabled(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// applyBRTranslations
-// ---------------------------------------------------------------------------
-
 func TestApplyBRTranslations(t *testing.T) {
 	// Should not panic
 	applyBRTranslations()
@@ -841,10 +757,6 @@ func TestApplyBRTranslations(t *testing.T) {
 		t.Error("expected non-empty usage template after BR translation")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// translateFlags
-// ---------------------------------------------------------------------------
 
 func TestTranslateFlags(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
@@ -861,10 +773,6 @@ func TestTranslateFlags(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// rawPrint (selector.go)
-// ---------------------------------------------------------------------------
-
 func TestRawPrint(t *testing.T) {
 	out := captureStdout(func() {
 		rawPrint("hello world")
@@ -873,10 +781,6 @@ func TestRawPrint(t *testing.T) {
 		t.Errorf("expected 'hello world', got %q", out)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// defaultLookPath (setup.go)
-// ---------------------------------------------------------------------------
 
 func TestDefaultLookPath_Echo(t *testing.T) {
 	path, err := defaultLookPath("echo")
@@ -894,10 +798,6 @@ func TestDefaultLookPath_Nonexistent(t *testing.T) {
 		t.Error("expected error for nonexistent command")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Version
-// ---------------------------------------------------------------------------
 
 func TestVersionVariable(t *testing.T) {
 	old := Version

@@ -20,10 +20,6 @@ var scannersCmd = &cobra.Command{
 	Long:  "List, install, and manage security scanner binaries.",
 }
 
-// ─────────────────────────────────────────────────────────────
-// scanners list
-// ─────────────────────────────────────────────────────────────
-
 var scannersListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all scanners with installation status",
@@ -103,10 +99,6 @@ var scannersListCmd = &cobra.Command{
 		return nil
 	},
 }
-
-// ─────────────────────────────────────────────────────────────
-// scanners install
-// ─────────────────────────────────────────────────────────────
 
 var scannersInstallCmd = &cobra.Command{
 	Use:   "install [scanner...]",
@@ -234,10 +226,6 @@ func init() {
 	scannersCmd.AddCommand(scannersInstallCmd)
 	scannersCmd.AddCommand(scannersDefaultCmd)
 }
-
-// ─────────────────────────────────────────────────────────────
-// scanners default
-// ─────────────────────────────────────────────────────────────
 
 var scannersDefaultCmd = &cobra.Command{
 	Use:   "default [scanner]",

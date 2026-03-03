@@ -7,7 +7,6 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-// ANSI color codes
 const (
 	reset = "\033[0m"
 	bold  = "\033[1m"
@@ -44,15 +43,12 @@ func DisableColor() {
 	ColorEnabled = false
 }
 
-// colorize wraps text with ANSI codes if colors are enabled.
 func colorize(code, text string) string {
 	if !ColorEnabled {
 		return text
 	}
 	return code + text + reset
 }
-
-// --- Semantic color functions ---
 
 // SevColor returns the colored severity label.
 func SevColor(severity string) string {

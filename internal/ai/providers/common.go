@@ -86,7 +86,6 @@ func retryAnalyze(
 		fmt.Errorf("falhou após %d tentativas: %w", cfg.MaxRetries+1, lastErr))
 }
 
-// llmFinding is the expected JSON shape from any LLM provider.
 type llmFinding struct {
 	Severity    string `json:"severity"`
 	Category    string `json:"category"`

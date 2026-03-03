@@ -10,8 +10,6 @@ import (
 	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
-// ────────────────────────── Types ──────────────────────────
-
 // Layer represents a logical infrastructure layer.
 type Layer struct {
 	Name      string
@@ -34,8 +32,6 @@ type Generator struct{}
 func NewGenerator() *Generator {
 	return &Generator{}
 }
-
-// ────────────────────────── Public API ──────────────────────
 
 // Generate produces an ASCII infrastructure diagram from normalized resources.
 // Uses the topology graph (if provided) to render connections between resources.
@@ -80,9 +76,6 @@ func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, gra
 	return g.renderElaborate(layers, edges, provider)
 }
 
-// ────────────────────────── Layer Classification ──────────────
-
-// layerDef defines a layer with its rendering properties.
 type layerDef struct {
 	name  string
 	order int
@@ -101,7 +94,6 @@ var layerDefs = map[string]layerDef{
 	"Other":      {name: "Other", order: 8, icon: "📦"},
 }
 
-// layerMapping maps resource types to their logical layer.
 var layerMapping = map[string]string{
 	// DNS & CDN
 	"aws_route53_record":                    "DNS",
@@ -208,7 +200,6 @@ var layerMapping = map[string]string{
 	"aws_wafv2_web_acl_association": "Security",
 }
 
-// serviceLabels maps resource types to friendly display names.
 var serviceLabels = map[string]string{
 	// AWS
 	"aws_vpc":                               "Amazon VPC",
@@ -298,8 +289,6 @@ var serviceLabels = map[string]string{
 	"google_storage_bucket":     "Cloud Storage",
 }
 
-// ────────────────────────── Helpers ──────────────────────────
-
 func getLayer(resourceType string) string {
 	if layer, ok := layerMapping[resourceType]; ok {
 		return layer
@@ -372,8 +361,6 @@ func getLabel(resType, address string) string {
 	return address
 }
 
-// runeLen returns the visual width (rune count) of a string,
-// which is correct for single-width Unicode characters like box-drawing.
 func runeLen(s string) int {
 	return utf8.RuneCountInString(s)
 }
@@ -415,8 +402,6 @@ func buildEdgeMap(graph *topology.Graph) map[string][]string {
 	return edges
 }
 
-// ────────────────────────── Layer Building ──────────────────
-
 func (g *Generator) buildLayers(resources []parser.NormalizedResource) []Layer {
 	layerMap := make(map[string]*Layer)
 
@@ -454,8 +439,6 @@ func (g *Generator) buildLayers(resources []parser.NormalizedResource) []Layer {
 
 	return layers
 }
-
-// ────────────────────────── Elaborate Renderer ──────────────
 
 const (
 	boxMinWidth   = 35
@@ -528,7 +511,6 @@ func (g *Generator) renderElaborate(layers []Layer, edges map[string][]string, p
 	return sb.String()
 }
 
-// renderLayerBoxes renders a layer as one or more side-by-side boxes.
 func (g *Generator) renderLayerBoxes(sb *strings.Builder, layer Layer, edges map[string][]string) { //nolint:unparam // edges reserved for future connection rendering
 	def, ok := layerDefs[layer.Name]
 	if !ok {
@@ -655,7 +637,6 @@ func (g *Generator) renderDualColumnBox(sb *strings.Builder, title string, left,
 	sb.WriteString(fmt.Sprintf("  %s%s%s\n", cornerBL, strings.Repeat(horizLine, totalWidth), cornerBR))
 }
 
-// renderVPCSection renders the network/compute/data layers inside a VPC boundary.
 func (g *Generator) renderVPCSection(sb *strings.Builder, layers []Layer, edges map[string][]string, provider string) { //nolint:unparam // edges reserved for future connection rendering
 	vpcLabel := "VPC"
 	if provider == "azure" {
@@ -695,7 +676,6 @@ func (g *Generator) renderVPCSection(sb *strings.Builder, layers []Layer, edges 
 	sb.WriteString(fmt.Sprintf("  ╚%s╝\n", strings.Repeat("═", totalWidth)))
 }
 
-// renderInnerLayer renders a single layer inside a VPC boundary.
 func (g *Generator) renderInnerLayer(sb *strings.Builder, title string, resources []ResourceEntry, outerWidth int) {
 	innerWidth := outerWidth - 6
 
@@ -849,9 +829,6 @@ func (g *Generator) renderInnerDualBox(sb *strings.Builder, title string, resour
 	sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, botLine, suffix(boxWidth)))
 }
 
-// ────────────────────────── Text Helpers ──────────────────────
-
-// centerText centers a string within the given width.
 func centerText(text string, width int) string {
 	if runeLen(text) >= width {
 		return text
@@ -860,7 +837,6 @@ func centerText(text string, width int) string {
 	return strings.Repeat(" ", pad) + text
 }
 
-// renderCenteredBox renders a simple centered box with a single label.
 func renderCenteredBox(label string, totalWidth int) string {
 	boxWidth := runeLen(label) + 6
 	pad := (totalWidth - boxWidth) / 2
@@ -877,7 +853,6 @@ func renderCenteredBox(label string, totalWidth int) string {
 	return sb.String()
 }
 
-// renderCenteredConnector renders a short vertical connector centered.
 func renderCenteredConnector(totalWidth int) string {
 	center := totalWidth / 2
 	var sb strings.Builder

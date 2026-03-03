@@ -67,7 +67,6 @@ func (p *Parser) NormalizeResources(plan *TerraformPlan) []NormalizedResource {
 	return resources
 }
 
-// normalizeAction converts the list of actions into a single human-readable action.
 func normalizeAction(actions []string) string {
 	if len(actions) == 0 {
 		return "no-op"
@@ -100,7 +99,6 @@ func normalizeAction(actions []string) string {
 	return strings.Join(actions, ",")
 }
 
-// extractProvider extracts a short provider name from the full provider path.
 func extractProvider(providerName string) string {
 	parts := strings.Split(providerName, "/")
 	if len(parts) > 0 {

@@ -131,8 +131,6 @@ func Deduplicate(scannerFindings, aiFindings []rules.Finding) DeduplicateResult 
 	return result
 }
 
-// ── helpers ────────────────────────────────────────────────────────
-
 // canonicalRiskCategory normalises a category string to one of the five
 // canonical categories defined in rules/types.go. AI providers sometimes
 // return variations ("Security", "SECURITY", "sec", "iam-security"); this

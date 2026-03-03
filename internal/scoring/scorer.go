@@ -85,7 +85,6 @@ func (s *Scorer) Calculate(findings []rules.Finding, totalResources int) Score {
 	}
 }
 
-// computeCategoryScore calculates a score for a set of findings in a category.
 func (s *Scorer) computeCategoryScore(findings []rules.Finding, totalResources int) float64 {
 	if len(findings) == 0 {
 		return 10.0

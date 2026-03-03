@@ -249,7 +249,6 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 	fmt.Println(Bar())
 }
 
-// printScoreDecomposition imprime a decomposição detalhada do scoring.
 func (w *Writer) printScoreDecomposition(d *scoring.ScoreDecomposition, br bool) {
 	if br {
 		fmt.Printf("  %s\n", Header("Decomposição do Score"))
@@ -319,7 +318,6 @@ func (w *Writer) printScoreDecomposition(d *scoring.ScoreDecomposition, br bool)
 	fmt.Println()
 }
 
-// renderMarkdownDecomposition adiciona a decomposição do score ao Markdown.
 func (w *Writer) renderMarkdownDecomposition(sb *strings.Builder, d *scoring.ScoreDecomposition, br bool) {
 	if br {
 		sb.WriteString("### Decomposição do Score\n\n")
@@ -602,7 +600,6 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 	return sb.String()
 }
 
-// translateReason translates known verdict reason patterns to Portuguese.
 func translateReason(reason string) string {
 	// Pattern: "N CRITICAL finding(s) detected"
 	if strings.Contains(reason, "CRITICAL finding") {

@@ -25,7 +25,6 @@ var (
 	ansiRed    = "\033[31m"
 )
 
-// disableCmdColors clears ANSI codes used by cmd package when --no-color is set.
 func disableCmdColors() {
 	if !output.ColorEnabled {
 		ansiReset = ""
@@ -38,7 +37,6 @@ func disableCmdColors() {
 	}
 }
 
-// selectItem represents a single item in a selector list.
 type selectItem struct {
 	Label    string // main label shown
 	Detail   string // secondary info shown dimmed (e.g. key status)
@@ -121,7 +119,6 @@ func runSelector(title string, items []selectItem, defaultIndex int) (string, bo
 	}
 }
 
-// renderList draws the full selector UI.
 func renderList(title string, items []selectItem, cursor int) {
 	rawPrint("\n")
 	rawPrint(ansiBold + title + ansiReset + "\n")
@@ -133,12 +130,10 @@ func renderList(title string, items []selectItem, cursor int) {
 	rawPrint(ansiDim + "  ↑↓ navegar    Enter confirmar    ESC cancelar" + ansiReset + "\n")
 }
 
-// eraseList removes the provider selector UI (N items + 5 fixed lines).
 func eraseList(n int) {
 	eraseLines(n + 5)
 }
 
-// moveUp moves the terminal cursor up n lines.
 func moveUp(n int) {
 	for i := 0; i < n; i++ {
 		rawPrint("\033[A")

@@ -190,7 +190,6 @@ func commandAvailable(name string) bool {
 	return err == nil
 }
 
-// execLookPath wraps exec.LookPath for testability
 var execLookPath = defaultLookPath
 
 func defaultLookPath(name string) (string, error) {

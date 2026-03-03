@@ -38,8 +38,6 @@ func (m *RedactionManifest) UniqueCount() int {
 	return len(m.Entries)
 }
 
-// sensitiveFieldNames são nomes de campos cujos valores devem ser redatados.
-// A comparação é feita em lowercase para ser case-insensitive.
 var sensitiveFieldNames = map[string]bool{
 	"password":          true,
 	"secret":            true,
@@ -53,8 +51,6 @@ var sensitiveFieldNames = map[string]bool{
 	"credentials":       true,
 }
 
-// sensitiveFieldSubstrings are substrings that, when present in a field name,
-// indicate the value should be redacted.
 var sensitiveFieldSubstrings = []string{
 	"sensitive",
 	"secret",
@@ -63,7 +59,6 @@ var sensitiveFieldSubstrings = []string{
 	"private_key",
 }
 
-// Padrões de regex compilados para detecção de valores sensíveis.
 var (
 	// AWS ARN: arn:aws[-partition]:service:region:account-id:...
 	arnPattern = regexp.MustCompile(`arn:aws[a-zA-Z-]*:[a-zA-Z0-9-]+:\S*:\d{12}`)
@@ -79,10 +74,8 @@ var (
 // Valores menores que isso geralmente são hashes curtos ou IDs legítimos.
 const minBase64Length = 200
 
-// base64Pattern detecta strings que parecem blobs base64 longos.
 var base64Pattern = regexp.MustCompile(`^[A-Za-z0-9+/=]{200,}$`)
 
-// sanitizer mantém estado durante a redação de um plano.
 type sanitizer struct {
 	mu          sync.Mutex
 	counter     int
@@ -99,8 +92,6 @@ func newSanitizer() *sanitizer {
 	}
 }
 
-// placeholder retorna um placeholder determinístico para o valor dado.
-// Se o mesmo valor já foi visto, retorna o mesmo placeholder.
 func (s *sanitizer) placeholder(value string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,7 +106,6 @@ func (s *sanitizer) placeholder(value string) string {
 	return plac
 }
 
-// redact substitui o valor pelo placeholder e registra no manifest.
 func (s *sanitizer) redact(value, fieldPath string) string {
 	plac := s.placeholder(value)
 
@@ -126,7 +116,6 @@ func (s *sanitizer) redact(value, fieldPath string) string {
 	return plac
 }
 
-// isSensitiveFieldName verifica se o nome do campo indica um valor sensível.
 func isSensitiveFieldName(fieldName string) bool {
 	lower := strings.ToLower(fieldName)
 
@@ -143,7 +132,6 @@ func isSensitiveFieldName(fieldName string) bool {
 	return false
 }
 
-// isSensitiveValue verifica se o valor (string) corresponde a um padrão sensível.
 func isSensitiveValue(value string) bool {
 	if pemPattern.MatchString(value) {
 		return true
@@ -182,7 +170,6 @@ func Sanitize(plan []byte) ([]byte, *RedactionManifest, error) {
 	return result, s.manifest, nil
 }
 
-// walk percorre recursivamente a estrutura JSON, redatando valores sensíveis.
 func (s *sanitizer) walk(node interface{}, path string) interface{} {
 	switch v := node.(type) {
 	case map[string]interface{}:
@@ -200,7 +187,6 @@ func (s *sanitizer) walk(node interface{}, path string) interface{} {
 	}
 }
 
-// walkMap percorre um objeto JSON, verificando tanto o nome do campo quanto o valor.
 func (s *sanitizer) walkMap(m map[string]interface{}, path string) map[string]interface{} {
 	result := make(map[string]interface{}, len(m))
 
@@ -227,7 +213,6 @@ func (s *sanitizer) walkMap(m map[string]interface{}, path string) map[string]in
 	return result
 }
 
-// walkSlice percorre um array JSON.
 func (s *sanitizer) walkSlice(arr []interface{}, path string) []interface{} {
 	result := make([]interface{}, len(arr))
 	for i, item := range arr {
@@ -237,18 +222,12 @@ func (s *sanitizer) walkSlice(arr []interface{}, path string) []interface{} {
 	return result
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Session — sanitizador reutilizável para múltiplos mapas (ex.: recursos).
-// Compartilha o mesmo mapeamento valor→placeholder, garantindo consistência
-// entre Values e BeforeValues de todos os recursos analisados.
-// ──────────────────────────────────────────────────────────────────────────
-
-// Session encapsula um sanitizer reutilizável.
+// Session encapsulates a reusable sanitizer for multiple maps.
 type Session struct {
 	s *sanitizer
 }
 
-// NewSession cria uma nova sessão de sanitização.
+// NewSession creates a new sanitization session.
 func NewSession() *Session {
 	return &Session{s: newSanitizer()}
 }

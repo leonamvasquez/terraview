@@ -146,7 +146,6 @@ func ParseExplanation(raw string) (*Explanation, error) {
 	}, nil
 }
 
-// extractFromCodeFence extracts JSON from markdown code fences if present.
 func extractFromCodeFence(raw string) string {
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		endIdx := strings.Index(raw[idx+7:], "```")
@@ -199,7 +198,6 @@ func explFromMap(m map[string]interface{}) *Explanation {
 	return expl
 }
 
-// toStringSlice converts an interface{} ([]interface{}) to []string.
 func toStringSlice(v interface{}) []string {
 	arr, ok := v.([]interface{})
 	if !ok {

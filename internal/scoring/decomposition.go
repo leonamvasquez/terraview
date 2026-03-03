@@ -114,7 +114,6 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 	}
 }
 
-// decomposeCategory calcula a decomposição de uma categoria individual.
 func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int, categoryName string) CategoryDecomposition {
 	impacts := make([]FindingImpact, 0, len(findings))
 	weightedSum := 0.0
@@ -176,7 +175,6 @@ func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int,
 	}
 }
 
-// emptyDecomposition retorna uma decomposição com todos os scores em 10.0.
 func (s *Scorer) emptyDecomposition(totalResources int) ScoreDecomposition {
 	empty := CategoryDecomposition{
 		RawScore:       10.0,
@@ -203,8 +201,6 @@ func (s *Scorer) emptyDecomposition(totalResources int) ScoreDecomposition {
 	}
 }
 
-// inferRiskVectors infere os vetores de risco a partir da categoria e mensagem.
-// Como findings não carregam features diretamente, usamos heurística.
 func inferRiskVectors(f rules.Finding) []string {
 	cat := strings.ToLower(f.Category)
 	msg := strings.ToLower(f.Message)

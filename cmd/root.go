@@ -125,7 +125,6 @@ func init() {
 	}
 }
 
-// applyBRTranslations replaces all command descriptions with Portuguese translations.
 func applyBRTranslations() {
 	// Root
 	rootCmd.Short = "Revisor semântico para planos Terraform"
@@ -433,7 +432,6 @@ func logVerbose(format string, args ...interface{}) {
 	}
 }
 
-// applyTemplateToCmds recursively sets the usage template on all subcommands.
 func applyTemplateToCmds(cmd *cobra.Command, tmpl string) {
 	for _, c := range cmd.Commands() {
 		c.SetUsageTemplate(tmpl)
@@ -445,7 +443,6 @@ func applyTemplateToCmds(cmd *cobra.Command, tmpl string) {
 	}
 }
 
-// translateFlags translates flag usage descriptions for a command.
 func translateFlags(cmd *cobra.Command, translations map[string]string) {
 	for name, usage := range translations {
 		if f := cmd.Flags().Lookup(name); f != nil {

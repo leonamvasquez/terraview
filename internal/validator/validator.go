@@ -127,7 +127,6 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 	return valid, discarded, report
 }
 
-// buildNodeIndex cria um mapa address→Node a partir do grafo de topologia.
 func buildNodeIndex(graph *topology.Graph) map[string]topology.Node {
 	index := make(map[string]topology.Node, len(graph.Nodes))
 	for _, n := range graph.Nodes {
@@ -136,7 +135,6 @@ func buildNodeIndex(graph *topology.Graph) map[string]topology.Node {
 	return index
 }
 
-// checkEmptyFields verifica se os campos obrigatórios estão preenchidos.
 func checkEmptyFields(f rules.Finding) (DiscardReason, string) {
 	resource := strings.TrimSpace(f.Resource)
 	message := strings.TrimSpace(f.Message)
@@ -153,7 +151,6 @@ func checkEmptyFields(f rules.Finding) (DiscardReason, string) {
 	return "", ""
 }
 
-// checkSeverity verifica se a severidade é válida.
 func checkSeverity(f rules.Finding) (DiscardReason, string) {
 	sev := strings.ToUpper(strings.TrimSpace(f.Severity))
 	if !validSeverities[sev] {
@@ -162,7 +159,6 @@ func checkSeverity(f rules.Finding) (DiscardReason, string) {
 	return "", ""
 }
 
-// checkResource verifica se o recurso existe no grafo e se o tipo corresponde.
 func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (DiscardReason, string) {
 	resource := strings.TrimSpace(f.Resource)
 
@@ -183,7 +179,6 @@ func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (Discard
 	return "", ""
 }
 
-// checkDuplicate verifica se um finding já foi visto (mesmo recurso + mesma categoria/descrição).
 func checkDuplicate(f rules.Finding, seen map[string]bool) (DiscardReason, string) {
 	key := deduplicationKey(f)
 	if seen[key] {
