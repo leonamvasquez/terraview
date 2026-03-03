@@ -19,33 +19,33 @@ type ScoreDecomposition struct {
 
 // CategoryDecomposition detalha o cálculo de uma categoria.
 type CategoryDecomposition struct {
-	RawScore       float64           `json:"raw_score"`
-	FinalScore     float64           `json:"final_score"`
-	WeightedSum    float64           `json:"weighted_sum"`
-	PenaltyRatio   float64           `json:"penalty_ratio"`
-	TotalResources int               `json:"total_resources"`
-	FloorApplied   string            `json:"floor_applied,omitempty"`
-	BlendingNote   string            `json:"blending_note,omitempty"`
-	FindingsImpact []FindingImpact   `json:"findings_impact"`
+	RawScore       float64         `json:"raw_score"`
+	FinalScore     float64         `json:"final_score"`
+	WeightedSum    float64         `json:"weighted_sum"`
+	PenaltyRatio   float64         `json:"penalty_ratio"`
+	TotalResources int             `json:"total_resources"`
+	FloorApplied   string          `json:"floor_applied,omitempty"`
+	BlendingNote   string          `json:"blending_note,omitempty"`
+	FindingsImpact []FindingImpact `json:"findings_impact"`
 }
 
 // FindingImpact detalha a contribuição de um finding individual.
 type FindingImpact struct {
-	RuleID       string   `json:"rule_id"`
-	Resource     string   `json:"resource"`
-	Severity     string   `json:"severity"`
-	Weight       float64  `json:"weight"`
-	Source       string   `json:"source"`
-	Category     string   `json:"category"`
-	RiskVectors  []string `json:"risk_vectors"`
-	ImpactOnScore float64 `json:"impact_on_score"`
+	RuleID        string   `json:"rule_id"`
+	Resource      string   `json:"resource"`
+	Severity      string   `json:"severity"`
+	Weight        float64  `json:"weight"`
+	Source        string   `json:"source"`
+	Category      string   `json:"category"`
+	RiskVectors   []string `json:"risk_vectors"`
+	ImpactOnScore float64  `json:"impact_on_score"`
 }
 
 // OverallDecomposition detalha o cálculo do Score Geral.
 type OverallDecomposition struct {
-	Formula    string  `json:"formula"`
+	Formula    string             `json:"formula"`
 	Components []OverallComponent `json:"components"`
-	FinalScore float64 `json:"final_score"`
+	FinalScore float64            `json:"final_score"`
 }
 
 // OverallComponent é um peso × score usado no cálculo do Overall.

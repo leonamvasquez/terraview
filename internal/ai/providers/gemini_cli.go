@@ -90,6 +90,10 @@ func (g *geminiCLIProvider) Analyze(ctx context.Context, r ai.Request) (ai.Compl
 		findings, summary, err := g.doExec(ctx, fullPrompt)
 		if err != nil {
 			lastErr = err
+			if !ai.IsTransient(err) {
+				return ai.Completion{}, ai.NewProviderError(geminiCLIName, "analyze",
+					fmt.Errorf("erro permanente (sem retentativa): %w", err))
+			}
 			continue
 		}
 

@@ -751,7 +751,7 @@ func TestCrossScanner_DeduplicateOverlappingFindings(t *testing.T) {
 			Resource:    "aws_s3_bucket.data",
 			Message:     "[tfsec] aws-s3-enable-bucket-encryption: Bucket does not have encryption enabled",
 			Remediation: "Configure server-side encryption",
-			Source:       "scanner:tfsec",
+			Source:      "scanner:tfsec",
 		},
 	}
 
