@@ -69,10 +69,10 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 	compFindings := filterByCategories(findings, rules.CategoryCompliance)
 	relFindings := filterByCategories(findings, rules.CategoryReliability)
 
-	secDecomp := s.decomposeCategory(secFindings, totalResources, "security")
-	compDecomp := s.decomposeCategory(compFindings, totalResources, "compliance")
-	maintDecomp := s.decomposeCategory(maintFindings, totalResources, "maintainability")
-	relDecomp := s.decomposeCategory(relFindings, totalResources, "reliability")
+	secDecomp := s.decomposeCategory(secFindings, totalResources)
+	compDecomp := s.decomposeCategory(compFindings, totalResources)
+	maintDecomp := s.decomposeCategory(maintFindings, totalResources)
+	relDecomp := s.decomposeCategory(relFindings, totalResources)
 
 	// Aplicar blending de confiabilidade
 	if len(relFindings) > 0 {
@@ -114,7 +114,7 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 	}
 }
 
-func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int, categoryName string) CategoryDecomposition {
+func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int) CategoryDecomposition {
 	impacts := make([]FindingImpact, 0, len(findings))
 	weightedSum := 0.0
 	hasCritical := false

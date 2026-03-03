@@ -432,7 +432,7 @@ func ListEntries(dir string) ([]CacheMeta, error) {
 		return nil, err
 	}
 
-	var entries []CacheMeta
+	entries := make([]CacheMeta, 0, len(metas))
 	for _, mp := range metas {
 		data, err := os.ReadFile(mp)
 		if err != nil {

@@ -107,7 +107,7 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 			continue
 		}
 
-		// Regra 4: detecção de duplicatas
+		// Regra 4: detecção de duplicates
 		if reason, detail := checkDuplicate(f, seen); reason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
@@ -188,7 +188,7 @@ func checkDuplicate(f rules.Finding, seen map[string]bool) (DiscardReason, strin
 	return "", ""
 }
 
-// deduplicationKey gera uma chave única para detecção de duplicatas.
+// deduplicationKey gera uma chave única para detecção de duplicates.
 // Usa recurso + categoria + primeiros 80 caracteres da mensagem normalizada.
 func deduplicationKey(f rules.Finding) string {
 	msg := strings.ToLower(strings.TrimSpace(f.Message))
