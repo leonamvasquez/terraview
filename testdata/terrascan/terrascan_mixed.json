@@ -1,0 +1,155 @@
+{
+  "results": {
+    "violations": [
+      {
+        "rule_name": "s3BucketAccessLogging",
+        "description": "Ensure S3 bucket has access logging enabled",
+        "rule_id": "AC_AWS_0214",
+        "severity": "HIGH",
+        "category": "Logging and Monitoring",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "s3BucketEncryption",
+        "description": "Ensure S3 bucket has server-side encryption enabled",
+        "rule_id": "AC_AWS_0207",
+        "severity": "HIGH",
+        "category": "Security Best Practices",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "securityGroupUnrestricted",
+        "description": "Security group allows unrestricted ingress to port 22",
+        "rule_id": "AC_AWS_0229",
+        "severity": "HIGH",
+        "category": "Security Best Practices",
+        "resource_name": "aws_security_group.allow_ssh",
+        "resource_type": "aws_security_group",
+        "file": "main.tf",
+        "line": 12
+      },
+      {
+        "rule_name": "iamPolicyWildcard",
+        "description": "IAM policy should not allow full administrative privileges",
+        "rule_id": "AC_AWS_0270",
+        "severity": "HIGH",
+        "category": "IAM Policies",
+        "resource_name": "aws_iam_policy.admin",
+        "resource_type": "aws_iam_policy",
+        "file": "iam.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "ec2IMDSv2",
+        "description": "Ensure EC2 instance uses Instance Metadata Service v2",
+        "rule_id": "AC_AWS_0480",
+        "severity": "HIGH",
+        "category": "Security Best Practices",
+        "resource_name": "aws_instance.web",
+        "resource_type": "aws_instance",
+        "file": "main.tf",
+        "line": 24
+      },
+      {
+        "rule_name": "s3BucketVersioning",
+        "description": "Ensure S3 bucket has versioning enabled",
+        "rule_id": "AC_AWS_0215",
+        "severity": "MEDIUM",
+        "category": "Best Practice",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "s3BlockPublicACLs",
+        "description": "Ensure S3 bucket blocks public ACLs",
+        "rule_id": "AC_AWS_0216",
+        "severity": "MEDIUM",
+        "category": "Security Best Practices",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "s3BlockPublicPolicy",
+        "description": "Ensure S3 bucket blocks public policy",
+        "rule_id": "AC_AWS_0217",
+        "severity": "MEDIUM",
+        "category": "Security Best Practices",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      },
+      {
+        "rule_name": "sgDescription",
+        "description": "Ensure every security group has a description",
+        "rule_id": "AC_AWS_0250",
+        "severity": "MEDIUM",
+        "category": "Best Practice",
+        "resource_name": "aws_security_group.allow_ssh",
+        "resource_type": "aws_security_group",
+        "file": "main.tf",
+        "line": 12
+      },
+      {
+        "rule_name": "ec2PublicIP",
+        "description": "Ensure EC2 instance does not have a public IP address",
+        "rule_id": "AC_AWS_0481",
+        "severity": "MEDIUM",
+        "category": "Security Best Practices",
+        "resource_name": "aws_instance.web",
+        "resource_type": "aws_instance",
+        "file": "main.tf",
+        "line": 24
+      },
+      {
+        "rule_name": "ebsEncryption",
+        "description": "Ensure EBS volumes attached to instances are encrypted",
+        "rule_id": "AC_AWS_0482",
+        "severity": "MEDIUM",
+        "category": "Security Best Practices",
+        "resource_name": "aws_instance.web",
+        "resource_type": "aws_instance",
+        "file": "main.tf",
+        "line": 24
+      },
+      {
+        "rule_name": "ec2DetailedMonitoring",
+        "description": "Ensure EC2 instance has detailed monitoring enabled",
+        "rule_id": "AC_AWS_0483",
+        "severity": "LOW",
+        "category": "Logging and Monitoring",
+        "resource_name": "aws_instance.web",
+        "resource_type": "aws_instance",
+        "file": "main.tf",
+        "line": 24
+      },
+      {
+        "rule_name": "s3PublicACL",
+        "description": "Ensure S3 bucket does not have a public ACL",
+        "rule_id": "AC_AWS_0218",
+        "severity": "LOW",
+        "category": "Security Best Practices",
+        "resource_name": "aws_s3_bucket.data",
+        "resource_type": "aws_s3_bucket",
+        "file": "main.tf",
+        "line": 1
+      }
+    ],
+    "count": {
+      "low": 2,
+      "medium": 6,
+      "high": 5,
+      "total": 13
+    }
+  }
+}

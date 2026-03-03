@@ -1,0 +1,31 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [
+      {
+        "check_id": "CKV_AWS_18",
+        "check_name": "Ensure the S3 bucket has access logging enabled",
+        "check_result": {"result": "PASSED"},
+        "resource_address": "aws_s3_bucket.logs",
+        "severity": "CRITICAL",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_18"
+      },
+      {
+        "check_id": "CKV_AWS_21",
+        "check_name": "Ensure the S3 bucket has versioning enabled",
+        "check_result": {"result": "PASSED"},
+        "resource_address": "aws_s3_bucket.data",
+        "severity": "HIGH",
+        "guideline": "https://docs.checkov.io/docs/CKV_AWS_21"
+      }
+    ],
+    "failed_checks": [],
+    "skipped_checks": []
+  },
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "parsing_errors": 0
+  }
+}

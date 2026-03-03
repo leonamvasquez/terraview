@@ -1,0 +1,1 @@
+{"Results": [{"Target": "main.tf", "Misconfigurations": [{"ID": "AVD-AWS-0086", "Severity": "HIGH"

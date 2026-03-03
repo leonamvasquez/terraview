@@ -44,8 +44,8 @@ func backoffWithJitter(attempt int) time.Duration {
 	return result
 }
 
-// retryAnalyze executes fn with exponential backoff, retrying on transient errors.
-// It encapsulates the retry loop shared by all HTTP-based providers.
+// retryAnalyze executa fn com backoff exponencial, retentando apenas erros transientes.
+// Erros permanentes (401, 403, 400) causam falha imediata sem retentativa.
 func retryAnalyze(
 	ctx context.Context,
 	cfg ai.ProviderConfig,
@@ -66,6 +66,11 @@ func retryAnalyze(
 		findings, summary, err := fn()
 		if err != nil {
 			lastErr = err
+			// Não retentar erros permanentes (401, 403, 400, validação)
+			if !ai.IsTransient(err) {
+				return ai.Completion{}, ai.NewProviderError(providerName, "analyze",
+					fmt.Errorf("erro permanente (sem retentativa): %w", err))
+			}
 			continue
 		}
 
@@ -78,7 +83,7 @@ func retryAnalyze(
 	}
 
 	return ai.Completion{}, ai.NewProviderError(providerName, "analyze",
-		fmt.Errorf("failed after %d attempts: %w", cfg.MaxRetries+1, lastErr))
+		fmt.Errorf("falhou após %d tentativas: %w", cfg.MaxRetries+1, lastErr))
 }
 
 // llmFinding is the expected JSON shape from any LLM provider.

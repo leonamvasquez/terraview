@@ -494,7 +494,7 @@ func TestNewOpenRouter_Defaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	o := p.(*openrouterProvider)
-	if o.cfg.Model != "google/gemini-2.5-flash" {
+	if o.cfg.Model != "google/gemini-2.5-pro" {
 		t.Errorf("Model = %q", o.cfg.Model)
 	}
 	if o.cfg.BaseURL != "https://openrouter.ai/api/v1" {

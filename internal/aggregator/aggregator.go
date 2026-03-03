@@ -20,22 +20,61 @@ type Verdict struct {
 	Confidence string   `json:"confidence"` // "high", "medium", "low"
 }
 
+// PipelineStatus descreve o estado de execução do pipeline scanner + IA.
+type PipelineStatus struct {
+	Scanner            *ComponentStatus `json:"scanner,omitempty"`
+	AI                 *ComponentStatus `json:"ai,omitempty"`
+	ResultCompleteness string           `json:"result_completeness"` // "complete", "partial_scanner_only", "partial_ai_only", "failed"
+}
+
+// ComponentStatus registra o estado de um componente do pipeline.
+type ComponentStatus struct {
+	Status     string `json:"status"`                // "success", "failed", "skipped"
+	Error      string `json:"error,omitempty"`       // mensagem de erro (se falhou)
+	DurationMs int64  `json:"duration_ms,omitempty"` // duração em milissegundos
+	Tool       string `json:"tool,omitempty"`        // nome da ferramenta (checkov, tfsec, etc.)
+	Version    string `json:"version,omitempty"`     // versão da ferramenta
+	Provider   string `json:"provider,omitempty"`    // provedor IA (gemini, claude, etc.)
+	Model      string `json:"model,omitempty"`       // modelo IA
+	Retries    int    `json:"retries,omitempty"`     // número de retentativas feitas
+}
+
 // ReviewResult is the final aggregated result of a review.
 type ReviewResult struct {
-	PlanFile       string               `json:"plan_file"`
-	TotalResources int                  `json:"total_resources"`
-	Verdict        Verdict              `json:"verdict"`
-	Findings       []rules.Finding      `json:"findings"`
-	Score          scoring.Score        `json:"score"`
-	Summary        string               `json:"summary,omitempty"`
-	Explanation    *explain.Explanation `json:"explanation,omitempty"`
-	Diagram        string               `json:"diagram,omitempty"`
-	BlastRadius    *blast.BlastResult   `json:"blast_radius,omitempty"`
-	MetaAnalysis   *meta.MetaResult     `json:"meta_analysis,omitempty"`
-	SeverityCounts map[string]int       `json:"severity_counts"`
-	CategoryCounts map[string]int       `json:"category_counts"`
-	MaxSeverity    string               `json:"max_severity"`
-	ExitCode       int                  `json:"exit_code"`
+	PlanFile           string                      `json:"plan_file"`
+	TotalResources     int                         `json:"total_resources"`
+	Verdict            Verdict                     `json:"verdict"`
+	Findings           []rules.Finding             `json:"findings"`
+	Score              scoring.Score               `json:"score"`
+	ScoreDecomposition *scoring.ScoreDecomposition `json:"score_decomposition,omitempty"`
+	Summary            string                      `json:"summary,omitempty"`
+	Explanation        *explain.Explanation        `json:"explanation,omitempty"`
+	Diagram            string                      `json:"diagram,omitempty"`
+	BlastRadius        *blast.BlastResult          `json:"blast_radius,omitempty"`
+	MetaAnalysis       *meta.MetaResult            `json:"meta_analysis,omitempty"`
+	AIValidation       *AIValidationReport         `json:"ai_validation,omitempty"`
+	PipelineStatus     *PipelineStatus             `json:"pipeline_status,omitempty"`
+	SeverityCounts     map[string]int              `json:"severity_counts"`
+	CategoryCounts     map[string]int              `json:"category_counts"`
+	MaxSeverity        string                      `json:"max_severity"`
+	ExitCode           int                         `json:"exit_code"`
+}
+
+// AIValidationReport contém as estatísticas da validação de findings da IA
+// contra o grafo de topologia. Incluído no JSON de saída quando há findings descartados.
+type AIValidationReport struct {
+	TotalReceived int                  `json:"total_received"`
+	TotalValid    int                  `json:"total_valid"`
+	TotalDiscard  int                  `json:"total_discarded"`
+	Discarded     []AIDiscardedFinding `json:"discarded,omitempty"`
+}
+
+// AIDiscardedFinding representa um finding descartado com o motivo.
+type AIDiscardedFinding struct {
+	Resource string `json:"resource"`
+	Message  string `json:"message"`
+	Reason   string `json:"reason"`
+	Detail   string `json:"detail"`
 }
 
 // Aggregator combines findings from multiple sources and computes the final result.

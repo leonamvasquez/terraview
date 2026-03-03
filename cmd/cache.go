@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -35,8 +36,8 @@ func init() {
 }
 
 func runCacheClear(_ *cobra.Command, _ []string) error {
-	path := aicache.DiskCachePath()
-	if err := aicache.ClearDisk(path); err != nil {
+	dir := aicache.DiskCacheDir()
+	if err := aicache.ClearDisk(dir); err != nil {
 		return fmt.Errorf(pick("failed to clear cache: %w", "falha ao limpar cache: %w"), err)
 	}
 	fmt.Fprintf(os.Stdout, "%s %s\n", output.Prefix(),
@@ -45,13 +46,13 @@ func runCacheClear(_ *cobra.Command, _ []string) error {
 }
 
 func runCacheStatus(_ *cobra.Command, _ []string) error {
-	path := aicache.DiskCachePath()
-	entries, fileSize, oldest, newest, err := aicache.DiskStats(path)
+	dir := aicache.DiskCacheDir()
+	entries, totalSize, oldest, newest, err := aicache.DiskStats(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Fprintf(os.Stdout, "%s %s\n", output.Prefix(),
-				pick("No cache file found. Enable with 'cache: true' in .terraview.yaml.",
-					"Nenhum arquivo de cache encontrado. Habilite com 'cache: true' em .terraview.yaml."))
+				pick("No cache found. Enable with 'cache: true' in .terraview.yaml.",
+					"Nenhum cache encontrado. Habilite com 'cache: true' em .terraview.yaml."))
 			return nil
 		}
 		return fmt.Errorf(pick("failed to read cache: %w", "falha ao ler cache: %w"), err)
@@ -62,7 +63,7 @@ func runCacheStatus(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(os.Stdout, "  %s %d\n",
 		pick("Entries:", "Entradas:"), entries)
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		pick("File size:", "Tamanho:"), formatBytes(fileSize))
+		pick("Total size:", "Tamanho total:"), formatBytes(totalSize))
 	if entries > 0 {
 		fmt.Fprintf(os.Stdout, "  %s %s\n",
 			pick("Oldest:", "Mais antigo:"), oldest.Format(time.RFC3339))
@@ -70,9 +71,50 @@ func runCacheStatus(_ *cobra.Command, _ []string) error {
 			pick("Newest:", "Mais recente:"), newest.Format(time.RFC3339))
 	}
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		pick("Path:", "Caminho:"), path)
+		pick("Path:", "Caminho:"), dir)
+
+	// Verificar se estamos em um diretório Terraform e mostrar hash do plano atual
+	currentPlanHash := detectCurrentPlanHash()
+	if currentPlanHash != "" {
+		fmt.Fprintf(os.Stdout, "\n  %s %s\n",
+			pick("Current plan hash:", "Hash do plano atual:"), currentPlanHash[:16]+"...")
+
+		meta, lookupErr := aicache.LookupPlanHash(dir, currentPlanHash)
+		if lookupErr != nil {
+			fmt.Fprintf(os.Stdout, "  %s %s\n",
+				pick("Cache hit:", "Cache hit:"),
+				pick("no", "não"))
+		} else {
+			fmt.Fprintf(os.Stdout, "  %s %s\n",
+				pick("Cache hit:", "Cache hit:"),
+				pick("yes", "sim"))
+			fmt.Fprintf(os.Stdout, "  %s %s/%s\n",
+				pick("Cached with:", "Cacheado com:"), meta.Provider, meta.Model)
+			fmt.Fprintf(os.Stdout, "  %s %s\n",
+				pick("Cached at:", "Cacheado em:"), meta.CreatedAt.Format(time.RFC3339))
+		}
+	}
 
 	return nil
+}
+
+// detectCurrentPlanHash procura plan.json ou tfplan no diretório atual
+// e calcula o hash SHA-256 do conteúdo para comparação com o cache.
+func detectCurrentPlanHash() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Procurar arquivos de plano em ordem de preferência
+	for _, name := range []string{"plan.json", "tfplan"} {
+		planPath := filepath.Join(cwd, name)
+		data, err := os.ReadFile(planPath)
+		if err == nil && len(data) > 0 {
+			return aicache.PlanHash(data)
+		}
+	}
+	return ""
 }
 
 func formatBytes(b int64) string {

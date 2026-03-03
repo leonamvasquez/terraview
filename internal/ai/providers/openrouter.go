@@ -21,10 +21,10 @@ func init() {
 		DisplayName:  "OpenRouter",
 		RequiresKey:  true,
 		EnvVarKey:    "OPENROUTER_API_KEY",
-		DefaultModel: "google/gemini-2.5-flash",
+		DefaultModel: "google/gemini-2.5-pro",
 		SuggestedModels: []string{
 			// Cost-effective
-			"google/gemini-2.5-flash",
+			"google/gemini-2.5-pro",
 			"deepseek/deepseek-v3.2",
 			// Mid-tier
 			"anthropic/claude-sonnet-4-6",
@@ -48,7 +48,7 @@ func NewOpenRouter(cfg ai.ProviderConfig) (ai.Provider, error) {
 		cfg.APIKey = os.Getenv("OPENROUTER_API_KEY")
 	}
 	if cfg.Model == "" {
-		cfg.Model = "google/gemini-2.5-flash"
+		cfg.Model = "google/gemini-2.5-pro"
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://openrouter.ai/api/v1"

@@ -1,0 +1,199 @@
+{
+  "Results": [
+    {
+      "Target": "main.tf",
+      "Misconfigurations": [
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0086",
+          "AVDID": "AVD-AWS-0086",
+          "Title": "S3 Access Block Should Restrict Public Bucket",
+          "Description": "S3 bucket does not have a corresponding public access block",
+          "Message": "Public access is not blocked for bucket aws_s3_bucket.data",
+          "Resolution": "Add a public access block to the S3 bucket",
+          "Severity": "CRITICAL",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0086"],
+          "CauseMetadata": {
+            "Resource": "aws_s3_bucket.data",
+            "Provider": "aws",
+            "Service": "s3",
+            "StartLine": 1,
+            "EndLine": 10
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0132",
+          "AVDID": "AVD-AWS-0132",
+          "Title": "Ensure IMDSv2 is Required",
+          "Description": "EC2 instance does not require IMDSv2",
+          "Message": "Instance aws_instance.web does not require IMDSv2",
+          "Resolution": "Set http_tokens to required in metadata options",
+          "Severity": "CRITICAL",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0132"],
+          "CauseMetadata": {
+            "Resource": "aws_instance.web",
+            "Provider": "aws",
+            "Service": "ec2",
+            "StartLine": 12,
+            "EndLine": 25
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0057",
+          "AVDID": "AVD-AWS-0057",
+          "Title": "IAM Policy Should Not Use Wildcards",
+          "Description": "IAM policy uses a wildcard action",
+          "Message": "Policy document uses wildcard for actions",
+          "Resolution": "Specify explicit actions instead of wildcards",
+          "Severity": "HIGH",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0057"],
+          "CauseMetadata": {
+            "Resource": "aws_iam_policy.admin",
+            "Provider": "aws",
+            "Service": "iam",
+            "StartLine": 1,
+            "EndLine": 15
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0107",
+          "AVDID": "AVD-AWS-0107",
+          "Title": "Security Group Unrestricted Ingress",
+          "Description": "Security group allows unrestricted SSH ingress",
+          "Message": "Security group aws_security_group.allow_ssh has unrestricted ingress to port 22",
+          "Resolution": "Restrict ingress to specific CIDR blocks",
+          "Severity": "HIGH",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0107"],
+          "CauseMetadata": {
+            "Resource": "aws_security_group.allow_ssh",
+            "Provider": "aws",
+            "Service": "vpc",
+            "StartLine": 27,
+            "EndLine": 40
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0088",
+          "AVDID": "AVD-AWS-0088",
+          "Title": "S3 Bucket Encryption",
+          "Description": "S3 bucket encryption is not configured",
+          "Message": "Bucket aws_s3_bucket.data does not have encryption enabled",
+          "Resolution": "Configure server-side encryption for the bucket",
+          "Severity": "HIGH",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0088"],
+          "CauseMetadata": {
+            "Resource": "aws_s3_bucket.data",
+            "Provider": "aws",
+            "Service": "s3",
+            "StartLine": 1,
+            "EndLine": 10
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0130",
+          "AVDID": "AVD-AWS-0130",
+          "Title": "EC2 Public IP",
+          "Description": "EC2 instance should not have a public IP",
+          "Message": "Instance aws_instance.web has a public IP",
+          "Resolution": "Disable associate_public_ip_address",
+          "Severity": "HIGH",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0130"],
+          "CauseMetadata": {
+            "Resource": "aws_instance.web",
+            "Provider": "aws",
+            "Service": "ec2",
+            "StartLine": 12,
+            "EndLine": 25
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0090",
+          "AVDID": "AVD-AWS-0090",
+          "Title": "S3 Bucket Logging",
+          "Description": "S3 bucket should have access logging enabled",
+          "Message": "Bucket aws_s3_bucket.data does not have logging enabled",
+          "Resolution": "Enable access logging",
+          "Severity": "MEDIUM",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0090"],
+          "CauseMetadata": {
+            "Resource": "aws_s3_bucket.data",
+            "Provider": "aws",
+            "Service": "s3",
+            "StartLine": 1,
+            "EndLine": 10
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0091",
+          "AVDID": "AVD-AWS-0091",
+          "Title": "S3 Bucket Versioning",
+          "Description": "S3 bucket should have versioning enabled",
+          "Message": "Bucket versioning not enabled for aws_s3_bucket.data",
+          "Resolution": "Enable bucket versioning",
+          "Severity": "MEDIUM",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0091"],
+          "CauseMetadata": {
+            "Resource": "aws_s3_bucket.data",
+            "Provider": "aws",
+            "Service": "s3",
+            "StartLine": 1,
+            "EndLine": 10
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0131",
+          "AVDID": "AVD-AWS-0131",
+          "Title": "EC2 Detailed Monitoring",
+          "Description": "EC2 instance should have detailed monitoring",
+          "Message": "Instance aws_instance.web does not have detailed monitoring",
+          "Resolution": "Enable detailed monitoring",
+          "Severity": "LOW",
+          "Status": "FAIL",
+          "References": ["https://avd.aquasec.com/misconfig/avd-aws-0131"],
+          "CauseMetadata": {
+            "Resource": "aws_instance.web",
+            "Provider": "aws",
+            "Service": "ec2",
+            "StartLine": 12,
+            "EndLine": 25
+          }
+        },
+        {
+          "Type": "Terraform Security Check",
+          "ID": "AVD-AWS-0099",
+          "AVDID": "AVD-AWS-0099",
+          "Title": "S3 Block Public ACLs",
+          "Description": "Check passed for public ACL block",
+          "Message": "Public ACLs are properly blocked",
+          "Resolution": "",
+          "Severity": "HIGH",
+          "Status": "PASS",
+          "References": [],
+          "CauseMetadata": {
+            "Resource": "aws_s3_bucket.logs",
+            "Provider": "aws",
+            "Service": "s3",
+            "StartLine": 50,
+            "EndLine": 55
+          }
+        }
+      ]
+    }
+  ]
+}

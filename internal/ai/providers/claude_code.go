@@ -88,6 +88,10 @@ func (c *claudeCodeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 		findings, summary, err := c.doExec(ctx, fullPrompt)
 		if err != nil {
 			lastErr = err
+			if !ai.IsTransient(err) {
+				return ai.Completion{}, ai.NewProviderError(claudeCodeName, "analyze",
+					fmt.Errorf("erro permanente (sem retentativa): %w", err))
+			}
 			continue
 		}
 
