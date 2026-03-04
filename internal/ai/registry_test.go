@@ -328,3 +328,63 @@ func TestNewProvider_NotFound(t *testing.T) {
 		t.Fatal("expected error for nonexistent provider")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Package-level wrappers (globalRegistry delegates)
+// ---------------------------------------------------------------------------
+
+func TestGlobalNames(t *testing.T) {
+	oldDefault := globalRegistry
+	defer func() { globalRegistry = oldDefault }()
+
+	globalRegistry = NewRegistry()
+	globalRegistry.Register("zz", func(cfg ProviderConfig) (Provider, error) {
+		return &mockProvider{name: "zz"}, nil
+	}, ProviderInfo{DisplayName: "ZZ"})
+	globalRegistry.Register("aa", func(cfg ProviderConfig) (Provider, error) {
+		return &mockProvider{name: "aa"}, nil
+	}, ProviderInfo{DisplayName: "AA"})
+
+	names := Names()
+	if len(names) != 2 {
+		t.Fatalf("expected 2 names, got %d", len(names))
+	}
+	if names[0] != "aa" || names[1] != "zz" {
+		t.Errorf("expected sorted [aa, zz], got %v", names)
+	}
+}
+
+func TestGlobalList(t *testing.T) {
+	oldDefault := globalRegistry
+	defer func() { globalRegistry = oldDefault }()
+
+	globalRegistry = NewRegistry()
+	globalRegistry.Register("test", func(cfg ProviderConfig) (Provider, error) {
+		return &mockProvider{name: "test"}, nil
+	}, ProviderInfo{DisplayName: "Test"})
+
+	infos := List()
+	if len(infos) != 1 {
+		t.Fatalf("expected 1 info, got %d", len(infos))
+	}
+	if infos[0].Name != "test" {
+		t.Errorf("expected name 'test', got %q", infos[0].Name)
+	}
+}
+
+func TestGlobalHas(t *testing.T) {
+	oldDefault := globalRegistry
+	defer func() { globalRegistry = oldDefault }()
+
+	globalRegistry = NewRegistry()
+	globalRegistry.Register("found", func(cfg ProviderConfig) (Provider, error) {
+		return &mockProvider{name: "found"}, nil
+	}, ProviderInfo{DisplayName: "Found"})
+
+	if !Has("found") {
+		t.Error("expected Has to return true for registered provider")
+	}
+	if Has("missing") {
+		t.Error("expected Has to return false for missing provider")
+	}
+}

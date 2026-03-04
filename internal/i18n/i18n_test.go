@@ -82,3 +82,46 @@ func TestNoENStringInBR(t *testing.T) {
 		t.Error("BR ClusterNoRisk should differ from EN")
 	}
 }
+
+func TestSevLabel_EN(t *testing.T) {
+	SetLang("")
+	tests := []struct {
+		sev  string
+		want string
+	}{
+		{"CRITICAL", "CRITICAL"},
+		{"HIGH", "HIGH"},
+		{"MEDIUM", "MEDIUM"},
+		{"LOW", "LOW"},
+		{"INFO", "INFO"},
+		{"UNKNOWN", "UNKNOWN"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := SevLabel(tt.sev); got != tt.want {
+			t.Errorf("SevLabel(%q) = %q, want %q", tt.sev, got, tt.want)
+		}
+	}
+}
+
+func TestSevLabel_BR(t *testing.T) {
+	SetLang("pt-BR")
+	defer SetLang("")
+	tests := []struct {
+		sev  string
+		want string
+	}{
+		{"CRITICAL", "CRÍTICO"},
+		{"HIGH", "ALTO"},
+		{"MEDIUM", "MÉDIO"},
+		{"LOW", "BAIXO"},
+		{"INFO", "INFO"},
+		{"UNKNOWN", "UNKNOWN"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := SevLabel(tt.sev); got != tt.want {
+			t.Errorf("SevLabel(%q) = %q, want %q", tt.sev, got, tt.want)
+		}
+	}
+}

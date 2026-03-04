@@ -167,3 +167,156 @@ func TestSmartInstall_WindowsArm64Terrascan(t *testing.T) {
 	result := SmartInstall(spec, p, t.TempDir())
 	assertSmartInstallSane(t, "terrascan/windows/arm64", result)
 }
+
+// ---------------------------------------------------------------------------
+// pkgCmdsFn — platform-specific branches
+// ---------------------------------------------------------------------------
+
+func TestTfsecSpec_PkgCmds_Darwin(t *testing.T) {
+	spec := tfsecSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "darwin", Arch: "arm64"})
+	if len(cmds) == 0 {
+		t.Fatal("expected pkg commands for darwin")
+	}
+	if cmds[0][0] != "brew" {
+		t.Errorf("expected brew as first command, got %s", cmds[0][0])
+	}
+}
+
+func TestTfsecSpec_PkgCmds_Windows(t *testing.T) {
+	spec := tfsecSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
+	if len(cmds) == 0 {
+		t.Fatal("expected pkg commands for windows")
+	}
+	if cmds[0][0] != "choco" {
+		t.Errorf("expected choco as first command, got %s", cmds[0][0])
+	}
+}
+
+func TestTfsecSpec_PkgCmds_UnknownOS(t *testing.T) {
+	spec := tfsecSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
+	if cmds != nil {
+		t.Errorf("expected nil commands for freebsd, got %v", cmds)
+	}
+}
+
+func TestCheckovSpec_PkgCmds_Darwin(t *testing.T) {
+	spec := checkovSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "darwin", Arch: "arm64"})
+	if len(cmds) == 0 {
+		t.Fatal("expected pkg commands for darwin")
+	}
+	if cmds[0][0] != "pip3" {
+		t.Errorf("expected pip3 as first command, got %s", cmds[0][0])
+	}
+}
+
+func TestCheckovSpec_PkgCmds_Linux(t *testing.T) {
+	spec := checkovSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "linux", Arch: "amd64"})
+	if len(cmds) < 3 {
+		t.Fatalf("expected multiple pkg commands for linux, got %d", len(cmds))
+	}
+}
+
+func TestCheckovSpec_PkgCmds_Windows(t *testing.T) {
+	spec := checkovSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
+	if len(cmds) == 0 {
+		t.Fatal("expected pkg commands for windows")
+	}
+}
+
+func TestCheckovSpec_PkgCmds_UnknownOS(t *testing.T) {
+	spec := checkovSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
+	if cmds != nil {
+		t.Errorf("expected nil commands for freebsd")
+	}
+}
+
+func TestTerrascanSpec_PkgCmds_Darwin(t *testing.T) {
+	spec := terrascanSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "darwin", Arch: "arm64"})
+	if len(cmds) == 0 {
+		t.Fatal("expected brew command for darwin")
+	}
+}
+
+func TestTerrascanSpec_PkgCmds_Linux(t *testing.T) {
+	spec := terrascanSpec()
+	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "linux", Arch: "amd64"})
+	if cmds != nil {
+		t.Errorf("expected nil for linux (binary direct), got %v", cmds)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// fallbackFn — platform-specific branches
+// ---------------------------------------------------------------------------
+
+func TestTfsecSpec_Fallback_Windows(t *testing.T) {
+	spec := tfsecSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
+	if !strings.Contains(fb, "choco") {
+		t.Errorf("expected choco in windows fallback, got %q", fb)
+	}
+}
+
+func TestTfsecSpec_Fallback_UnknownOS(t *testing.T) {
+	spec := tfsecSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
+	if !strings.Contains(fb, "github.com") {
+		t.Errorf("expected github link, got %q", fb)
+	}
+}
+
+func TestCheckovSpec_Fallback_Windows(t *testing.T) {
+	spec := checkovSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
+	if !strings.Contains(fb, "pip") {
+		t.Errorf("expected pip in windows fallback, got %q", fb)
+	}
+}
+
+func TestCheckovSpec_Fallback_UnknownOS(t *testing.T) {
+	spec := checkovSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
+	if fb != "pip3 install checkov" {
+		t.Errorf("expected generic pip3 fallback, got %q", fb)
+	}
+}
+
+func TestTerrascanSpec_Fallback_Windows(t *testing.T) {
+	spec := terrascanSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
+	if !strings.Contains(fb, "github.com") {
+		t.Errorf("expected github link, got %q", fb)
+	}
+}
+
+func TestTerrascanSpec_Fallback_WindowsArm64(t *testing.T) {
+	spec := terrascanSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "windows", Arch: "arm64", BinaryExt: ".exe"})
+	if !strings.Contains(fb, "no Windows/arm64") {
+		t.Errorf("expected arm64 warning, got %q", fb)
+	}
+}
+
+func TestTerrascanSpec_Fallback_UnknownOS(t *testing.T) {
+	spec := terrascanSpec()
+	fb := spec.fallbackFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
+	if !strings.Contains(fb, "github.com") {
+		t.Errorf("expected github link, got %q", fb)
+	}
+}
+
+func TestFallbackFor_NilFallbackFn(t *testing.T) {
+	spec := &ScannerSpec{Name: "test"}
+	fb := FallbackFor(spec, platform.PlatformInfo{OS: "linux", Arch: "amd64"})
+	if fb != "" {
+		t.Errorf("expected empty fallback for nil fn, got %q", fb)
+	}
+}

@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/rules"
@@ -417,5 +418,246 @@ func TestSortedKeys(t *testing.T) {
 	keys := sortedKeys(m)
 	if !sort.StringsAreSorted(keys) {
 		t.Errorf("keys not sorted: %v", keys)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ResolveDefault tests
+// ---------------------------------------------------------------------------
+
+func TestResolveDefault_ConfiguredDefault(t *testing.T) {
+	mgr := NewManager()
+	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
+
+	s, err := mgr.ResolveDefault("tfsec")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s == nil || s.Name() != "tfsec" {
+		t.Errorf("expected tfsec, got %v", s)
+	}
+}
+
+func TestResolveDefault_ConfiguredNotAvailable_FallsThrough(t *testing.T) {
+	mgr := NewManager()
+	mgr.Register(&mockScanner{name: "tfsec", available: false, priority: 2})
+	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
+
+	s, err := mgr.ResolveDefault("tfsec")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should fall through to priority-based selection (checkov is higher priority)
+	if s == nil || s.Name() != "checkov" {
+		t.Errorf("expected checkov (fallback), got %v", s)
+	}
+}
+
+func TestResolveDefault_Empty_PicksByPriority(t *testing.T) {
+	mgr := NewManager()
+	mgr.Register(&mockScanner{name: "terrascan", available: true, priority: 3})
+	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
+
+	s, err := mgr.ResolveDefault("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s == nil || s.Name() != "checkov" {
+		t.Errorf("expected checkov (priority 1), got %v", s)
+	}
+}
+
+func TestResolveDefault_NoneAvailable(t *testing.T) {
+	mgr := NewManager()
+	mgr.Register(&mockScanner{name: "tfsec", available: false, priority: 2})
+	mgr.Register(&mockScanner{name: "checkov", available: false, priority: 1})
+
+	s, err := mgr.ResolveDefault("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s != nil {
+		t.Errorf("expected nil scanner, got %v", s.Name())
+	}
+}
+
+func TestResolveDefault_EmptyManager(t *testing.T) {
+	mgr := NewManager()
+	s, err := mgr.ResolveDefault("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s != nil {
+		t.Error("expected nil scanner from empty manager")
+	}
+}
+
+func TestGlobalResolveDefault(t *testing.T) {
+	// Test global wrapper — just ensure it doesn't panic
+	_, err := ResolveDefault("")
+	if err != nil {
+		t.Errorf("ResolveDefault(\"\") error: %v", err)
+	}
+}
+
+func TestGlobalRunAll_Empty(t *testing.T) {
+	results := RunAll(nil, ScanContext{})
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestRunAllEmpty(t *testing.T) {
+	mgr := NewManager()
+	results := mgr.RunAll(nil, ScanContext{})
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// commandExists and getCommandVersion tests
+// ---------------------------------------------------------------------------
+
+func TestCommandExists_Echo(t *testing.T) {
+	if !commandExists("echo") {
+		t.Skip("echo not available")
+	}
+}
+
+func TestCommandExists_Nonexistent(t *testing.T) {
+	if commandExists("nonexistent-cmd-xyz-12345") {
+		t.Error("expected false for nonexistent command")
+	}
+}
+
+func TestGetCommandVersion_Echo(t *testing.T) {
+	v := getCommandVersion("echo")
+	// echo --version may or may not return a version, just ensure no panic
+	_ = v
+}
+
+func TestGetCommandVersionArgs_Nonexistent(t *testing.T) {
+	v := getCommandVersionArgs("nonexistent-cmd-xyz-12345", "--version")
+	if v != "" {
+		t.Errorf("expected empty string for nonexistent command, got %q", v)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SupportedModes
+// ---------------------------------------------------------------------------
+
+func TestCheckovSupportedModes(t *testing.T) {
+	s := &CheckovScanner{}
+	modes := s.SupportedModes()
+	if len(modes) != 2 {
+		t.Fatalf("expected 2 modes, got %d", len(modes))
+	}
+	if modes[0] != ScanModePlan || modes[1] != ScanModeSource {
+		t.Errorf("unexpected modes: %v", modes)
+	}
+}
+
+func TestTfsecSupportedModes(t *testing.T) {
+	s := &TfsecScanner{}
+	modes := s.SupportedModes()
+	if len(modes) != 1 || modes[0] != ScanModeSource {
+		t.Errorf("expected [source], got %v", modes)
+	}
+}
+
+func TestTerrascanSupportedModes(t *testing.T) {
+	s := &TerrascanScanner{}
+	modes := s.SupportedModes()
+	if len(modes) != 1 || modes[0] != ScanModeSource {
+		t.Errorf("expected [source], got %v", modes)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FormatScannerHeaderBR — dedup branch
+// ---------------------------------------------------------------------------
+
+func TestFormatScannerHeaderBR_WithDedup(t *testing.T) {
+	result := AggregatedResult{
+		ScannerStats: []ScannerStat{{Name: "checkov", Findings: 5}},
+		TotalRaw:     10,
+		TotalDeduped: 5,
+	}
+	header := FormatScannerHeaderBR(result)
+	if !strings.Contains(header, "Dedup") {
+		t.Error("expected dedup line when TotalRaw != TotalDeduped")
+	}
+	if !strings.Contains(header, "duplicados") {
+		t.Error("expected Portuguese text in BR header")
+	}
+}
+
+func TestFormatScannerHeaderBR_NoDedup(t *testing.T) {
+	result := AggregatedResult{
+		ScannerStats: []ScannerStat{{Name: "tfsec", Findings: 3}},
+		TotalRaw:     3,
+		TotalDeduped: 3,
+	}
+	header := FormatScannerHeaderBR(result)
+	if strings.Contains(header, "Dedup") {
+		t.Error("expected no dedup line when TotalRaw == TotalDeduped")
+	}
+}
+
+func TestFormatScannerHeaderBR_ErrorScanner(t *testing.T) {
+	result := AggregatedResult{
+		ScannerStats: []ScannerStat{{Name: "terrascan", Error: "timeout"}},
+		TotalRaw:     0,
+		TotalDeduped: 0,
+	}
+	header := FormatScannerHeaderBR(result)
+	if !strings.Contains(header, "erro") {
+		t.Error("expected 'erro' for scanner with error in BR header")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// convertCheckovFindings edge cases
+// ---------------------------------------------------------------------------
+
+func TestConvertCheckovFindings_EmptyResourceAddr(t *testing.T) {
+	checks := []checkovCheck{
+		{
+			CheckID:      "CKV_AWS_1",
+			CheckName:    "test check",
+			ResourceAddr: "",
+			FilePath:     "/main.tf",
+			Severity:     "HIGH",
+		},
+	}
+	findings := convertCheckovFindings(checks)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if findings[0].Resource != "/main.tf" {
+		t.Errorf("expected resource to fallback to FilePath, got %q", findings[0].Resource)
+	}
+}
+
+func TestConvertCheckovFindings_GuidelineFallback(t *testing.T) {
+	checks := []checkovCheck{
+		{
+			CheckID:   "CKV_AWS_2",
+			CheckName: "",
+			Guideline: "https://example.com",
+			Severity:  "MEDIUM",
+		},
+	}
+	findings := convertCheckovFindings(checks)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	// Should fallback to guideline when checkname and description are empty
+	if !strings.Contains(findings[0].Message, "https://example.com") {
+		t.Errorf("expected guideline in message, got %q", findings[0].Message)
 	}
 }

@@ -50,3 +50,9 @@ vendor/
 
 # Logs
 *.log
+
+# Coverage artifacts
+*_cov.out
+full.out
+analyze_cov.py
+site/

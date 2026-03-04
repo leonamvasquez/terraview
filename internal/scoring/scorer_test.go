@@ -187,3 +187,84 @@ func assertScore(t *testing.T, name string, got, expected float64) {
 		t.Errorf("expected %s score %.1f, got %.1f", name, expected, got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// clampScore edge cases
+// ---------------------------------------------------------------------------
+
+func TestClampScore_Negative(t *testing.T) {
+	got := clampScore(-5.0)
+	if got != 0 {
+		t.Errorf("expected 0 for negative, got %f", got)
+	}
+}
+
+func TestClampScore_AboveTen(t *testing.T) {
+	got := clampScore(15.7)
+	if got != 10 {
+		t.Errorf("expected 10 for above ten, got %f", got)
+	}
+}
+
+func TestClampScore_Normal(t *testing.T) {
+	got := clampScore(7.55)
+	if got != 7.6 { // Rounds to 1 decimal: 7.55 * 10 = 75.5 → Round → 76 / 10 = 7.6
+		t.Errorf("expected 7.6, got %f", got)
+	}
+}
+
+func TestClampScore_Zero(t *testing.T) {
+	got := clampScore(0)
+	if got != 0 {
+		t.Errorf("expected 0, got %f", got)
+	}
+}
+
+func TestClampScore_Ten(t *testing.T) {
+	got := clampScore(10)
+	if got != 10 {
+		t.Errorf("expected 10, got %f", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// filterByCategories edge cases
+// ---------------------------------------------------------------------------
+
+func TestFilterByCategories_NoMatch(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "HIGH", Category: "Security"},
+	}
+	result := filterByCategories(findings, "Compliance")
+	if len(result) != 0 {
+		t.Errorf("expected 0 findings, got %d", len(result))
+	}
+}
+
+func TestFilterByCategories_MultipleCategories(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "HIGH", Category: "Security"},
+		{Severity: "MEDIUM", Category: "BestPractice"},
+		{Severity: "LOW", Category: "Compliance"},
+	}
+	result := filterByCategories(findings, "Security", "BestPractice")
+	if len(result) != 2 {
+		t.Errorf("expected 2 findings, got %d", len(result))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Scorer — Reliability blending
+// ---------------------------------------------------------------------------
+
+func TestScorer_ReliabilityBlending(t *testing.T) {
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
+	findings := []rules.Finding{
+		{Severity: rules.SeverityHigh, Category: rules.CategoryReliability},
+	}
+	score := scorer.Calculate(findings, 10)
+	// Reliability blends into security and compliance
+	if score.SecurityScore >= 10.0 {
+		t.Errorf("security should be affected by reliability finding, got %.1f", score.SecurityScore)
+	}
+}

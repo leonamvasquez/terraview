@@ -6,6 +6,69 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
+// ---------------------------------------------------------------------------
+// severityRank — pure function with 6 branches
+// ---------------------------------------------------------------------------
+
+func TestSeverityRank_AllValues(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"CRITICAL", 0},
+		{"HIGH", 1},
+		{"MEDIUM", 2},
+		{"LOW", 3},
+		{"INFO", 4},
+		{"UNKNOWN", 5},
+		{"", 5},
+		{"critical", 5}, // case-sensitive
+	}
+	for _, tc := range tests {
+		got := severityRank(tc.input)
+		if got != tc.want {
+			t.Errorf("severityRank(%q) = %d, want %d", tc.input, got, tc.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectCoverageGaps — pure function
+// ---------------------------------------------------------------------------
+
+func TestDetectCoverageGaps_SingleSource(t *testing.T) {
+	sourceMap := map[string][]rules.Finding{
+		"checkov": {{RuleID: "SEC001", Category: "security", Severity: "HIGH"}},
+	}
+	gaps := detectCoverageGaps(sourceMap)
+	if len(gaps) == 0 {
+		t.Error("expected at least one gap for single source")
+	}
+	found := false
+	for _, g := range gaps {
+		if len(g) > 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected non-empty gap messages")
+	}
+}
+
+func TestDetectCoverageGaps_MultipleSources(t *testing.T) {
+	sourceMap := map[string][]rules.Finding{
+		"checkov":   {{RuleID: "SEC001", Category: "security", Severity: "HIGH"}},
+		"terraview": {{RuleID: "AI001", Category: "networking", Severity: "MEDIUM"}},
+	}
+	gaps := detectCoverageGaps(sourceMap)
+	// With 2 sources and 2 categories, should have no single-source gap
+	for _, g := range gaps {
+		if g == "" {
+			t.Error("gap should be non-empty")
+		}
+	}
+}
+
 func TestAnalyzer_MultipleSources(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},

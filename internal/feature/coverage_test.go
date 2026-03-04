@@ -225,3 +225,140 @@ func TestHasWildcardPolicy_DirectActionStar(t *testing.T) {
 		t.Error("expected true for directly embedded Action:*")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// hasWildcardAssumeRole — pure function, 4 branches
+// ---------------------------------------------------------------------------
+
+func TestHasWildcardAssumeRole_WithWildcardPrincipal(t *testing.T) {
+	vals := map[string]interface{}{
+		"assume_role_policy": `{"Statement":[{"Effect":"Allow","Principal":"*","Action":"sts:AssumeRole"}]}`,
+	}
+	if !hasWildcardAssumeRole(vals) {
+		t.Error("expected true for wildcard Principal")
+	}
+}
+
+func TestHasWildcardAssumeRole_NoPrincipal(t *testing.T) {
+	vals := map[string]interface{}{
+		"assume_role_policy": `{"Statement":[{"Effect":"Allow","Action":"sts:AssumeRole"}]}`,
+	}
+	if hasWildcardAssumeRole(vals) {
+		t.Error("expected false when no Principal present")
+	}
+}
+
+func TestHasWildcardAssumeRole_MissingKey(t *testing.T) {
+	vals := map[string]interface{}{
+		"name": "some-role",
+	}
+	if hasWildcardAssumeRole(vals) {
+		t.Error("expected false when assume_role_policy key missing")
+	}
+}
+
+func TestHasWildcardAssumeRole_NonStringValue(t *testing.T) {
+	vals := map[string]interface{}{
+		"assume_role_policy": 42,
+	}
+	if hasWildcardAssumeRole(vals) {
+		t.Error("expected false when value is not a string")
+	}
+}
+
+func TestHasWildcardAssumeRole_NoWildcard(t *testing.T) {
+	vals := map[string]interface{}{
+		"assume_role_policy": `{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::123456789:root"},"Action":"sts:AssumeRole"}]}`,
+	}
+	if hasWildcardAssumeRole(vals) {
+		t.Error("expected false for specific principal")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// hasVersioningDisabled — pure function, 4 branches
+// ---------------------------------------------------------------------------
+
+func TestHasVersioningDisabled_Disabled(t *testing.T) {
+	vals := map[string]interface{}{
+		"versioning": map[string]interface{}{
+			"enabled": false,
+		},
+	}
+	if !hasVersioningDisabled(vals) {
+		t.Error("expected true when versioning enabled=false")
+	}
+}
+
+func TestHasVersioningDisabled_Enabled(t *testing.T) {
+	vals := map[string]interface{}{
+		"versioning": map[string]interface{}{
+			"enabled": true,
+		},
+	}
+	if hasVersioningDisabled(vals) {
+		t.Error("expected false when versioning enabled=true")
+	}
+}
+
+func TestHasVersioningDisabled_MissingKey(t *testing.T) {
+	vals := map[string]interface{}{
+		"bucket": "my-bucket",
+	}
+	if hasVersioningDisabled(vals) {
+		t.Error("expected false when versioning key missing")
+	}
+}
+
+func TestHasVersioningDisabled_NotAMap(t *testing.T) {
+	vals := map[string]interface{}{
+		"versioning": "some-string",
+	}
+	if hasVersioningDisabled(vals) {
+		t.Error("expected false when versioning is not a map")
+	}
+}
+
+func TestHasVersioningDisabled_StringEnabled(t *testing.T) {
+	vals := map[string]interface{}{
+		"versioning": map[string]interface{}{
+			"enabled": "false",
+		},
+	}
+	if !hasVersioningDisabled(vals) {
+		t.Error("expected true for string 'false'")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// containsStringAnywhere — pure function
+// ---------------------------------------------------------------------------
+
+func TestContainsStringAnywhere_DeepNesting(t *testing.T) {
+	vals := map[string]interface{}{
+		"tags": map[string]interface{}{
+			"Environment": "production",
+		},
+	}
+	if !containsStringAnywhere(vals, "production") {
+		t.Error("expected to find 'production' in nested map")
+	}
+}
+
+func TestContainsStringAnywhere_InSlice(t *testing.T) {
+	vals := map[string]interface{}{
+		"security_groups": []interface{}{"sg-12345", "sg-open-world"},
+	}
+	if !containsStringAnywhere(vals, "sg-open-world") {
+		t.Error("expected to find 'sg-open-world' in slice")
+	}
+}
+
+func TestContainsStringAnywhere_NotFound(t *testing.T) {
+	vals := map[string]interface{}{
+		"name": "my-instance",
+	}
+	if containsStringAnywhere(vals, "nonexistent") {
+		t.Error("expected false for nonexistent value")
+	}
+}
