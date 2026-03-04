@@ -5,50 +5,50 @@
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                              terraview CLI                                │
-│  scan | apply | diagram | explain | drift | provider | scanners | cache  │
+│  scan | apply | diagram | explain | drift | provider | scanners | cache   │
 └────────────────────────────────┬──────────────────────────────────────────┘
                                  │
                         ┌────────┴────────┐
                         ▼                 ▼
                Terraform Executor    Plan JSON (--plan)
-                   init + plan           │
-                   show -json            │
-                        │                │
-                        └───────┬────────┘
+                   init + plan            │
+                   show -json             │
+                        │                 │
+                        └───────┬─────────┘
                                 ▼
                    ┌─────────────────────────┐
-                   │   Parser + Normalizer    │
-                   │   NormalizedResource[]   │
+                   │   Parser + Normalizer   │
+                   │   NormalizedResource[]  │
                    └────────────┬────────────┘
                                 │
                                 ▼
                    ┌─────────────────────────┐
-                   │      Topology Graph      │
+                   │     Topology Graph      │
                    └────────────┬────────────┘
                                 │
                      ┌──────────┴──────────┐
                      │                     │
                      ▼                     ▼
           ┌─────────────────┐    ┌─────────────────┐
-          │  Plan (original)│    │    Sanitizer     │
-          │                 │    │  Plan (redacted) │
+          │ Plan (original) │    │    Sanitizer    │
+          │                 │    │  Plan (redacted)│
           └────────┬────────┘    └────────┬────────┘
                    │                      │
                    │             ┌────────┴────────┐
-                   │             │    AI Cache      │
-                   │             │  SHA256 + TTL    │
+                   │             │    AI Cache     │
+                   │             │  SHA256 + TTL   │
                    │             └───┬─────────┬───┘
                    │                 │         │
-                   │              hit│      miss│
+                   │              hit│     miss│
                    │                 │         ▼
-          ┌────────┴───────┐         │  ┌─────────────────┐
-          │   Scanner      │         │  │  AI Context     │
-          │  ┌───────────┐ │         │  │  Analysis       │
-          │  │ Checkov    │ │         │  └────────┬────────┘
-          │  │ tfsec      │ │         │           │
-          │  │ Terrascan  │ │         │           ▼
+          ┌────────┴───────┐         │   ┌─────────────────┐
+          │   Scanner      │         │   │  AI Context     │
+          │  ┌───────────┐ │         │   │  Analysis       │
+          │  │ Checkov   │ │         │   └────────┬────────┘
+          │  │ tfsec     │ │         │            │
+          │  │ Terrascan │ │         │            ▼
           │  └───────────┘ │         │  ┌─────────────────┐
-          └────────┬───────┘         │  │    Validator     │
+          └────────┬───────┘         │  │    Validator    │
                    │                 │  └────────┬────────┘
                    │                 │           │
                    └────────┬────────┴───────────┘
@@ -56,7 +56,7 @@
              ┌──────────────────────────┐
              │  Normalizer + Resolver   │
              │  Confidence Scorer       │
-             └────────────┬────────────┘
+             └────────────┬─────────────┘
                           ▼
              ┌──────────────────────────┐
              │  Aggregator + Scorer     │
@@ -74,8 +74,8 @@
              │  │  governance        │  │
              │  │  observability     │  │
              │  └────────────────────┘  │
-             │  Meta-analysis          │
-             └────────────┬────────────┘
+             │  Meta-analysis           │
+             └────────────┬─────────────┘
                           ▼
              ┌──────────────────────────┐
              │  Output                  │
