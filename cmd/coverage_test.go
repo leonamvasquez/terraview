@@ -4170,7 +4170,7 @@ func TestExecuteReview_StaticWithFindings(t *testing.T) {
 
 	planFile = planPath
 
-	findingsData := `[{"rule_id":"TEST-001","severity":"HIGH","category":"security","resource":"aws_instance.test","message":"Test finding","remediation":"Fix it"}]`
+	findingsData := `{"results":[{"rule_id":"TEST-001","severity":"HIGH","description":"Test finding","resource":"aws_instance.test"}]}`
 	findingsPath := filepath.Join(tmpDir, "findings.json")
 	os.WriteFile(findingsPath, []byte(findingsData), 0644)
 	findingsFile = findingsPath
@@ -4273,6 +4273,11 @@ func TestMergeAndScore_WithScannerFindingsAndImpact(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGeneratePlan_WithExistingPlanFile(t *testing.T) {
+	// Requires terraform in PATH — skip in CI if not available
+	if _, err := execLookPath("terraform"); err != nil {
+		t.Skip("terraform not in PATH, skipping")
+	}
+
 	tmpDir := t.TempDir()
 	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
 
@@ -4784,11 +4789,9 @@ func TestRunScanners_WithFindingsFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	ff := filepath.Join(tmpDir, "findings.json")
-	findingsData := []map[string]string{
-		{"check_id": "CKV_AWS_1", "check_result": "FAILED", "resource": "aws_s3_bucket.data", "guideline": "enable encryption"},
-	}
-	data, _ := json.Marshal(findingsData)
-	os.WriteFile(ff, data, 0644)
+	// Use valid tfsec format so the importer recognizes it
+	findingsData := `{"results":[{"rule_id":"CKV_AWS_1","severity":"HIGH","description":"enable encryption","resource":"aws_s3_bucket.data"}]}`
+	os.WriteFile(ff, []byte(findingsData), 0644)
 
 	oldFF := findingsFile
 	defer func() { findingsFile = oldFF }()
