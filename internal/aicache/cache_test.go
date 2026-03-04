@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -713,4 +714,324 @@ func TestDiskCache_OverwriteOnProviderChange(t *testing.T) {
 	if ok {
 		t.Error("provider original deveria receber miss após sobrescrita")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// DiskCacheDir / DiskCachePath
+// ---------------------------------------------------------------------------
+
+func TestDiskCacheDir_NonEmpty(t *testing.T) {
+	dir := DiskCacheDir()
+	if dir == "" {
+		t.Error("DiskCacheDir should return non-empty path")
+	}
+	if !strings.Contains(dir, ".terraview") {
+		t.Errorf("DiskCacheDir should contain .terraview, got %q", dir)
+	}
+	if !strings.HasSuffix(dir, "cache") {
+		t.Errorf("DiskCacheDir should end with 'cache', got %q", dir)
+	}
+}
+
+func TestDiskCachePath_NonEmpty(t *testing.T) {
+	p := DiskCachePath()
+	if p == "" {
+		t.Error("DiskCachePath should return non-empty path")
+	}
+	if !strings.HasSuffix(p, "ai-cache.json") {
+		t.Errorf("DiskCachePath should end with ai-cache.json, got %q", p)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MarshalJSON
+// ---------------------------------------------------------------------------
+
+func TestCache_MarshalJSON_Empty(t *testing.T) {
+	c := NewCache()
+	data, err := c.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON error: %v", err)
+	}
+	if string(data) != "{}" {
+		t.Errorf("expected empty JSON object, got %s", string(data))
+	}
+}
+
+func TestCache_MarshalJSON_WithEntries(t *testing.T) {
+	c := NewCache()
+	c.Put("key1", Response{Severity: "HIGH"})
+	c.Put("key2", Response{Severity: "LOW"})
+
+	data, err := c.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON error: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "key1") || !strings.Contains(s, "key2") {
+		t.Errorf("MarshalJSON should contain keys, got %s", s)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LookupPlanHash
+// ---------------------------------------------------------------------------
+
+func TestLookupPlanHash_Miss(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LookupPlanHash(dir, "nonexistent-hash")
+	if err == nil {
+		t.Error("expected error for nonexistent hash")
+	}
+}
+
+func TestLookupPlanHash_Hit(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a disk cache entry
+	dc := NewDiskCache(dir, "openai", "gpt-4", "checkov", 24)
+	planData := []byte("test plan content")
+	planHash := PlanHash(planData)
+	dc.Put(planHash, `{"findings":[],"summary":"test"}`)
+
+	// Lookup should find it
+	meta, err := LookupPlanHash(dir, planHash)
+	if err != nil {
+		t.Fatalf("LookupPlanHash error: %v", err)
+	}
+	if meta.Provider != "openai" {
+		t.Errorf("expected provider 'openai', got %q", meta.Provider)
+	}
+	if meta.Model != "gpt-4" {
+		t.Errorf("expected model 'gpt-4', got %q", meta.Model)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DiskStats with populated cache
+// ---------------------------------------------------------------------------
+
+func TestDiskStats_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	// Empty dir has no .meta files and no legacy ai-cache.json, so DiskStats
+	// falls back to legacyDiskStats which returns an error.
+	_, _, _, _, err := DiskStats(dir)
+	if err == nil {
+		t.Fatal("expected error for empty dir (no meta files, no legacy cache)")
+	}
+}
+
+func TestDiskStats_WithMetaFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a .meta + .json pair
+	dc := NewDiskCache(dir, "openai", "gpt-4", "checkov", 24)
+	planData := []byte("test plan")
+	planHash := PlanHash(planData)
+	dc.Put(planHash, `{"findings":[]}`)
+
+	entries, totalSize, _, _, err := DiskStats(dir)
+	if err != nil {
+		t.Fatalf("DiskStats error: %v", err)
+	}
+	if entries == 0 {
+		t.Error("expected at least 1 entry")
+	}
+	if totalSize == 0 {
+		t.Error("expected non-zero total size")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DiskCache.Get — edge cases
+// ---------------------------------------------------------------------------
+
+func TestDiskCacheGet_CorruptedMeta(t *testing.T) {
+	dir := t.TempDir()
+	dc := NewDiskCache(dir, "ollama", "llama3", "checkov", 24)
+
+	// Create a meta file with invalid JSON
+	hash := "corrupted123"
+	os.WriteFile(filepath.Join(dir, hash+".meta"), []byte("not-json{"), 0600)
+	os.WriteFile(filepath.Join(dir, hash+".json"), []byte(`"data"`), 0600)
+
+	_, ok := dc.Get(hash)
+	if ok {
+		t.Error("expected miss for corrupted meta")
+	}
+}
+
+func TestDiskCacheGet_WrongProvider(t *testing.T) {
+	dir := t.TempDir()
+	dc := NewDiskCache(dir, "ollama", "llama3", "checkov", 24)
+
+	// Write a valid entry with a different provider
+	planHash := PlanHash([]byte("test"))
+	dc.Put(planHash, `{"response":"ok"}`)
+
+	// Read with a different provider
+	dc2 := NewDiskCache(dir, "openai", "gpt-4", "checkov", 24)
+	_, ok := dc2.Get(planHash)
+	if ok {
+		t.Error("expected miss for wrong provider")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DiskCache.Put — read-only dir
+// ---------------------------------------------------------------------------
+
+func TestDiskCachePut_ReadOnlyDir(t *testing.T) {
+	dir := t.TempDir()
+	readOnlyDir := filepath.Join(dir, "readonly")
+	os.MkdirAll(readOnlyDir, 0555)
+	defer os.Chmod(readOnlyDir, 0755)
+
+	dc := NewDiskCache(readOnlyDir, "ollama", "llama3", "checkov", 24)
+	// Should not panic — gracefully fails
+	dc.Put("test-hash", "test-response")
+}
+
+// ---------------------------------------------------------------------------
+// ListEntries — with corrupted metas
+// ---------------------------------------------------------------------------
+
+func TestListEntries_CorruptedMeta(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write valid entry
+	dc := NewDiskCache(dir, "ollama", "llama3", "checkov", 24)
+	hash := PlanHash([]byte("plan1"))
+	dc.Put(hash, "response1")
+
+	// Write corrupted meta
+	os.WriteFile(filepath.Join(dir, "bad.meta"), []byte("{{invalid"), 0600)
+
+	entries, err := ListEntries(dir)
+	if err != nil {
+		t.Fatalf("ListEntries error: %v", err)
+	}
+	// Should only return the valid entry, skipping the corrupted one
+	if len(entries) != 1 {
+		t.Errorf("expected 1 valid entry, got %d", len(entries))
+	}
+}
+
+func TestListEntries_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	entries, err := ListEntries(dir)
+	if err != nil {
+		t.Fatalf("ListEntries error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(entries))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LookupPlanHash — corrupted
+// ---------------------------------------------------------------------------
+
+func TestLookupPlanHash_CorruptedJSON(t *testing.T) {
+	dir := t.TempDir()
+	hash := "corruptHash"
+	os.WriteFile(filepath.Join(dir, hash+".meta"), []byte("not json"), 0600)
+
+	_, err := LookupPlanHash(dir, hash)
+	if err == nil {
+		t.Error("expected error for corrupted JSON")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ClearDisk — with various file types
+// ---------------------------------------------------------------------------
+
+func TestClearDisk_WithAllTypes(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "abc.json"), []byte("{}"), 0600)
+	os.WriteFile(filepath.Join(dir, "abc.meta"), []byte("{}"), 0600)
+	os.WriteFile(filepath.Join(dir, "abc.tmp"), []byte("{}"), 0600)
+
+	err := ClearDisk(dir)
+	if err != nil {
+		t.Fatalf("ClearDisk error: %v", err)
+	}
+
+	// All files should be removed
+	remaining, _ := filepath.Glob(filepath.Join(dir, "*"))
+	if len(remaining) != 0 {
+		t.Errorf("expected 0 files after clear, got %d", len(remaining))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DiskCacheDir — fallback when HOME is unset
+// ---------------------------------------------------------------------------
+
+func TestDiskCacheDir_NoHome(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	os.Unsetenv("HOME")
+	defer os.Setenv("HOME", origHome)
+
+	dir := DiskCacheDir()
+	if dir == "" {
+		t.Error("expected non-empty dir even with HOME unset")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Put — error paths for rename failures
+// ---------------------------------------------------------------------------
+
+func TestDiskCachePut_MetaRenameFail(t *testing.T) {
+	// Create cache in a temp dir, then make the target meta file a directory
+	// so os.Rename fails
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	dc := NewDiskCache(cacheDir, "test", "model", "scanner", 1)
+
+	planHash := "rename-fail-meta"
+	// Create the meta path as a directory so rename will fail
+	metaPath := filepath.Join(cacheDir, planHash+".meta")
+	os.MkdirAll(metaPath, 0755)
+	// Put a file inside to make os.Rename fail (can't rename file over non-empty dir)
+	os.WriteFile(filepath.Join(metaPath, "blocker"), []byte("x"), 0644)
+
+	// Should not panic — silently returns
+	dc.Put(planHash, "some response")
+}
+
+func TestDiskCachePut_DataWriteFail(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	dc := NewDiskCache(cacheDir, "test", "model", "scanner", 1)
+
+	planHash := "data-write-fail"
+	// Pre-create the directory so MkdirAll succeeds and meta writes fine
+	os.MkdirAll(cacheDir, 0755)
+
+	// Create the data tmp path as a directory to make WriteFile fail
+	dataTmpPath := filepath.Join(cacheDir, planHash+".data.tmp")
+	os.MkdirAll(dataTmpPath, 0755)
+	os.WriteFile(filepath.Join(dataTmpPath, "blocker"), []byte("x"), 0644)
+
+	dc.Put(planHash, "some response")
+	// Verify meta was still written even though data failed
+	metaPath := filepath.Join(cacheDir, planHash+".meta")
+	if _, err := os.Stat(metaPath); err != nil {
+		t.Log("meta file wasn't written (expected if rename also failed)")
+	}
+}
+
+func TestDiskCachePut_DataRenameFail(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	dc := NewDiskCache(cacheDir, "test", "model", "scanner", 1)
+
+	planHash := "data-rename-fail"
+	// Create the data path as a directory so os.Rename fails
+	dataPath := filepath.Join(cacheDir, planHash+".data")
+	os.MkdirAll(dataPath, 0755)
+	os.WriteFile(filepath.Join(dataPath, "blocker"), []byte("x"), 0644)
+
+	dc.Put(planHash, "some response")
+	// Should not panic
 }

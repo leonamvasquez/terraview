@@ -3,13 +3,16 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/util"
 )
 
@@ -1064,5 +1067,761 @@ func TestBuildUserPrompt_WithSummaryMap(t *testing.T) {
 	}
 	if got == "" {
 		t.Error("expected non-empty prompt")
+	}
+}
+
+// ===========================================================================
+// DeepSeek — Validate with httptest (OK / Unauthorized)
+// ===========================================================================
+
+func TestDeepSeek_Validate_OK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer srv.Close()
+	p, _ := NewDeepSeek(ai.ProviderConfig{APIKey: "good-key", BaseURL: srv.URL})
+	err := p.Validate(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
+func TestDeepSeek_Validate_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	p, _ := NewDeepSeek(ai.ProviderConfig{APIKey: "bad-key", BaseURL: srv.URL})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unauthorized")
+	}
+}
+
+func TestDeepSeek_Validate_Unreachable(t *testing.T) {
+	p, _ := NewDeepSeek(ai.ProviderConfig{APIKey: "k", BaseURL: "http://127.0.0.1:1"})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable server")
+	}
+}
+
+// ===========================================================================
+// OpenRouter — Validate with httptest (OK / Unauthorized)
+// ===========================================================================
+
+func TestOpenRouter_Validate_OK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer srv.Close()
+	p, _ := NewOpenRouter(ai.ProviderConfig{APIKey: "good-key", BaseURL: srv.URL})
+	err := p.Validate(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
+func TestOpenRouter_Validate_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	p, _ := NewOpenRouter(ai.ProviderConfig{APIKey: "bad-key", BaseURL: srv.URL})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unauthorized")
+	}
+}
+
+// ===========================================================================
+// Gemini — Validate with httptest (Unauthorized)
+// ===========================================================================
+
+func TestGemini_Validate_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	p, _ := NewGemini(ai.ProviderConfig{APIKey: "bad-key", BaseURL: srv.URL})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unauthorized")
+	}
+}
+
+func TestGemini_Validate_Unreachable(t *testing.T) {
+	p, _ := NewGemini(ai.ProviderConfig{APIKey: "k", BaseURL: "http://127.0.0.1:1"})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable")
+	}
+}
+
+// ===========================================================================
+// OpenAI — Validate with httptest (Unauthorized / OK)
+// ===========================================================================
+
+func TestOpenAI_Validate_Unreachable(t *testing.T) {
+	p, _ := NewOpenAI(ai.ProviderConfig{APIKey: "k", BaseURL: "http://127.0.0.1:1"})
+	err := p.Validate(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable")
+	}
+}
+
+// ===========================================================================
+// priorityTier edge cases
+// ===========================================================================
+
+func TestPriorityTier_HighResource(t *testing.T) {
+	if tier := priorityTier("aws_iam_role"); tier != 1 {
+		t.Errorf("expected tier 1 for aws_iam_role, got %d", tier)
+	}
+}
+
+func TestPriorityTier_MediumResource(t *testing.T) {
+	if tier := priorityTier("aws_lambda_function"); tier != 2 {
+		t.Errorf("expected tier 2 for aws_lambda_function, got %d", tier)
+	}
+}
+
+func TestPriorityTier_LowResource(t *testing.T) {
+	if tier := priorityTier("aws_route53_zone"); tier != 3 {
+		t.Errorf("expected tier 3 for unknown resource, got %d", tier)
+	}
+}
+
+func TestPriorityTier_GoogleIAM(t *testing.T) {
+	if tier := priorityTier("google_iam_binding"); tier != 1 {
+		t.Errorf("expected tier 1 for google_iam_binding, got %d", tier)
+	}
+}
+
+func TestPriorityTier_AzureRM(t *testing.T) {
+	if tier := priorityTier("azurerm_role_assignment"); tier != 1 {
+		t.Errorf("expected tier 1 for azurerm_role_assignment, got %d", tier)
+	}
+}
+
+// ===========================================================================
+// buildUserPrompt — max resources truncation
+// ===========================================================================
+
+func TestBuildUserPrompt_MaxResources(t *testing.T) {
+	resources := make([]parser.NormalizedResource, 20)
+	for i := range resources {
+		resources[i] = parser.NormalizedResource{
+			Address:  "aws_instance.r" + string(rune('0'+i%10)),
+			Type:     "aws_instance",
+			Action:   "create",
+			Provider: "aws",
+		}
+	}
+	got, err := buildUserPrompt(resources, nil, 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+}
+
+// ===========================================================================
+// Ollama — Validate URL not configured
+// ===========================================================================
+
+func TestOllama_Validate_EmptyURL(t *testing.T) {
+	p, _ := NewOllama(ai.ProviderConfig{BaseURL: ""})
+	err := p.Validate(context.Background())
+	// Even with empty URL it should attempt default Ollama URL
+	_ = err // Just exercise the path
+}
+
+// ===========================================================================
+// parseResponse — more edge cases
+// ===========================================================================
+
+func TestParseResponse_MalformedJSON(t *testing.T) {
+	_, _, err := parseResponse("{bad json}", "test")
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+func TestParseResponse_SummaryOnly(t *testing.T) {
+	input := `{"summary":"no findings field"}`
+	findings, summary, err := parseResponse(input, "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings")
+	}
+	if summary != "no findings field" {
+		t.Errorf("summary = %q", summary)
+	}
+}
+
+func TestParseResponse_FindingsValidation(t *testing.T) {
+	// Finding with all required fields
+	input := `{"findings":[{"severity":"HIGH","category":"Security","resource":"aws_s3.x","message":"test","remediation":"fix"}],"summary":"ok"}`
+	findings, _, err := parseResponse(input, "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Errorf("expected 1 finding, got %d", len(findings))
+	}
+}
+
+func TestParseResponse_FindingsMissingFields(t *testing.T) {
+	// Finding missing required fields should be filtered out
+	input := `{"findings":[{"severity":"HIGH","message":"test"}],"summary":"ok"}`
+	findings, _, err := parseResponse(input, "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings (incomplete filtered), got %d", len(findings))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Full Analyze flow via httptest — DeepSeek
+// ---------------------------------------------------------------------------
+
+func validChatResponse() string {
+	return `{"choices":[{"message":{"content":"{\"findings\":[{\"severity\":\"HIGH\",\"category\":\"security\",\"resource\":\"aws_instance.web\",\"message\":\"SSH open to world\",\"remediation\":\"Restrict to known IPs\"}],\"summary\":\"Found 1 issue\"}"}}]}`
+}
+
+func TestDeepSeek_Analyze_FullFlow(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(validChatResponse()))
+	}))
+	defer ts.Close()
+
+	p, err := NewDeepSeek(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "deepseek-v3.2",
+		MaxTokens:   4096,
+		MaxRetries:  0,
+		TimeoutSecs: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewDeepSeek: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{"instance_type": "t3.micro"}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review this plan"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze error: %v", err)
+	}
+	if result.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+}
+
+func TestDeepSeek_Analyze_FullFlowNon200(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "server error"}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewDeepSeek(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "deepseek-v3.2",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewDeepSeek: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+}
+
+func TestDeepSeek_Analyze_FullFlowEmptyChoices(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewDeepSeek(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "deepseek-v3.2",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewDeepSeek: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for empty choices")
+	}
+}
+
+func TestDeepSeek_Analyze_FullFlowAPIError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[{"message":{"content":"hello"}}],"error":{"message":"rate limited","type":"rate_limit"}}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewDeepSeek(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "deepseek-v3.2",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewDeepSeek: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for API error response")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Full Analyze flow via httptest — OpenAI
+// ---------------------------------------------------------------------------
+
+func TestOpenAI_Analyze_FullFlow(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(validChatResponse()))
+	}))
+	defer ts.Close()
+
+	p, err := NewOpenAI(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "gpt-4o",
+		MaxTokens:   4096,
+		MaxRetries:  0,
+		TimeoutSecs: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAI: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{"instance_type": "t3.micro"}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review this plan"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze error: %v", err)
+	}
+	if result.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+}
+
+func TestOpenAI_Analyze_FullFlowNon200(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error": "rate limited"}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewOpenAI(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "gpt-4o",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAI: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for non-200")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Full Analyze flow via httptest — OpenRouter
+// ---------------------------------------------------------------------------
+
+func TestOpenRouter_Analyze_FullFlow(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(validChatResponse()))
+	}))
+	defer ts.Close()
+
+	p, err := NewOpenRouter(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "anthropic/claude-3.5-sonnet",
+		MaxTokens:   4096,
+		MaxRetries:  0,
+		TimeoutSecs: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenRouter: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{"instance_type": "t3.micro"}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review this plan"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze error: %v", err)
+	}
+	if result.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Full Analyze flow via httptest — Gemini
+// ---------------------------------------------------------------------------
+
+func validGeminiResponse() string {
+	inner := `{"findings":[{"severity":"HIGH","category":"security","resource":"aws_instance.web","message":"SSH open","remediation":"Restrict"}],"summary":"Found 1 issue"}`
+	return `{"candidates":[{"content":{"parts":[{"text":` + string(mustJSON(inner)) + `}]}}]}`
+}
+
+func mustJSON(s string) []byte {
+	b, _ := json.Marshal(s)
+	return b
+}
+
+func TestGemini_Analyze_FullFlow(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(validGeminiResponse()))
+	}))
+	defer ts.Close()
+
+	p, err := NewGemini(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "gemini-2.0-flash",
+		MaxTokens:   4096,
+		MaxRetries:  0,
+		TimeoutSecs: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewGemini: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{"instance_type": "t3.micro"}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review this plan"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze error: %v", err)
+	}
+	if result.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+}
+
+func TestGemini_Analyze_FullFlowNon200(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":"forbidden"}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewGemini(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "gemini-2.0-flash",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewGemini: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+}
+
+func TestGemini_Analyze_FullFlowEmptyCandidates(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"candidates":[]}`))
+	}))
+	defer ts.Close()
+
+	p, err := NewGemini(ai.ProviderConfig{
+		APIKey:      "test-key",
+		BaseURL:     ts.URL,
+		Model:       "gemini-2.0-flash",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewGemini: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for empty candidates")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ollama Analyze via httptest
+// ---------------------------------------------------------------------------
+
+func TestOllama_Analyze_FullFlow(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{"response":"{\"findings\":[{\"severity\":\"HIGH\",\"category\":\"security\",\"resource\":\"aws_instance.web\",\"message\":\"SSH open\",\"remediation\":\"Restrict\"}],\"summary\":\"Found 1 issue\"}","done":true}`
+		w.Write([]byte(resp))
+	}))
+	defer ts.Close()
+
+	p, err := NewOllama(ai.ProviderConfig{
+		BaseURL:     ts.URL,
+		Model:       "llama3",
+		MaxRetries:  0,
+		TimeoutSecs: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewOllama: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{"instance_type": "t3.micro"}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review this plan"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze error: %v", err)
+	}
+	if result.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+}
+
+func TestOllama_Analyze_FullFlowNon200(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`error`))
+	}))
+	defer ts.Close()
+
+	p, err := NewOllama(ai.ProviderConfig{
+		BaseURL:     ts.URL,
+		Model:       "llama3",
+		MaxRetries:  0,
+		TimeoutSecs: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewOllama: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = p.Analyze(ctx, ai.Request{
+		Resources: []parser.NormalizedResource{
+			{Type: "aws_instance", Name: "web", Action: "create", Values: map[string]interface{}{}},
+		},
+		Summary: map[string]interface{}{"total_resources": 1},
+		Prompts: ai.Prompts{System: "Review"},
+	})
+	if err == nil {
+		t.Fatal("expected error for non-200")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Common helper tests
+// ---------------------------------------------------------------------------
+
+func TestBuildSystemPrompt_AllPromptSections(t *testing.T) {
+	prompts := ai.Prompts{
+		System:       "Base system prompt",
+		Security:     "Security guidelines",
+		Architecture: "Architecture guidelines",
+		Standards:    "Standards guidelines",
+		Cost:         "Cost guidelines",
+		Compliance:   "Compliance guidelines",
+	}
+	result := buildSystemPrompt(prompts)
+	for _, section := range []string{"Security", "Architecture", "Standards", "Cost", "Compliance"} {
+		if !containsString(result, section) {
+			t.Errorf("expected prompt to contain %q section", section)
+		}
+	}
+}
+
+func containsString(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || containsString(s[1:], substr)))
+}
+
+func TestBackoffWithJitter_AllBounds(t *testing.T) {
+	for attempt := 1; attempt <= 5; attempt++ {
+		d := backoffWithJitter(attempt)
+		if d < 100*time.Millisecond {
+			t.Errorf("attempt %d: duration %v < 100ms", attempt, d)
+		}
+		if d > 35*time.Second {
+			t.Errorf("attempt %d: duration %v > 35s (cap + jitter)", attempt, d)
+		}
+	}
+}
+
+func TestRetryAnalyze_PermanentError(t *testing.T) {
+	callCount := 0
+	_, err := retryAnalyze(context.Background(), ai.ProviderConfig{MaxRetries: 3}, "test", func() ([]rules.Finding, string, error) {
+		callCount++
+		return nil, "", ai.ErrProviderValidation
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 call (permanent error should not retry), got %d", callCount)
+	}
+}
+
+func TestRetryAnalyze_TransientThenSuccess(t *testing.T) {
+	callCount := 0
+	result, err := retryAnalyze(context.Background(), ai.ProviderConfig{MaxRetries: 2, Model: "test-model"}, "test", func() ([]rules.Finding, string, error) {
+		callCount++
+		if callCount == 1 {
+			return nil, "", fmt.Errorf("status 500: temporary")
+		}
+		return []rules.Finding{}, "success", nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Summary != "success" {
+		t.Errorf("expected summary 'success', got %q", result.Summary)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 calls, got %d", callCount)
+	}
+}
+
+func TestExtractSummary_EmptyRaw(t *testing.T) {
+	r := &llmResponse{}
+	s := r.extractSummary()
+	if s != "" {
+		t.Errorf("expected empty string, got %q", s)
+	}
+}
+
+func TestExtractSummary_JSONObject(t *testing.T) {
+	r := &llmResponse{Summary: json.RawMessage(`{"key":"value"}`)}
+	s := r.extractSummary()
+	if s != `{"key":"value"}` {
+		t.Errorf("expected JSON object string, got %q", s)
+	}
+}
+
+func TestReadResponseBody_Small(t *testing.T) {
+	body := strings.NewReader("hello world")
+	data, err := readResponseBody(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Errorf("expected 'hello world', got %q", string(data))
 	}
 }

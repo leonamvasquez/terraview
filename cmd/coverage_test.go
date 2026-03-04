@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
+	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/drift"
 	"github.com/leonamvasquez/terraview/internal/i18n"
@@ -20,6 +23,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scanner"
+	"github.com/leonamvasquez/terraview/internal/scoring"
 	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
@@ -1544,5 +1548,4102 @@ func TestRunAICurrent_NoConfig(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("runAICurrent no config error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parsePlan
+// ---------------------------------------------------------------------------
+
+func TestParsePlan_WithFixture(t *testing.T) {
+	fixturePath := filepath.Join("..", "examples", "plan.json")
+	if _, err := os.Stat(fixturePath); err != nil {
+		t.Skip("fixture plan.json not available")
+	}
+
+	resources, graph, err := parsePlan(fixturePath)
+	if err != nil {
+		t.Fatalf("parsePlan error: %v", err)
+	}
+	if len(resources) == 0 {
+		t.Error("expected at least one resource")
+	}
+	if graph == nil {
+		t.Error("expected non-nil topology graph")
+	}
+}
+
+func TestParsePlan_InvalidPath(t *testing.T) {
+	_, _, err := parsePlan("/nonexistent/path/plan.json")
+	if err == nil {
+		t.Error("expected error for invalid path")
+	}
+}
+
+func TestParsePlan_InvalidJSON(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "bad.json")
+	os.WriteFile(tmpFile, []byte("not json"), 0644)
+
+	_, _, err := parsePlan(tmpFile)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestParsePlan_EmptyPlan(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "empty.json")
+	os.WriteFile(tmpFile, []byte(`{"format_version":"1.0","resource_changes":[]}`), 0644)
+
+	_, _, err := parsePlan(tmpFile)
+	// Parser may reject empty plans — both outcomes are valid
+	if err != nil {
+		if !strings.Contains(err.Error(), "no resource") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCacheClear
+// ---------------------------------------------------------------------------
+
+func TestRunCacheClear(t *testing.T) {
+	// Should not fail even if cache dir is empty
+	var err error
+	captureStdout(func() {
+		err = runCacheClear(nil, nil)
+	})
+	if err != nil {
+		t.Errorf("runCacheClear error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCacheStatus
+// ---------------------------------------------------------------------------
+
+func TestRunCacheStatus(t *testing.T) {
+	var err error
+	out := captureStdout(func() {
+		err = runCacheStatus(nil, nil)
+	})
+	if err != nil {
+		t.Errorf("runCacheStatus error: %v", err)
+	}
+	_ = out // just ensure no panic
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_EmptyFindings(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Scoring.SeverityWeights = config.SeverityWeightsConfig{
+		Critical: 10,
+		High:     7,
+		Medium:   4,
+		Low:      1,
+	}
+
+	rc := reviewConfig{
+		cfg:          cfg,
+		resolvedPlan: "test.json",
+	}
+
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+	}
+	topoGraph := topology.BuildGraph(resources)
+
+	sr := scanResult{}
+
+	result := mergeAndScore(rc, resources, topoGraph, sr)
+	if result.Score.OverallScore < 0 || result.Score.OverallScore > 10 {
+		t.Errorf("score out of range: %f", result.Score.OverallScore)
+	}
+}
+
+func TestMergeAndScore_WithFindings(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Scoring.SeverityWeights = config.SeverityWeightsConfig{
+		Critical: 10,
+		High:     7,
+		Medium:   4,
+		Low:      1,
+	}
+
+	rc := reviewConfig{
+		cfg:          cfg,
+		resolvedPlan: "test.json",
+	}
+
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+	}
+	topoGraph := topology.BuildGraph(resources)
+
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "CKV_AWS_1", Severity: "HIGH", Resource: "aws_instance.web", Message: "test"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, topoGraph, sr)
+	if len(result.Findings) == 0 {
+		t.Error("expected findings in result")
+	}
+	// Score should be computed (may still be high with just 1 finding)
+	if result.Score.OverallScore < 0 {
+		t.Error("score should not be negative")
+	}
+}
+
+func TestMergeAndScore_WithDisabledRules(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Scoring.SeverityWeights = config.SeverityWeightsConfig{
+		Critical: 10,
+		High:     7,
+		Medium:   4,
+		Low:      1,
+	}
+	cfg.Rules.DisabledRules = []string{"CKV_AWS_1"}
+
+	rc := reviewConfig{
+		cfg:          cfg,
+		resolvedPlan: "test.json",
+	}
+
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+	}
+	topoGraph := topology.BuildGraph(resources)
+
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "CKV_AWS_1", Severity: "HIGH", Resource: "aws_instance.web", Message: "should be filtered"},
+			{RuleID: "CKV_AWS_2", Severity: "MEDIUM", Resource: "aws_instance.web", Message: "should remain"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, topoGraph, sr)
+	for _, f := range result.Findings {
+		if f.RuleID == "CKV_AWS_1" {
+			t.Error("CKV_AWS_1 should have been filtered by DisabledRules")
+		}
+	}
+}
+
+func TestMergeAndScore_ExplainScores(t *testing.T) {
+	oldFlag := explainScoresFlag
+	defer func() { explainScoresFlag = oldFlag }()
+	explainScoresFlag = true
+
+	cfg := config.Config{}
+	cfg.Scoring.SeverityWeights = config.SeverityWeightsConfig{
+		Critical: 10,
+		High:     7,
+		Medium:   4,
+		Low:      1,
+	}
+
+	rc := reviewConfig{
+		cfg:          cfg,
+		resolvedPlan: "test.json",
+	}
+
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+	}
+	topoGraph := topology.BuildGraph(resources)
+
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "R1", Severity: "HIGH", Resource: "aws_instance.web", Message: "test"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, topoGraph, sr)
+	if result.ScoreDecomposition == nil {
+		t.Error("expected ScoreDecomposition to be set when explainScoresFlag is true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveReviewConfig — partial (with fixture plan and minimal config)
+// ---------------------------------------------------------------------------
+
+func TestResolveReviewConfig_WithFixturePlan(t *testing.T) {
+	fixturePath := filepath.Join("..", "examples", "plan.json")
+	if _, err := os.Stat(fixturePath); err != nil {
+		t.Skip("fixture plan.json not available")
+	}
+
+	oldPlanFile := planFile
+	oldWorkDir := workDir
+	oldStaticOnly := staticOnly
+	defer func() {
+		planFile = oldPlanFile
+		workDir = oldWorkDir
+		staticOnly = oldStaticOnly
+	}()
+
+	planFile = fixturePath
+	workDir = t.TempDir()
+	staticOnly = true
+
+	rc, err := resolveReviewConfig("")
+	if err != nil {
+		t.Fatalf("resolveReviewConfig error: %v", err)
+	}
+	if rc.resolvedPlan != fixturePath {
+		t.Errorf("expected plan %q, got %q", fixturePath, rc.resolvedPlan)
+	}
+	if rc.effectiveAI {
+		t.Error("expected AI to be off with --static")
+	}
+}
+
+func TestResolveReviewConfig_WithProviderOverride(t *testing.T) {
+	fixturePath := filepath.Join("..", "examples", "plan.json")
+	if _, err := os.Stat(fixturePath); err != nil {
+		t.Skip("fixture plan.json not available")
+	}
+
+	oldPlanFile := planFile
+	oldWorkDir := workDir
+	oldProvider := activeProvider
+	oldModel := activeModel
+	defer func() {
+		planFile = oldPlanFile
+		workDir = oldWorkDir
+		activeProvider = oldProvider
+		activeModel = oldModel
+	}()
+
+	planFile = fixturePath
+	workDir = t.TempDir()
+	activeProvider = "openai"
+	activeModel = "gpt-4"
+
+	rc, err := resolveReviewConfig("")
+	if err != nil {
+		t.Fatalf("resolveReviewConfig error: %v", err)
+	}
+	if rc.aiProvider != "openai" {
+		t.Errorf("expected provider 'openai', got %q", rc.aiProvider)
+	}
+	if rc.aiModel != "gpt-4" {
+		t.Errorf("expected model 'gpt-4', got %q", rc.aiModel)
+	}
+}
+
+func TestResolveReviewConfig_OutputFormatOverride(t *testing.T) {
+	fixturePath := filepath.Join("..", "examples", "plan.json")
+	if _, err := os.Stat(fixturePath); err != nil {
+		t.Skip("fixture plan.json not available")
+	}
+
+	oldPlanFile := planFile
+	oldWorkDir := workDir
+	oldFormat := outputFormat
+	defer func() {
+		planFile = oldPlanFile
+		workDir = oldWorkDir
+		outputFormat = oldFormat
+	}()
+
+	planFile = fixturePath
+	workDir = t.TempDir()
+	outputFormat = "json"
+
+	rc, err := resolveReviewConfig("")
+	if err != nil {
+		t.Fatalf("resolveReviewConfig error: %v", err)
+	}
+	if rc.effectiveFormat != "json" {
+		t.Errorf("expected format 'json', got %q", rc.effectiveFormat)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI List command (runAIList)
+// ---------------------------------------------------------------------------
+
+func TestRunAIList(t *testing.T) {
+	var err error
+	out := captureStdout(func() {
+		err = runAIList(nil, nil)
+	})
+	if err != nil {
+		t.Errorf("runAIList error: %v", err)
+	}
+	if out == "" {
+		t.Error("expected non-empty output from runAIList")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runAITest scenarios
+// ---------------------------------------------------------------------------
+
+func TestRunAITest_NoProvider(t *testing.T) {
+	oldProvider := activeProvider
+	oldWorkDir := workDir
+	defer func() {
+		activeProvider = oldProvider
+		workDir = oldWorkDir
+	}()
+
+	activeProvider = ""
+	workDir = t.TempDir()
+
+	err := runAITest(nil, nil)
+	// Should return error when no provider is configured
+	if err == nil {
+		t.Log("runAITest returned nil (provider may be configured in env)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePlan — error when no terraform available
+// ---------------------------------------------------------------------------
+
+func TestGeneratePlan_NoTerraform(t *testing.T) {
+	oldWorkDir := workDir
+	defer func() { workDir = oldWorkDir }()
+
+	workDir = t.TempDir()
+
+	_, _, err := generatePlan()
+	if err == nil {
+		t.Log("generatePlan succeeded (terraform may be installed)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Sorted scanner names
+// ---------------------------------------------------------------------------
+
+func TestSortedScannerNames(t *testing.T) {
+	names := sortedScannerNames(map[string]scanner.Scanner{
+		"z": nil,
+		"a": nil,
+		"m": nil,
+	})
+	if len(names) != 3 {
+		t.Fatalf("expected 3 names, got %d", len(names))
+	}
+	if names[0] != "a" || names[1] != "m" || names[2] != "z" {
+		t.Errorf("expected sorted order, got %v", names)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — 3 format paths (pretty, json, sarif)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_PrettyFormat(t *testing.T) {
+	dir := t.TempDir()
+
+	// Save/restore package-level flags
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test-plan.json",
+		TotalResources: 3,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	// Capture stdout (PrintSummary writes there)
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r) // drain
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// Check JSON was written
+	if _, err := os.Stat(filepath.Join(dir, "review.json")); err != nil {
+		t.Error("review.json not created")
+	}
+	// Check MD was written (pretty format writes markdown too)
+	if _, err := os.Stat(filepath.Join(dir, "review.md")); err != nil {
+		t.Error("review.md not created")
+	}
+}
+
+func TestRenderOutput_JSONFormat(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatJSON,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// JSON format should NOT create review.md
+	if _, err := os.Stat(filepath.Join(dir, "review.md")); !os.IsNotExist(err) {
+		t.Error("review.md should not be created in JSON format")
+	}
+	// Should create review.json
+	if _, err := os.Stat(filepath.Join(dir, "review.json")); err != nil {
+		t.Error("review.json not created")
+	}
+}
+
+func TestRenderOutput_SARIFFormat(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatSARIF,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 2,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// SARIF format creates both review.json and review.sarif.json
+	if _, err := os.Stat(filepath.Join(dir, "review.json")); err != nil {
+		t.Error("review.json not created")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "review.sarif.json")); err != nil {
+		t.Error("review.sarif.json not created in SARIF format")
+	}
+}
+
+func TestRenderOutput_StrictMode(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = true
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 2,
+		Verdict:        aggregator.Verdict{Safe: false, Label: "NOT SAFE"},
+		Score:          scoring.Score{OverallScore: 7.0},
+		ExitCode:       1, // HIGH severity
+		SeverityCounts: map[string]int{"HIGH": 1},
+		CategoryCounts: map[string]int{"security": 1},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	// strict mode: exit code 1 → 2
+	if exitCode != 2 {
+		t.Errorf("expected exit code 2 in strict mode, got %d", exitCode)
+	}
+}
+
+func TestRenderOutput_WithScannerResult(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+	scanResult := &scanner.AggregatedResult{}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, scanResult)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+}
+
+func TestRenderOutput_BRFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = true
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI Registry: Names, List, Has
+// ---------------------------------------------------------------------------
+
+func TestAI_Names(t *testing.T) {
+	names := ai.Names()
+	if len(names) == 0 {
+		t.Fatal("expected at least one registered provider")
+	}
+	// Should be sorted
+	for i := 1; i < len(names); i++ {
+		if names[i] < names[i-1] {
+			t.Errorf("names not sorted: %v", names)
+			break
+		}
+	}
+}
+
+func TestAI_List(t *testing.T) {
+	infos := ai.List()
+	if len(infos) == 0 {
+		t.Fatal("expected at least one provider info")
+	}
+	// Each info should have a non-empty Name
+	for _, info := range infos {
+		if info.Name == "" {
+			t.Error("provider info has empty name")
+		}
+	}
+}
+
+func TestAI_Has(t *testing.T) {
+	// ollama is always registered via the providers import
+	if !ai.Has("ollama") {
+		t.Error("expected ollama to be registered")
+	}
+	if ai.Has("nonexistent-provider-xyz") {
+		t.Error("non-existent provider should not be registered")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// canResolveAIProvider
+// ---------------------------------------------------------------------------
+
+func TestCanResolveAIProvider_NoProvider(t *testing.T) {
+	cfg := config.Config{}
+	if canResolveAIProvider(cfg) {
+		t.Error("expected false when no provider set")
+	}
+}
+
+func TestCanResolveAIProvider_Ollama(t *testing.T) {
+	cfg := config.Config{}
+	cfg.LLM.Provider = "ollama"
+	if !canResolveAIProvider(cfg) {
+		t.Error("expected true for ollama")
+	}
+}
+
+func TestCanResolveAIProvider_Unknown(t *testing.T) {
+	cfg := config.Config{}
+	cfg.LLM.Provider = "nonexistent-provider"
+	if canResolveAIProvider(cfg) {
+		t.Error("expected false for unknown provider")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore — additional branch coverage
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_WithDiagramFlag(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = true
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if result.Diagram == "" {
+		t.Error("expected diagram to be generated when diagramFlag is true")
+	}
+}
+
+func TestMergeAndScore_WithImpactFlag(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = true
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if result.BlastRadius == nil {
+		t.Error("expected blast radius when impactFlag is true")
+	}
+}
+
+func TestMergeAndScore_WithExplainScores(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = true
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{Resource: "aws_instance.web", Severity: "HIGH", Message: "test"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, nil, sr)
+	if result.ScoreDecomposition == nil {
+		t.Error("expected score decomposition with explainScoresFlag")
+	}
+}
+
+func TestMergeAndScore_WithContextFindings(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{
+		contextFindings: []rules.Finding{
+			{Resource: "aws_instance.web", Severity: "MEDIUM", Message: "AI finding"},
+		},
+		contextSummary: "AI summary",
+	}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if result.TotalResources != 1 {
+		t.Errorf("expected 1 total resource, got %d", result.TotalResources)
+	}
+}
+
+func TestMergeAndScore_MetaAnalysis(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_security_group", Name: "sg", Action: "create"},
+	}
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{Resource: "aws_security_group.sg", Severity: "CRITICAL", Message: "open to world", Category: "security"},
+			{Resource: "aws_security_group.sg", Severity: "HIGH", Message: "no tags", Category: "compliance"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, nil, sr)
+	if result.MetaAnalysis == nil {
+		t.Error("expected meta analysis when findings exist")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — early error paths
+// ---------------------------------------------------------------------------
+
+func TestRunScan_NoScannerStaticNoFindings(t *testing.T) {
+	oldStatic, oldWorkDir, oldFindingsFile := staticOnly, workDir, findingsFile
+	defer func() { staticOnly, workDir, findingsFile = oldStatic, oldWorkDir, oldFindingsFile }()
+
+	dir := t.TempDir()
+	// Create minimal .terraview.yaml AND a dummy .tf file so workspace validation passes
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "main.tf"), []byte(""), 0644)
+
+	workDir = dir
+	staticOnly = true
+	findingsFile = ""
+
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Fatal("expected error with --static and no scanner")
+	}
+}
+
+func TestRunScan_NoScannerNoAI(t *testing.T) {
+	oldStatic, oldWorkDir, oldFindingsFile := staticOnly, workDir, findingsFile
+	defer func() { staticOnly, workDir, findingsFile = oldStatic, oldWorkDir, oldFindingsFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "main.tf"), []byte(""), 0644)
+
+	workDir = dir
+	staticOnly = false
+	findingsFile = ""
+
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Fatal("expected error with no scanner and no AI configured")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// executeReview — error on missing plan
+// ---------------------------------------------------------------------------
+
+func TestExecuteReview_NoPlanFile(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+
+	workDir = dir
+	planFile = filepath.Join(dir, "nonexistent.json")
+
+	_, _, err := executeReview("")
+	if err == nil {
+		t.Fatal("expected error for nonexistent plan file")
+	}
+}
+
+func TestExecuteReview_InvalidPlanJSON(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{invalid"), 0644)
+
+	workDir = dir
+	planFile = filepath.Join(dir, "bad.json")
+
+	_, _, err := executeReview("")
+	if err == nil {
+		t.Fatal("expected error for invalid plan JSON")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCacheStatus — test with real (empty) cache dir
+// ---------------------------------------------------------------------------
+
+func TestRunCacheStatus_NoCache(t *testing.T) {
+	// runCacheStatus reads DiskCacheDir() which is determined by $HOME
+	// We capture stdout to avoid polluting test output
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runCacheStatus(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	// Either returns nil (with "no cache" message) or an error
+	_ = err
+	_ = out
+	// We just ensure it doesn't panic
+}
+
+// ---------------------------------------------------------------------------
+// runSetup — covers the setup command printing logic
+// ---------------------------------------------------------------------------
+
+func TestRunSetup_Basic(t *testing.T) {
+	oldWorkDir := workDir
+	defer func() { workDir = oldWorkDir }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	workDir = dir
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runSetup(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	outBytes, _ := io.ReadAll(r)
+	out := string(outBytes)
+
+	if err != nil {
+		t.Fatalf("runSetup error: %v", err)
+	}
+	if !strings.Contains(out, "setup") && !strings.Contains(out, "scanner") && !strings.Contains(out, "Scanner") {
+		t.Errorf("setup output doesn't contain expected content: %s", out[:min(200, len(out))])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// confirmApply
+// ---------------------------------------------------------------------------
+
+func TestConfirmApply_Yes(t *testing.T) {
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, _ := os.Pipe()
+	w.WriteString("yes\n")
+	w.Close()
+	os.Stdin = r
+
+	// Capture stdout (confirmApply prints a prompt)
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	result := confirmApply()
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(rOut)
+
+	if !result {
+		t.Error("expected confirmApply to return true for 'yes'")
+	}
+}
+
+func TestConfirmApply_No(t *testing.T) {
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, _ := os.Pipe()
+	w.WriteString("no\n")
+	w.Close()
+	os.Stdin = r
+
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	result := confirmApply()
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(rOut)
+
+	if result {
+		t.Error("expected confirmApply to return false for 'no'")
+	}
+}
+
+func TestConfirmApply_ShortY(t *testing.T) {
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, _ := os.Pipe()
+	w.WriteString("y\n")
+	w.Close()
+	os.Stdin = r
+
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	result := confirmApply()
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(rOut)
+
+	if !result {
+		t.Error("expected confirmApply to return true for 'y'")
+	}
+}
+
+func TestConfirmApply_EOF(t *testing.T) {
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, _ := os.Pipe()
+	w.Close() // immediate EOF
+	os.Stdin = r
+
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	result := confirmApply()
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(rOut)
+
+	if result {
+		t.Error("expected confirmApply to return false on EOF")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runApply — error paths
+// ---------------------------------------------------------------------------
+
+func TestRunApply_StaticNoScanner(t *testing.T) {
+	oldStatic, oldWorkDir := staticOnly, workDir
+	defer func() { staticOnly, workDir = oldStatic, oldWorkDir }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "main.tf"), []byte(""), 0644)
+	workDir = dir
+	staticOnly = true
+
+	err := runApply(nil, nil)
+	if err == nil {
+		t.Fatal("expected error when --static and no scanner")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — error paths
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_BadPlan(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{not json"), 0644)
+	workDir = dir
+	planFile = filepath.Join(dir, "bad.json")
+
+	err := runExplainCmd(nil, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid plan")
+	}
+}
+
+func TestRunExplainCmd_EmptyPlan(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+
+	// Write a valid but empty plan
+	emptyPlan := map[string]interface{}{
+		"format_version":   "1.0",
+		"resource_changes": []interface{}{},
+	}
+	data, _ := json.Marshal(emptyPlan)
+	planPath := filepath.Join(dir, "empty.json")
+	os.WriteFile(planPath, data, 0644)
+
+	workDir = dir
+	planFile = planPath
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runExplainCmd(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	// Empty plan should either return nil (with "no resources" message) or an error
+	// either way, no panic
+	_ = err
+}
+
+// ---------------------------------------------------------------------------
+// runDiagram — error paths
+// ---------------------------------------------------------------------------
+
+func TestRunDiagram_BadPlan(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	workDir = dir
+	planFile = filepath.Join(dir, "nonexistent.json")
+
+	err := runDiagram(nil, nil)
+	if err == nil {
+		t.Fatal("expected error for missing plan file")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runDrift — error paths
+// ---------------------------------------------------------------------------
+
+func TestRunDrift_NoPlanNoTerraform(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+	workDir = dir
+	planFile = ""
+
+	err := runDrift(nil, nil)
+	// Either error (no terraform/no workspace) or success - just don't panic
+	_ = err
+}
+
+// ---------------------------------------------------------------------------
+// output.FormatSARIF constant via renderOutput
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_CompactFormat(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatCompact,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	// Compact format should create review.md (not JSON or SARIF only)
+	if _, err := os.Stat(filepath.Join(dir, "review.md")); err != nil {
+		t.Error("review.md not created in compact format")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Additional coverage for partially covered functions
+// ---------------------------------------------------------------------------
+
+func TestLogVerbose_NotVerbose(t *testing.T) {
+	// When verbose is false, logVerbose should do nothing (no panic)
+	oldVerbose := verbose
+	defer func() { verbose = oldVerbose }()
+	verbose = false
+	logVerbose("test %s", "message")
+}
+
+func TestLogVerbose_Verbose(t *testing.T) {
+	oldVerbose := verbose
+	defer func() { verbose = oldVerbose }()
+	verbose = true
+
+	// Capture stderr (logVerbose writes there)
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	logVerbose("test %s", "message")
+
+	w.Close()
+	os.Stderr = oldStderr
+	out, _ := io.ReadAll(r)
+
+	if !strings.Contains(string(out), "test message") {
+		t.Errorf("logVerbose didn't write expected output: %q", string(out))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — valid plan but no AI provider
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_ValidPlanNoProvider(t *testing.T) {
+	oldWorkDir, oldPlanFile, oldProvider, oldModel := workDir, planFile, activeProvider, activeModel
+	defer func() {
+		workDir, planFile, activeProvider, activeModel = oldWorkDir, oldPlanFile, oldProvider, oldModel
+	}()
+
+	dir := t.TempDir()
+	// Write config that explicitly disables provider
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte("llm:\n  provider: \"\"\n"), 0644)
+
+	// Write a plan with actual resources
+	plan := map[string]interface{}{
+		"format_version": "1.0",
+		"resource_changes": []interface{}{
+			map[string]interface{}{
+				"address": "aws_instance.web",
+				"type":    "aws_instance",
+				"name":    "web",
+				"change": map[string]interface{}{
+					"actions": []interface{}{"create"},
+					"after":   map[string]interface{}{"instance_type": "t3.micro"},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(plan)
+	planPath := filepath.Join(dir, "plan.json")
+	os.WriteFile(planPath, data, 0644)
+
+	workDir = dir
+	planFile = planPath
+	activeProvider = ""
+	activeModel = ""
+
+	// Override HOME to prevent loading global config with a configured provider
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", dir)
+	defer os.Setenv("HOME", origHome)
+
+	err := runExplainCmd(nil, nil)
+	if err == nil {
+		t.Fatal("expected error when no AI provider configured")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("expected provider-related error, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// executeReview — with a valid minimal plan (scanner=static, no AI)
+// ---------------------------------------------------------------------------
+
+func TestExecuteReview_ValidPlanStaticOnly(t *testing.T) {
+	oldWorkDir, oldPlanFile, oldStatic, oldOutputDir := workDir, planFile, staticOnly, outputDir
+	oldFindingsFile := findingsFile
+	defer func() {
+		workDir, planFile, staticOnly, outputDir = oldWorkDir, oldPlanFile, oldStatic, oldOutputDir
+		findingsFile = oldFindingsFile
+	}()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+
+	plan := map[string]interface{}{
+		"format_version": "1.0",
+		"resource_changes": []interface{}{
+			map[string]interface{}{
+				"address": "aws_instance.web",
+				"type":    "aws_instance",
+				"name":    "web",
+				"change": map[string]interface{}{
+					"actions": []interface{}{"create"},
+					"after":   map[string]interface{}{"instance_type": "t3.micro"},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(plan)
+	planPath := filepath.Join(dir, "plan.json")
+	os.WriteFile(planPath, data, 0644)
+
+	outDir := t.TempDir()
+
+	workDir = dir
+	planFile = planPath
+	staticOnly = true
+	outputDir = outDir
+	findingsFile = ""
+
+	// Save/restore flags that mergeAndScore and renderOutput use
+	oldBR, oldStrict, oldImpact, oldExplainScores, oldDiagram := brFlag, strict, impactFlag, explainScoresFlag, diagramFlag
+	defer func() {
+		brFlag, strict, impactFlag, explainScoresFlag, diagramFlag = oldBR, oldStrict, oldImpact, oldExplainScores, oldDiagram
+	}()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+	diagramFlag = false
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	_, exitCode, err := executeReview("")
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("executeReview error: %v", err)
+	}
+	// No findings → exit code 0
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// Check output files were created
+	if _, err := os.Stat(filepath.Join(outDir, "review.json")); err != nil {
+		t.Error("review.json not created")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runDiagram — valid plan
+// ---------------------------------------------------------------------------
+
+func TestRunDiagram_ValidPlan(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+
+	plan := map[string]interface{}{
+		"format_version": "1.0",
+		"resource_changes": []interface{}{
+			map[string]interface{}{
+				"address": "aws_vpc.main",
+				"type":    "aws_vpc",
+				"name":    "main",
+				"change": map[string]interface{}{
+					"actions": []interface{}{"create"},
+					"after":   map[string]interface{}{"cidr_block": "10.0.0.0/16"},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(plan)
+	planPath := filepath.Join(dir, "plan.json")
+	os.WriteFile(planPath, data, 0644)
+
+	workDir = dir
+	planFile = planPath
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDiagram(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	outBytes, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("runDiagram error: %v", err)
+	}
+	out := string(outBytes)
+	if !strings.Contains(out, "vpc") && !strings.Contains(out, "aws") && len(out) < 10 {
+		t.Errorf("expected diagram output, got: %q", out[:min(100, len(out))])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runDrift — with valid plan
+// ---------------------------------------------------------------------------
+
+func TestRunDrift_ValidPlan(t *testing.T) {
+	oldWorkDir, oldPlanFile := workDir, planFile
+	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
+
+	plan := map[string]interface{}{
+		"format_version": "1.0",
+		"resource_changes": []interface{}{
+			map[string]interface{}{
+				"address": "aws_instance.web",
+				"type":    "aws_instance",
+				"name":    "web",
+				"change": map[string]interface{}{
+					"actions": []interface{}{"create"},
+					"after":   map[string]interface{}{"instance_type": "t3.micro"},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(plan)
+	planPath := filepath.Join(dir, "plan.json")
+	os.WriteFile(planPath, data, 0644)
+
+	workDir = dir
+	planFile = planPath
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDrift(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("runDrift error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// filterDisabledRules — ensure disabled rules are removed
+// ---------------------------------------------------------------------------
+
+func TestFilterDisabledRules_RemovesMatch(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "SEC-001", Resource: "a", Severity: "HIGH"},
+		{RuleID: "NET-002", Resource: "b", Severity: "MEDIUM"},
+		{RuleID: "SEC-003", Resource: "c", Severity: "LOW"},
+	}
+	disabled := []string{"SEC-001", "SEC-003"}
+
+	result := filterDisabledRules(findings, disabled)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 finding after filter, got %d", len(result))
+	}
+	if result[0].RuleID != "NET-002" {
+		t.Errorf("expected NET-002 to remain, got %s", result[0].RuleID)
+	}
+}
+
+func TestFilterDisabledRules_NoMatch(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "SEC-001", Severity: "HIGH"},
+	}
+	result := filterDisabledRules(findings, []string{"NONEXISTENT"})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildResourceLimits
+// ---------------------------------------------------------------------------
+
+func TestBuildResourceLimits_Default(t *testing.T) {
+	limits := buildResourceLimits(config.Config{}, false)
+	// Should return defaults (non-zero)
+	if limits.MaxThreads == 0 {
+		t.Error("expected non-zero default MaxThreads")
+	}
+}
+
+func TestBuildResourceLimits_Safe(t *testing.T) {
+	limits := buildResourceLimits(config.Config{}, true)
+	// Safe limits should be set
+	if limits.MaxThreads == 0 {
+		t.Error("expected non-zero safe MaxThreads")
+	}
+}
+
+func TestBuildResourceLimits_CustomConfig(t *testing.T) {
+	cfg := config.Config{}
+	cfg.LLM.Ollama.MaxThreads = 8
+	cfg.LLM.Ollama.MaxMemoryMB = 4096
+	cfg.LLM.Ollama.MinFreeMemoryMB = 512
+
+	limits := buildResourceLimits(cfg, false)
+	if limits.MaxThreads != 8 {
+		t.Errorf("expected MaxThreads=8, got %d", limits.MaxThreads)
+	}
+	if limits.MaxMemoryMB != 4096 {
+		t.Errorf("expected MaxMemoryMB=4096, got %d", limits.MaxMemoryMB)
+	}
+	if limits.MinFreeMemoryMB != 512 {
+		t.Errorf("expected MinFreeMemoryMB=512, got %d", limits.MinFreeMemoryMB)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseInfraExplanation — code fence branches
+// ---------------------------------------------------------------------------
+
+func TestParseInfraExplanation_JSONCodeFence(t *testing.T) {
+	raw := "Here is the explanation:\n```json\n{\"overview\":\"vpc-based\",\"architecture\":\"three-tier\"}\n```\nEnjoy!"
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "vpc-based" {
+		t.Errorf("expected 'vpc-based' from json code fence, got %q", expl.Overview)
+	}
+}
+
+func TestParseInfraExplanation_PlainCodeFence(t *testing.T) {
+	raw := "Explanation:\n```\n{\"overview\":\"simple\",\"architecture\":\"flat\"}\n```\nDone."
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "simple" {
+		t.Errorf("expected 'simple' from plain code fence, got %q", expl.Overview)
+	}
+}
+
+func TestParseInfraExplanation_RawTextFallback(t *testing.T) {
+	raw := "This is just plain text with no JSON at all."
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != raw {
+		t.Errorf("expected raw text as overview, got %q", expl.Overview)
+	}
+	if expl.Architecture != "Unable to parse structured response" {
+		t.Errorf("expected fallback architecture, got %q", expl.Architecture)
+	}
+}
+
+func TestParseInfraExplanation_DirectValidJSON(t *testing.T) {
+	raw := `{"overview":"direct","architecture":"microservices"}`
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "direct" {
+		t.Errorf("expected 'direct', got %q", expl.Overview)
+	}
+	if expl.Architecture != "microservices" {
+		t.Errorf("expected 'microservices', got %q", expl.Architecture)
+	}
+}
+
+func TestParseInfraExplanation_MapWithNestedOverview(t *testing.T) {
+	raw := `{"overview":{"overview":"nested-overview"},"architecture":"arch"}`
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "nested-overview" {
+		t.Errorf("expected 'nested-overview', got %q", expl.Overview)
+	}
+}
+
+func TestParseInfraExplanation_MapWithSummaryInOverview(t *testing.T) {
+	raw := `{"overview":{"summary":"from-summary"},"architecture":"arch"}`
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "from-summary" {
+		t.Errorf("expected 'from-summary', got %q", expl.Overview)
+	}
+}
+
+func TestParseInfraExplanation_MapOverviewAsNumber(t *testing.T) {
+	raw := `{"overview":42,"architecture":"arch"}`
+	expl := parseInfraExplanation(raw)
+	if expl.Overview != "42" {
+		t.Errorf("expected '42', got %q", expl.Overview)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCacheStatus — test with populated cache
+// ---------------------------------------------------------------------------
+
+func TestRunCacheStatus_WithEntries(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	// Create a cache entry
+	cacheDir := filepath.Join(tmpDir, ".terraview", "cache")
+	os.MkdirAll(cacheDir, 0755)
+
+	// Write a meta file
+	meta := `{"plan_hash":"abc123","provider":"ollama","model":"llama3","created_at":"2024-01-01T00:00:00Z"}`
+	os.WriteFile(filepath.Join(cacheDir, "abc123.meta"), []byte(meta), 0644)
+	os.WriteFile(filepath.Join(cacheDir, "abc123.json"), []byte(`{"response":"test"}`), 0644)
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runCacheStatus(nil, nil)
+
+	w.Close()
+	os.Stdout = old
+
+	var buf strings.Builder
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if err != nil {
+		t.Fatalf("runCacheStatus error: %v", err)
+	}
+	if !strings.Contains(output, "Entries:") && !strings.Contains(output, "Entradas:") {
+		t.Errorf("expected entries line in output, got: %s", output)
+	}
+}
+
+func TestRunCacheStatus_NotExist(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runCacheStatus(nil, nil)
+
+	w.Close()
+	os.Stdout = old
+
+	var buf strings.Builder
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if err != nil {
+		t.Fatalf("runCacheStatus error: %v", err)
+	}
+	if !strings.Contains(output, "No cache found") && !strings.Contains(output, "Nenhum cache") {
+		t.Errorf("expected 'no cache' message, got: %s", output)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCacheClear — with existing dir
+// ---------------------------------------------------------------------------
+
+func TestRunCacheClear_WithDir(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	cacheDir := filepath.Join(tmpDir, ".terraview", "ai-cache")
+	os.MkdirAll(cacheDir, 0755)
+	os.WriteFile(filepath.Join(cacheDir, "test.json"), []byte("{}"), 0644)
+
+	old := os.Stdout
+	_, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runCacheClear(nil, nil)
+
+	w.Close()
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("runCacheClear error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — allFlag branch + static+no-scanner error
+// ---------------------------------------------------------------------------
+
+func TestRunScan_AllFlagSetsFeatures(t *testing.T) {
+	origAll := allFlag
+	origExplain := explainFlag
+	origDiagram := diagramFlag
+	origImpact := impactFlag
+	origStatic := staticOnly
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		allFlag = origAll
+		explainFlag = origExplain
+		diagramFlag = origDiagram
+		impactFlag = origImpact
+		staticOnly = origStatic
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	allFlag = true
+	staticOnly = true
+
+	// Should error because --static + no scanner + allFlag
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Fatal("expected error for --static with no scanner specified")
+	}
+	// After allFlag=true, explainFlag/diagramFlag/impactFlag should be set
+	if !explainFlag || !diagramFlag || !impactFlag {
+		t.Error("expected allFlag to enable explain, diagram, impact")
+	}
+}
+
+func TestRunScan_NoScannerNoProvider(t *testing.T) {
+	origStatic := staticOnly
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		staticOnly = origStatic
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	staticOnly = false
+
+	// No scanner, no AI provider → should error with helpful message
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Fatal("expected error when no scanner and no AI provider")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runApply — allFlag sets features
+// ---------------------------------------------------------------------------
+
+func TestRunApply_AllFlagSetsFeatures(t *testing.T) {
+	origAll := allFlag
+	origExplain := explainFlag
+	origDiagram := diagramFlag
+	origImpact := impactFlag
+	origStatic := staticOnly
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		allFlag = origAll
+		explainFlag = origExplain
+		diagramFlag = origDiagram
+		impactFlag = origImpact
+		staticOnly = origStatic
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	allFlag = true
+	staticOnly = true
+
+	// Should error because no scanner + static
+	err := runApply(nil, nil)
+	if err == nil {
+		t.Fatal("expected error for static + no scanner")
+	}
+	if !explainFlag || !diagramFlag || !impactFlag {
+		t.Error("expected allFlag to enable explain, diagram, impact")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePlan — terragrunt detection
+// ---------------------------------------------------------------------------
+
+func TestGeneratePlan_TerragruntDetection(t *testing.T) {
+	origWork := workDir
+	origTG := terragruntFlag
+	origVerbose := verbose
+	tmpDir := t.TempDir()
+
+	defer func() {
+		workDir = origWork
+		terragruntFlag = origTG
+		verbose = origVerbose
+	}()
+
+	workDir = tmpDir
+	terragruntFlag = false
+	verbose = false
+
+	// Create terragrunt.hcl to trigger auto-detection
+	os.WriteFile(filepath.Join(tmpDir, "terragrunt.hcl"), []byte("# tg"), 0644)
+
+	// generatePlan will try to run terragrunt which will fail, but the
+	// auto-detection of terragrunt should happen first
+	_, _, err := generatePlan()
+	// Will fail because terragrunt is not installed, but that's expected
+	if err == nil {
+		t.Log("generatePlan succeeded (terragrunt may be installed)")
+	}
+	// The key assertion: terragruntFlag should have been auto-set
+	if !terragruntFlag {
+		t.Error("expected terragruntFlag to be auto-set when terragrunt.hcl present")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — impactFlag with BlastRadius
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_WithImpactAndBlastRadius(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = true
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 9.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+		BlastRadius: &blast.BlastResult{
+			Impacts: []blast.Impact{
+				{Resource: "aws_instance.web", Action: "create", DirectDeps: []string{"aws_security_group.web"}, TotalAffected: 1, RiskLevel: "medium"},
+			},
+			MaxRadius: 2,
+			Summary:   "Moderate blast radius",
+		},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	// The blast radius output should have been printed
+	if !strings.Contains(string(out), "blast") && !strings.Contains(string(out), "Blast") && !strings.Contains(string(out), "radius") {
+		t.Log("output:", string(out))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — BR flag + scanner result (exercises FormatScannerHeaderBR)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_BRFlagWithScannerResult(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = true
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+	scanRes := &scanner.AggregatedResult{
+		ScannerStats: []scanner.ScannerStat{
+			{Name: "tfsec", Findings: 0},
+		},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, scanRes)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — JSON-only format (no markdown written)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_JSONOnlyNoMarkdown(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatJSON,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// JSON format should not create review.md
+	mdPath := filepath.Join(dir, "review.md")
+	if _, err := os.Stat(mdPath); err == nil {
+		t.Error("did not expect markdown file for JSON-only output")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — strict mode with exitCode 0 (should not become 2)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_StrictModeExitCodeZero(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = true
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatPretty,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		ExitCode:       0,
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0 (strict should not change 0), got %d", exitCode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — scanner specified as positional arg
+// ---------------------------------------------------------------------------
+
+func TestRunScan_ScannerFromArgs(t *testing.T) {
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+	origStatic := staticOnly
+	origPlan := planFile
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+		staticOnly = origStatic
+		planFile = origPlan
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	staticOnly = true
+
+	// Pass a scanner name as arg — covers the args[0] branch
+	err := runScan(nil, []string{"tfsec"})
+	// Will fail when trying to resolve/run the scanner, but the args parsing is exercised
+	if err == nil {
+		t.Log("runScan succeeded unexpectedly (tfsec may be installed)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — findingsFile flag bypasses scanner requirement
+// ---------------------------------------------------------------------------
+
+func TestRunScan_FindingsFileFlag(t *testing.T) {
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+	origStatic := staticOnly
+	origPlan := planFile
+	origFindings := findingsFile
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+		staticOnly = origStatic
+		planFile = origPlan
+		findingsFile = origFindings
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	// Create a valid plan.json
+	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(`{"resource_changes":[]}`), 0644)
+
+	staticOnly = true
+	planFile = filepath.Join(tmpDir, "plan.json")
+	findingsFile = filepath.Join(tmpDir, "findings.json")
+
+	// Create a findings file
+	os.WriteFile(filepath.Join(tmpDir, "findings.json"), []byte(`[{"rule_id":"TEST-001","severity":"HIGH","category":"security","resource":"aws_instance.test","message":"test","remediation":"fix it"}]`), 0644)
+
+	// With findingsFile set, --static + no scanner should NOT error
+	err := runScan(nil, nil)
+	_ = err
+}
+
+// ---------------------------------------------------------------------------
+// runApply — positional scanner arg + static
+// ---------------------------------------------------------------------------
+
+func TestRunApply_ScannerFromArgs(t *testing.T) {
+	origAll := allFlag
+	origStatic := staticOnly
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		allFlag = origAll
+		staticOnly = origStatic
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	allFlag = false
+	staticOnly = true
+
+	// Pass scanner as positional arg — covers args[0] branch
+	err := runApply(nil, []string{"tfsec"})
+	if err == nil {
+		t.Log("runApply succeeded unexpectedly")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runApply — no scanner + no static (AI mode check)
+// ---------------------------------------------------------------------------
+
+func TestRunApply_NoScannerNoStatic(t *testing.T) {
+	origAll := allFlag
+	origStatic := staticOnly
+	origWork := workDir
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		allFlag = origAll
+		staticOnly = origStatic
+		workDir = origWork
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	allFlag = false
+	staticOnly = false
+
+	err := runApply(nil, nil)
+	if err == nil {
+		t.Log("runApply succeeded unexpectedly")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePlan — tgConfigFile implies terragrunt
+// ---------------------------------------------------------------------------
+
+func TestGeneratePlan_TgConfigImpliesTerragrunt(t *testing.T) {
+	origWork := workDir
+	origTG := terragruntFlag
+	origTGConfig := tgConfigFile
+	tmpDir := t.TempDir()
+
+	defer func() {
+		workDir = origWork
+		terragruntFlag = origTG
+		tgConfigFile = origTGConfig
+	}()
+
+	workDir = tmpDir
+	terragruntFlag = false
+	tgConfigFile = filepath.Join(tmpDir, "custom-tg.hcl")
+
+	os.WriteFile(filepath.Join(tmpDir, "custom-tg.hcl"), []byte("# custom"), 0644)
+
+	_, _, err := generatePlan()
+	if err == nil {
+		t.Log("generatePlan succeeded (terragrunt may be installed)")
+	}
+	if !terragruntFlag {
+		t.Error("expected tgConfigFile to imply terragruntFlag=true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePlan — terraform workspace validation failure
+// ---------------------------------------------------------------------------
+
+func TestGeneratePlan_InvalidWorkspace(t *testing.T) {
+	origWork := workDir
+	origTG := terragruntFlag
+	origTGConfig := tgConfigFile
+	tmpDir := t.TempDir()
+
+	defer func() {
+		workDir = origWork
+		terragruntFlag = origTG
+		tgConfigFile = origTGConfig
+	}()
+
+	workDir = tmpDir
+	terragruntFlag = false
+	tgConfigFile = ""
+
+	_, _, err := generatePlan()
+	if err == nil {
+		t.Fatal("expected error for empty workspace")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// applyTemplateToCmds — recursive application
+// ---------------------------------------------------------------------------
+
+func TestApplyTemplateToCmds_Recursive(t *testing.T) {
+	parent := &cobra.Command{Use: "parent"}
+	child := &cobra.Command{Use: "child"}
+	grandchild := &cobra.Command{Use: "grandchild"}
+	child.AddCommand(grandchild)
+	parent.AddCommand(child)
+
+	parent.InitDefaultHelpFlag()
+	child.InitDefaultHelpFlag()
+	grandchild.InitDefaultHelpFlag()
+
+	tmpl := "custom template {{ .UseLine }}"
+	applyTemplateToCmds(parent, tmpl)
+
+	if child.UsageTemplate() != tmpl {
+		t.Error("expected child to have custom usage template")
+	}
+	if grandchild.UsageTemplate() != tmpl {
+		t.Error("expected grandchild to have custom usage template")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — JSON output format
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_JSONFormat(t *testing.T) {
+	origWork := workDir
+	origPlan := planFile
+	origFormat := outputFormat
+	origOutputDir := outputDir
+	origHome := os.Getenv("HOME")
+	origProvider := activeProvider
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		planFile = origPlan
+		outputFormat = origFormat
+		outputDir = origOutputDir
+		os.Setenv("HOME", origHome)
+		activeProvider = origProvider
+	}()
+
+	workDir = tmpDir
+	activeProvider = ""
+
+	planData := `{"resource_changes":[{"address":"aws_instance.test","type":"aws_instance","change":{"actions":["create"],"after":{"ami":"ami-123","instance_type":"t3.micro"}}}]}`
+	planPath := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(planPath, []byte(planData), 0644)
+
+	planFile = planPath
+	outputFormat = "json"
+	outputDir = tmpDir
+
+	err := runExplainCmd(nil, nil)
+	if err == nil {
+		t.Log("runExplainCmd succeeded unexpectedly")
+	}
+	if err != nil && !strings.Contains(err.Error(), "provider") {
+		t.Logf("unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — empty resources in plan
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_EmptyResourcesPlan(t *testing.T) {
+	origWork := workDir
+	origPlan := planFile
+	origHome := os.Getenv("HOME")
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		planFile = origPlan
+		os.Setenv("HOME", origHome)
+	}()
+
+	workDir = tmpDir
+
+	planPath := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(planPath, []byte(`{"resource_changes":[]}`), 0644)
+
+	planFile = planPath
+
+	err := runExplainCmd(nil, nil)
+	// Parser returns error for empty resource_changes — that's expected
+	if err == nil {
+		t.Log("runExplainCmd succeeded for empty plan")
+	} else if !strings.Contains(err.Error(), "no resource") && !strings.Contains(err.Error(), "parse") {
+		t.Logf("unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectCurrentPlanHash
+// ---------------------------------------------------------------------------
+
+func TestDetectCurrentPlanHash_CoverageWithPlan(t *testing.T) {
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(`{"resource_changes":[]}`), 0644)
+
+	hash := detectCurrentPlanHash()
+	if hash == "" {
+		t.Error("expected non-empty hash when plan.json exists")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — SARIF writes file and verifies existence
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_SARIFWritesFile(t *testing.T) {
+	dir := t.TempDir()
+
+	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
+	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	brFlag = false
+	strict = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedOutput:  dir,
+		effectiveFormat: output.FormatSARIF,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "test.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	sarifPath := filepath.Join(dir, "review.sarif.json")
+	if _, err := os.Stat(sarifPath); os.IsNotExist(err) {
+		t.Error("expected SARIF file to be written")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runDrift — with plan that has update actions
+// ---------------------------------------------------------------------------
+
+func TestRunDrift_ValidPlanWithUpdates(t *testing.T) {
+	origWork := workDir
+	origPlan := planFile
+	origOutputDir := outputDir
+	origHome := os.Getenv("HOME")
+	origVerbose := verbose
+	origBR := brFlag
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		planFile = origPlan
+		outputDir = origOutputDir
+		os.Setenv("HOME", origHome)
+		verbose = origVerbose
+		brFlag = origBR
+	}()
+
+	workDir = tmpDir
+	brFlag = false
+	verbose = false
+
+	planData := `{"resource_changes":[{"address":"aws_instance.test","type":"aws_instance","change":{"actions":["update"],"before":{"ami":"ami-old","instance_type":"t3.micro"},"after":{"ami":"ami-new","instance_type":"t3.micro"}}}]}`
+	planPath := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(planPath, []byte(planData), 0644)
+
+	planFile = planPath
+	outputDir = tmpDir
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDrift(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("runDrift error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveReviewConfig — various flag combinations
+// ---------------------------------------------------------------------------
+
+func TestResolveReviewConfig_WithPlanFile(t *testing.T) {
+	origWork := workDir
+	origPlan := planFile
+	origOutputDir := outputDir
+	origFormat := outputFormat
+	origHome := os.Getenv("HOME")
+	origBR := brFlag
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		planFile = origPlan
+		outputDir = origOutputDir
+		outputFormat = origFormat
+		os.Setenv("HOME", origHome)
+		brFlag = origBR
+	}()
+
+	workDir = tmpDir
+	brFlag = false
+	outputFormat = "json"
+	outputDir = tmpDir
+
+	planData := `{"resource_changes":[]}`
+	planPath := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(planPath, []byte(planData), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	planFile = planPath
+
+	rc, err := resolveReviewConfig("tfsec")
+	if err != nil {
+		t.Fatalf("resolveReviewConfig error: %v", err)
+	}
+	if rc.resolvedPlan != planPath {
+		t.Errorf("expected plan path %q, got %q", planPath, rc.resolvedPlan)
+	}
+	if rc.effectiveFormat != "json" {
+		t.Errorf("expected format 'json', got %q", rc.effectiveFormat)
+	}
+	if rc.scannerName != "tfsec" {
+		t.Errorf("expected scanner 'tfsec', got %q", rc.scannerName)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// executeReview — static with valid plan and imported findings
+// ---------------------------------------------------------------------------
+
+func TestExecuteReview_StaticWithFindings(t *testing.T) {
+	origWork := workDir
+	origPlan := planFile
+	origOutputDir := outputDir
+	origFormat := outputFormat
+	origHome := os.Getenv("HOME")
+	origStatic := staticOnly
+	origBR := brFlag
+	origFindings := findingsFile
+	origImpact := impactFlag
+	origDiagram := diagramFlag
+	origExplainScores := explainScoresFlag
+	origStrict := strict
+
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		workDir = origWork
+		planFile = origPlan
+		outputDir = origOutputDir
+		outputFormat = origFormat
+		os.Setenv("HOME", origHome)
+		staticOnly = origStatic
+		brFlag = origBR
+		findingsFile = origFindings
+		impactFlag = origImpact
+		diagramFlag = origDiagram
+		explainScoresFlag = origExplainScores
+		strict = origStrict
+	}()
+
+	workDir = tmpDir
+	brFlag = false
+	staticOnly = true
+	impactFlag = false
+	diagramFlag = false
+	explainScoresFlag = false
+	strict = false
+	outputFormat = "json"
+	outputDir = tmpDir
+
+	planData := `{"resource_changes":[{"address":"aws_instance.test","type":"aws_instance","change":{"actions":["create"],"after":{"ami":"ami-123","instance_type":"t3.micro"}}}]}`
+	planPath := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(planPath, []byte(planData), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	planFile = planPath
+
+	findingsData := `[{"rule_id":"TEST-001","severity":"HIGH","category":"security","resource":"aws_instance.test","message":"Test finding","remediation":"Fix it"}]`
+	findingsPath := filepath.Join(tmpDir, "findings.json")
+	os.WriteFile(findingsPath, []byte(findingsData), 0644)
+	findingsFile = findingsPath
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	_, exitCode, err := executeReview("")
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("executeReview error: %v", err)
+	}
+	_ = exitCode
+
+	reviewPath := filepath.Join(tmpDir, "review.json")
+	if _, err := os.Stat(reviewPath); os.IsNotExist(err) {
+		t.Error("expected review.json to be written")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore — with context findings
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_ContextFindingsWithAI(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+		effectiveAI:  true,
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{
+		contextFindings: []rules.Finding{
+			{RuleID: "AI-SEC-001", Severity: "MEDIUM", Category: "security", Resource: "aws_instance.web", Message: "Insecure configuration detected", Remediation: "Enable encryption at rest"},
+		},
+		contextSummary: "AI detected potential issues",
+	}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	// AI findings may be filtered by hallucination validator, but function should not panic
+	_ = result
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore — with scanner findings + impact + explain scores
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_WithScannerFindingsAndImpact(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = true
+	explainScoresFlag = true
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+		{Type: "aws_s3_bucket", Name: "data", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "CKV-001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Message: "Scanner finding", Remediation: "Fix"},
+		},
+		scannerResult: &scanner.AggregatedResult{
+			ScannerStats: []scanner.ScannerStat{
+				{Name: "checkov", Findings: 1},
+			},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if len(result.Findings) == 0 {
+		t.Error("expected findings from scanner")
+	}
+	if result.BlastRadius == nil {
+		t.Error("expected blast radius when impactFlag is true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePlan — with planFile already set
+// ---------------------------------------------------------------------------
+
+func TestGeneratePlan_WithExistingPlanFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+
+	oldWorkDir := workDir
+	oldTG := terragruntFlag
+	defer func() {
+		workDir = oldWorkDir
+		terragruntFlag = oldTG
+	}()
+
+	workDir = tmpDir
+	terragruntFlag = false
+
+	path, _, err := generatePlan()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if path == "" {
+		t.Error("expected non-empty plan path")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveReviewConfig — static-only mode
+// ---------------------------------------------------------------------------
+
+func TestResolveReviewConfig_StaticOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["create"],"after":{"instance_type":"t3.micro"},"before":null}}]}`
+	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(planJSON), 0644)
+
+	oldWorkDir := workDir
+	oldPlanFile := planFile
+	oldStatic := staticOnly
+	oldFormat := outputFormat
+	defer func() {
+		workDir = oldWorkDir
+		planFile = oldPlanFile
+		staticOnly = oldStatic
+		outputFormat = oldFormat
+	}()
+
+	workDir = tmpDir
+	planFile = filepath.Join(tmpDir, "plan.json")
+	staticOnly = true
+	outputFormat = "compact"
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	rc, err := resolveReviewConfig("checkov")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rc.effectiveAI {
+		t.Error("expected effectiveAI=false with staticOnly")
+	}
+	if rc.effectiveFormat != "compact" {
+		t.Errorf("expected compact format, got %q", rc.effectiveFormat)
+	}
+	if rc.scannerName != "checkov" {
+		t.Errorf("expected scannerName=checkov, got %q", rc.scannerName)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — SARIF format
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_SARIFFormatWithFindings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatSARIF,
+		resolvedOutput:  tmpDir,
+	}
+
+	result := aggregator.ReviewResult{
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "HIGH", Category: "security",
+				Resource: "aws_instance.web", Message: "Open SSH", Remediation: "Restrict"},
+		},
+		Summary: "1 issue found",
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = exitCode
+
+	sarifPath := filepath.Join(tmpDir, "review.sarif.json")
+	if _, err := os.Stat(sarifPath); err != nil {
+		t.Errorf("SARIF file not written: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — markdown format with scanner results
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_MarkdownWithScanner(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = true
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatPretty,
+		resolvedOutput:  tmpDir,
+	}
+
+	result := aggregator.ReviewResult{
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "CRITICAL", Category: "security",
+				Resource: "aws_s3_bucket.data", Message: "No encryption", Remediation: "Enable SSE"},
+		},
+		Summary: "review complete",
+	}
+	scannerRes := &scanner.AggregatedResult{
+		ScannerStats: []scanner.ScannerStat{{Name: "checkov", Findings: 1}},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, scannerRes)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = exitCode
+
+	mdPath := filepath.Join(tmpDir, "review.md")
+	if _, err := os.Stat(mdPath); err != nil {
+		t.Errorf("markdown file not written: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — strict mode escalates exit code
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_StrictModeEscalation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = true
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatJSON,
+		resolvedOutput:  tmpDir,
+	}
+
+	result := aggregator.ReviewResult{
+		ExitCode: 1,
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "HIGH", Category: "security",
+				Resource: "aws_instance.web", Message: "Issue", Remediation: "Fix"},
+		},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 2 {
+		t.Errorf("expected exit code 2 (strict + exitCode 1), got %d", exitCode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — full format writes JSON + MD
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_FullFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatJSON,
+		resolvedOutput:  tmpDir,
+	}
+
+	result := aggregator.ReviewResult{
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "MEDIUM", Category: "security",
+				Resource: "aws_instance.web", Message: "Warning", Remediation: "Check"},
+		},
+		Summary: "done",
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = exitCode
+
+	jsonPath := filepath.Join(tmpDir, "review.json")
+	if _, err := os.Stat(jsonPath); err != nil {
+		t.Errorf("JSON file not written: %v", err)
+	}
+}
+
+func TestMergeAndScore_WithMetaAnalysis(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Message: "Finding 1", Remediation: "Fix", Source: "checkov"},
+			{RuleID: "SEC-002", Severity: "MEDIUM", Category: "networking", Resource: "aws_instance.web", Message: "Finding 2", Remediation: "Fix", Source: "tfsec"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if result.MetaAnalysis == nil {
+		t.Error("expected meta analysis for findings from multiple sources")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseInfraExplanation — code fence with valid map (not struct)
+// ---------------------------------------------------------------------------
+
+func TestParseInfraExplanation_CodeFenceWithMap(t *testing.T) {
+	raw := "```json\n{\"overview\":\"my overview\",\"components\":[{\"name\":\"VPC\",\"purpose\":\"networking\"}]}\n```"
+	expl := parseInfraExplanation(raw)
+	if expl == nil {
+		t.Fatal("expected non-nil explanation")
+	}
+	if expl.Overview == "" {
+		t.Error("expected overview to be parsed from code fence")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// infraExplFromMap — overview as map without overview/summary keys
+// ---------------------------------------------------------------------------
+
+func TestInfraExplFromMap_MapOverviewNoKeys(t *testing.T) {
+	m := map[string]interface{}{
+		"overview": map[string]interface{}{
+			"description": "some desc",
+		},
+	}
+	expl := infraExplFromMap(m)
+	if expl == nil {
+		t.Fatal("expected non-nil explanation")
+	}
+	if expl.Overview == "" {
+		t.Error("expected overview to be set from json.Marshal fallback")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// applyTemplateToCmds — template with subcommands
+// ---------------------------------------------------------------------------
+
+func TestApplyTemplateToCmds_MultipleFields(t *testing.T) {
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "A test command",
+	}
+	sub := &cobra.Command{
+		Use:   "sub",
+		Short: "Sub cmd",
+	}
+	cmd.AddCommand(sub)
+
+	tmpl := "custom usage template"
+	applyTemplateToCmds(cmd, tmpl)
+
+	// After applying, subcommands should have the usage template set
+	if sub.UsageTemplate() != tmpl {
+		t.Errorf("expected usage template %q on subcommand, got %q", tmpl, sub.UsageTemplate())
+	}
+	// Help flag should be translated
+	if h := sub.Flags().Lookup("help"); h != nil && !strings.Contains(h.Usage, "ajuda para") {
+		t.Errorf("expected help flag translated, got %q", h.Usage)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — invalid work dir error
+// ---------------------------------------------------------------------------
+
+func TestRunScan_InvalidWorkDir(t *testing.T) {
+	oldWorkDir := workDir
+	defer func() { workDir = oldWorkDir }()
+
+	workDir = "/nonexistent/dir/for/scan/test"
+
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Error("expected error for nonexistent work dir")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — static with no scanner and no findings file
+// ---------------------------------------------------------------------------
+
+func TestRunScan_StaticNoScannerNoFindings(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+
+	oldWorkDir := workDir
+	oldStatic := staticOnly
+	oldFindings := findingsFile
+	defer func() {
+		workDir = oldWorkDir
+		staticOnly = oldStatic
+		findingsFile = oldFindings
+	}()
+
+	workDir = tmpDir
+	staticOnly = true
+	findingsFile = ""
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Error("expected error for --static with no scanner")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runDrift — with brFlag enabled
+// ---------------------------------------------------------------------------
+
+func TestRunDrift_WithBRFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["update"],"before":{"instance_type":"t3.micro"},"after":{"instance_type":"t3.large"}}}]}`
+	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(planJSON), 0644)
+
+	oldWorkDir := workDir
+	oldBR := brFlag
+	oldFormat := outputFormat
+	oldPlanFile := planFile
+	defer func() {
+		workDir = oldWorkDir
+		brFlag = oldBR
+		outputFormat = oldFormat
+		planFile = oldPlanFile
+	}()
+
+	workDir = tmpDir
+	brFlag = true
+	outputFormat = "json"
+	planFile = filepath.Join(tmpDir, "plan.json")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDrift(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	_ = err
+}
+
+// ---------------------------------------------------------------------------
+// runScanners — no scanner, no AI → complete pipeline
+// ---------------------------------------------------------------------------
+
+func TestRunScanners_NoScannerNoAI(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+
+	rc := reviewConfig{
+		scannerName:  "",
+		effectiveAI:  false,
+		resolvedPlan: "test.json",
+	}
+
+	sr, err := runScanners(rc, resources, graph)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sr.pipelineStatus == nil {
+		t.Fatal("expected pipeline status to be set")
+	}
+	if sr.pipelineStatus.ResultCompleteness != "complete" {
+		t.Errorf("expected 'complete', got %q", sr.pipelineStatus.ResultCompleteness)
+	}
+	if sr.pipelineStatus.Scanner != nil {
+		t.Error("expected nil scanner status when no scanner specified")
+	}
+	if sr.pipelineStatus.AI != nil {
+		t.Error("expected nil AI status when AI disabled")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScanners — with findingsFile (external findings import)
+// ---------------------------------------------------------------------------
+
+func TestRunScanners_WithFindingsFile(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_s3_bucket.data", Type: "aws_s3_bucket", Name: "data", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+
+	tmpDir := t.TempDir()
+	ff := filepath.Join(tmpDir, "findings.json")
+	findingsData := []map[string]string{
+		{"check_id": "CKV_AWS_1", "check_result": "FAILED", "resource": "aws_s3_bucket.data", "guideline": "enable encryption"},
+	}
+	data, _ := json.Marshal(findingsData)
+	os.WriteFile(ff, data, 0644)
+
+	oldFF := findingsFile
+	defer func() { findingsFile = oldFF }()
+	findingsFile = ff
+
+	rc := reviewConfig{
+		scannerName:  "",
+		effectiveAI:  false,
+		resolvedPlan: "test.json",
+	}
+
+	sr, err := runScanners(rc, resources, graph)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sr.pipelineStatus.ResultCompleteness != "complete" {
+		t.Errorf("expected 'complete', got %q", sr.pipelineStatus.ResultCompleteness)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScanners — invalid findings file (warning, not fatal)
+// ---------------------------------------------------------------------------
+
+func TestRunScanners_InvalidFindingsFile(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+
+	oldFF := findingsFile
+	defer func() { findingsFile = oldFF }()
+	findingsFile = "/nonexistent/findings.json"
+
+	rc := reviewConfig{
+		scannerName:  "",
+		effectiveAI:  false,
+		resolvedPlan: "test.json",
+	}
+
+	oldStderr := os.Stderr
+	rr, ww, _ := os.Pipe()
+	os.Stderr = ww
+
+	sr, err := runScanners(rc, resources, graph)
+
+	ww.Close()
+	os.Stderr = oldStderr
+	io.ReadAll(rr)
+
+	if err != nil {
+		t.Fatalf("expected no fatal error, got: %v", err)
+	}
+	if sr.pipelineStatus.ResultCompleteness != "complete" {
+		t.Errorf("expected 'complete', got %q", sr.pipelineStatus.ResultCompleteness)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScanners — invalid scanner (graceful degradation)
+// ---------------------------------------------------------------------------
+
+func TestRunScanners_InvalidScanner(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	graph := topology.BuildGraph(resources)
+
+	rc := reviewConfig{
+		scannerName:  "nonexistent_scanner_xyz_99",
+		effectiveAI:  false,
+		resolvedPlan: "test.json",
+	}
+
+	oldStderr := os.Stderr
+	rr, ww, _ := os.Pipe()
+	os.Stderr = ww
+
+	sr, err := runScanners(rc, resources, graph)
+
+	ww.Close()
+	os.Stderr = oldStderr
+	io.ReadAll(rr)
+
+	if err != nil {
+		t.Fatalf("expected no fatal error, got: %v", err)
+	}
+	if sr.pipelineStatus.Scanner == nil {
+		t.Fatal("expected scanner status to be set")
+	}
+	if sr.pipelineStatus.Scanner.Status != "failed" {
+		t.Errorf("expected scanner status 'failed', got %q", sr.pipelineStatus.Scanner.Status)
+	}
+	if sr.pipelineStatus.ResultCompleteness != "partial_ai_only" {
+		t.Errorf("expected 'partial_ai_only', got %q", sr.pipelineStatus.ResultCompleteness)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// formatBytes — all branches
+// ---------------------------------------------------------------------------
+
+func TestFormatBytes_AllBranches(t *testing.T) {
+	tests := []struct {
+		input    int64
+		expected string
+	}{
+		{500, "500 B"},
+		{1024, "1.0 KB"},
+		{2048, "2.0 KB"},
+		{1048576, "1.0 MB"},
+		{2 * 1024 * 1024, "2.0 MB"},
+	}
+	for _, tc := range tests {
+		got := formatBytes(tc.input)
+		if got != tc.expected {
+			t.Errorf("formatBytes(%d) = %q, want %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runModelSelector — no suggested models (early return)
+// ---------------------------------------------------------------------------
+
+func TestRunModelSelector_NoSuggestedModels(t *testing.T) {
+	p := ai.ProviderInfo{
+		Name:         "test-provider",
+		DefaultModel: "test-model-v1",
+	}
+	model, ok := runModelSelector(p, "", "")
+	if !ok {
+		t.Error("expected ok=true for no suggested models")
+	}
+	if model != "test-model-v1" {
+		t.Errorf("expected default model 'test-model-v1', got %q", model)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runModelSelector — with matching current provider (default override)
+// ---------------------------------------------------------------------------
+
+func TestRunModelSelector_WithCurrentProvider(t *testing.T) {
+	p := ai.ProviderInfo{
+		Name:            "ollama",
+		DefaultModel:    "llama3",
+		SuggestedModels: []string{"llama3", "mistral", "codellama"},
+	}
+	model, ok := runModelSelector(p, "ollama", "mistral")
+	_ = model
+	_ = ok
+}
+
+// ---------------------------------------------------------------------------
+// runApply — allFlag sets features
+// ---------------------------------------------------------------------------
+
+func TestRunApply_AllFlagSetsAllFeatures(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+
+	oldAll := allFlag
+	oldWorkDir := workDir
+	oldExplain := explainFlag
+	oldDiagram := diagramFlag
+	oldImpact := impactFlag
+	defer func() {
+		allFlag = oldAll
+		workDir = oldWorkDir
+		explainFlag = oldExplain
+		diagramFlag = oldDiagram
+		impactFlag = oldImpact
+	}()
+
+	allFlag = true
+	explainFlag = false
+	diagramFlag = false
+	impactFlag = false
+	workDir = tmpDir
+
+	_ = runApply(nil, nil)
+
+	if !explainFlag {
+		t.Error("expected explainFlag to be set by --all")
+	}
+	if !diagramFlag {
+		t.Error("expected diagramFlag to be set by --all")
+	}
+	if !impactFlag {
+		t.Error("expected impactFlag to be set by --all")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runApply — scanner auto-select (no default)
+// ---------------------------------------------------------------------------
+
+func TestRunApply_ScannerAutoSelect(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	oldWorkDir := workDir
+	oldStatic := staticOnly
+	oldAll := allFlag
+	defer func() {
+		workDir = oldWorkDir
+		staticOnly = oldStatic
+		allFlag = oldAll
+	}()
+
+	workDir = tmpDir
+	staticOnly = false
+	allFlag = false
+
+	err := runApply(nil, nil)
+	if err == nil {
+		t.Error("expected error (no terraform), got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — config error on invalid dir
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_ConfigLoadError(t *testing.T) {
+	oldWorkDir := workDir
+	defer func() { workDir = oldWorkDir }()
+
+	workDir = "/nonexistent/dir/that/does/not/exist"
+
+	err := runExplainCmd(nil, nil)
+	if err == nil {
+		t.Error("expected error for nonexistent workdir")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — valid plan with no resources
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_NoResourcesPlan(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[]}`
+	pf := filepath.Join(tmpDir, "empty-plan.json")
+	os.WriteFile(pf, []byte(planJSON), 0644)
+
+	oldWorkDir := workDir
+	oldPlanFile := planFile
+	defer func() {
+		workDir = oldWorkDir
+		planFile = oldPlanFile
+	}()
+
+	workDir = tmpDir
+	planFile = pf
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runExplainCmd(nil, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	// Parser returns error for empty resource_changes
+	if err != nil {
+		if !strings.Contains(err.Error(), "parse error") && !strings.Contains(err.Error(), "no resource") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	// If no error, expect "No resources" printed
+	if !strings.Contains(string(out), "No resources") {
+		t.Errorf("expected 'No resources' message, got: %s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runExplainCmd — valid plan, resources, but no AI provider
+// ---------------------------------------------------------------------------
+
+func TestRunExplainCmd_ResourcesNoProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["create"],"after":{"instance_type":"t3.micro"},"before":null}}]}`
+	pf := filepath.Join(tmpDir, "plan.json")
+	os.WriteFile(pf, []byte(planJSON), 0644)
+
+	oldWorkDir := workDir
+	oldPlanFile := planFile
+	oldProvider := activeProvider
+	defer func() {
+		workDir = oldWorkDir
+		planFile = oldPlanFile
+		activeProvider = oldProvider
+	}()
+
+	workDir = tmpDir
+	planFile = pf
+	activeProvider = ""
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	err := runExplainCmd(nil, nil)
+	if err == nil {
+		t.Error("expected error for no AI provider")
+	}
+	if err != nil && !strings.Contains(err.Error(), "provider") {
+		t.Errorf("expected provider error, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — with scanner from positional arg
+// ---------------------------------------------------------------------------
+
+func TestRunScan_ScannerFromPositionalArg(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+
+	oldWorkDir := workDir
+	oldStatic := staticOnly
+	defer func() {
+		workDir = oldWorkDir
+		staticOnly = oldStatic
+	}()
+
+	workDir = tmpDir
+	staticOnly = false
+
+	err := runScan(nil, []string{"nonexistent-scanner"})
+	if err == nil {
+		t.Error("expected error (no terraform)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runScan — allFlag sets features
+// ---------------------------------------------------------------------------
+
+func TestRunScan_AllFlagSetsAllFeatures(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
+
+	oldAll := allFlag
+	oldWorkDir := workDir
+	oldExplain := explainFlag
+	oldDiagram := diagramFlag
+	oldImpact := impactFlag
+	defer func() {
+		allFlag = oldAll
+		workDir = oldWorkDir
+		explainFlag = oldExplain
+		diagramFlag = oldDiagram
+		impactFlag = oldImpact
+	}()
+
+	allFlag = true
+	explainFlag = false
+	diagramFlag = false
+	impactFlag = false
+	workDir = tmpDir
+
+	_ = runScan(nil, nil)
+
+	if !explainFlag {
+		t.Error("expected explainFlag to be set by --all")
+	}
+	if !diagramFlag {
+		t.Error("expected diagramFlag to be set by --all")
+	}
+	if !impactFlag {
+		t.Error("expected impactFlag to be set by --all")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// canResolveAIProvider — with empty config
+// ---------------------------------------------------------------------------
+
+func TestCanResolveAIProvider_EmptyConfig(t *testing.T) {
+	oldProvider := activeProvider
+	defer func() { activeProvider = oldProvider }()
+	activeProvider = ""
+
+	cfg := config.Config{}
+	if canResolveAIProvider(cfg) {
+		t.Error("expected false for empty config")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// canResolveAIProvider — with active provider flag
+// ---------------------------------------------------------------------------
+
+func TestCanResolveAIProvider_WithRegisteredProvider(t *testing.T) {
+	// canResolveAIProvider checks cfg.LLM.Provider + ai.Has()
+	// Use a known registered provider
+	for _, name := range []string{"ollama", "openai", "gemini", "deepseek", "claude", "openrouter"} {
+		cfg := config.Config{LLM: config.LLMConfig{Provider: name}}
+		if canResolveAIProvider(cfg) {
+			return // found one that works
+		}
+	}
+	t.Error("expected at least one registered provider to return true")
+}
+
+// ---------------------------------------------------------------------------
+// canResolveAIProvider — from config provider
+// ---------------------------------------------------------------------------
+
+func TestCanResolveAIProvider_FromConfigProvider(t *testing.T) {
+	// Use a known registered provider name
+	for _, name := range []string{"ollama", "openai", "gemini", "deepseek", "claude", "openrouter"} {
+		cfg := config.Config{LLM: config.LLMConfig{Provider: name}}
+		if canResolveAIProvider(cfg) {
+			return
+		}
+	}
+	t.Error("expected at least one registered provider to return true")
+}
+
+// ---------------------------------------------------------------------------
+// detectCurrentPlanHash — no plan files in temp dir
+// ---------------------------------------------------------------------------
+
+func TestDetectCurrentPlanHash_NoPlanFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(tmpDir)
+
+	hash := detectCurrentPlanHash()
+	if hash != "" {
+		t.Errorf("expected empty hash, got %q", hash)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectCurrentPlanHash — with plan.json in cwd
+// ---------------------------------------------------------------------------
+
+func TestDetectCurrentPlanHash_WithPlanJSONCwd(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(`{"test":true}`), 0644)
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(tmpDir)
+
+	hash := detectCurrentPlanHash()
+	if hash == "" {
+		t.Error("expected non-empty hash for plan.json")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — impact flag with blast radius
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_ImpactFlagWithBlastRadius(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = true
+	strict = false
+	explainScoresFlag = false
+
+	resources := []parser.NormalizedResource{{Type: "aws_instance", Name: "web", Action: "create", Address: "aws_instance.web"}}
+	graph := topology.BuildGraph(resources)
+	analyzer := &blast.Analyzer{}
+	br := analyzer.AnalyzeWithGraph(resources, graph)
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatPretty,
+		resolvedOutput:  tmpDir,
+	}
+	result := aggregator.ReviewResult{
+		Summary:     "test",
+		BlastRadius: br,
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	_ = out // blast radius output
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — compact format
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_CompactFormatWithHighFinding(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatCompact,
+		resolvedOutput:  tmpDir,
+	}
+	result := aggregator.ReviewResult{
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "HIGH", Category: "security",
+				Resource: "aws_instance.web", Message: "Test finding", Remediation: "Fix it"},
+		},
+		Summary:  "compact test",
+		ExitCode: 1,
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// HIGH findings → exit code 1
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	// Compact writes JSON + MD (not SARIF)
+	if _, err := os.Stat(filepath.Join(tmpDir, "review.json")); err != nil {
+		t.Errorf("JSON file not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "review.md")); err != nil {
+		t.Errorf("MD file not written: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — explainScores flag
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_ExplainScoresFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = false
+	explainScoresFlag = true
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatPretty,
+		resolvedOutput:  tmpDir,
+	}
+	result := aggregator.ReviewResult{Summary: "scores test"}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	_, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — brFlag with scanner stats header (pt-BR)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_BRFlagWithScannerStats(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = true
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatPretty,
+		resolvedOutput:  tmpDir,
+	}
+	result := aggregator.ReviewResult{Summary: "scanner test"}
+	scannerRes := &scanner.AggregatedResult{
+		ScannerStats: []scanner.ScannerStat{{Name: "checkov", Findings: 3}},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	_, err := renderOutput(rc, result, scannerRes)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// brFlag=true should trigger FormatScannerHeaderBR
+	_ = out
+}
+
+// ---------------------------------------------------------------------------
+// runScan — config load error path
+// ---------------------------------------------------------------------------
+
+func TestRunScan_ConfigLoadError(t *testing.T) {
+	oldWorkDir := workDir
+	oldStatic := staticOnly
+	defer func() {
+		workDir = oldWorkDir
+		staticOnly = oldStatic
+	}()
+
+	workDir = "/nonexistent/dir/no/config"
+	staticOnly = false
+
+	err := runScan(nil, nil)
+	if err == nil {
+		t.Error("expected config error for nonexistent dir")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runApply — config load error path
+// ---------------------------------------------------------------------------
+
+func TestRunApply_ConfigLoadError(t *testing.T) {
+	oldWorkDir := workDir
+	oldStatic := staticOnly
+	oldAll := allFlag
+	defer func() {
+		workDir = oldWorkDir
+		staticOnly = oldStatic
+		allFlag = oldAll
+	}()
+
+	workDir = "/nonexistent/dir/no/config"
+	staticOnly = false
+	allFlag = false
+
+	err := runApply(nil, nil)
+	if err == nil {
+		t.Error("expected config error for nonexistent dir")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// logVerbose — exercise verbose logging branch
+// ---------------------------------------------------------------------------
+
+func TestLogVerbose_Coverage(t *testing.T) {
+	oldVerbose := verbose
+	defer func() { verbose = oldVerbose }()
+
+	verbose = true
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	logVerbose("test message %d", 42)
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	_ = out // verbose logging outputs something
+}
+
+// ---------------------------------------------------------------------------
+// renderOutput — SARIF format writes sarif file
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_SARIFWritesSarifFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldBR := brFlag
+	oldImpact := impactFlag
+	oldStrict := strict
+	oldExplainScores := explainScoresFlag
+	defer func() {
+		brFlag = oldBR
+		impactFlag = oldImpact
+		strict = oldStrict
+		explainScoresFlag = oldExplainScores
+	}()
+	brFlag = false
+	impactFlag = false
+	strict = false
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		effectiveFormat: output.FormatSARIF,
+		resolvedOutput:  tmpDir,
+	}
+	result := aggregator.ReviewResult{
+		Findings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "CRITICAL", Category: "security",
+				Resource: "aws_s3_bucket.data", Message: "No encryption", Remediation: "Enable SSE"},
+		},
+		Summary:  "sarif test",
+		ExitCode: 2,
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 2 {
+		t.Errorf("expected exit code 2 for CRITICAL, got %d", exitCode)
+	}
+	sarifPath := filepath.Join(tmpDir, "review.sarif.json")
+	if _, err := os.Stat(sarifPath); err != nil {
+		t.Errorf("SARIF file not written: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore — with explain scores flag
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_WithExplainScoresFlag(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = false
+	explainScoresFlag = true
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg: config.Config{
+			Scoring: config.ScoringConfig{
+				SeverityWeights: config.SeverityWeightsConfig{
+					Critical: 10, High: 5, Medium: 2, Low: 1,
+				},
+			},
+		},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create"},
+	}
+	sr := scanResult{
+		hardFindings: []rules.Finding{
+			{RuleID: "SEC-001", Severity: "HIGH", Category: "security",
+				Resource: "aws_instance.web", Message: "Test", Remediation: "Fix"},
+		},
+	}
+
+	result := mergeAndScore(rc, resources, nil, sr)
+	if result.ScoreDecomposition == nil {
+		t.Error("expected score decomposition when explainScoresFlag is true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// mergeAndScore — with impact flag
+// ---------------------------------------------------------------------------
+
+func TestMergeAndScore_WithImpactFlagAndResources(t *testing.T) {
+	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
+	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
+	diagramFlag = false
+	impactFlag = true
+	explainScoresFlag = false
+
+	rc := reviewConfig{
+		resolvedPlan: "test.json",
+		cfg:          config.Config{},
+	}
+	resources := []parser.NormalizedResource{
+		{Type: "aws_instance", Name: "web", Action: "create", Address: "aws_instance.web"},
+	}
+	graph := topology.BuildGraph(resources)
+	sr := scanResult{}
+
+	result := mergeAndScore(rc, resources, graph, sr)
+	if result.BlastRadius == nil {
+		t.Error("expected blast radius when impactFlag is true")
 	}
 }

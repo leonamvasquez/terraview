@@ -1079,3 +1079,239 @@ func TestPrintFull_FindingsGroupedBySource(t *testing.T) {
 		t.Error("expected resource name")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// printScoreDecomposition / renderMarkdownDecomposition
+// ---------------------------------------------------------------------------
+
+func makeDecomp(withFindings bool, withFloor bool, withBlending bool) *scoring.ScoreDecomposition {
+	fi := []scoring.FindingImpact{}
+	if withFindings {
+		fi = []scoring.FindingImpact{
+			{RuleID: "R001", Resource: "aws_instance.web", Severity: "HIGH", Weight: 3.0, ImpactOnScore: -1.50, RiskVectors: []string{"network", "iam"}},
+			{RuleID: "R002", Resource: "aws_s3_bucket.data", Severity: "MEDIUM", Weight: 2.0, ImpactOnScore: -0.80, RiskVectors: []string{"encryption"}},
+		}
+	}
+	floor := ""
+	blending := ""
+	if withFloor {
+		floor = "floor applied: 1.0"
+	}
+	if withBlending {
+		blending = "blended with base 7.0"
+	}
+	return &scoring.ScoreDecomposition{
+		Security: scoring.CategoryDecomposition{
+			FinalScore: 6.5, WeightedSum: 4.30, PenaltyRatio: 0.35, TotalResources: 3,
+			FloorApplied: floor, BlendingNote: blending, FindingsImpact: fi,
+		},
+		Compliance: scoring.CategoryDecomposition{
+			FinalScore: 8.0, WeightedSum: 1.20, PenaltyRatio: 0.10, TotalResources: 5,
+			FindingsImpact: nil,
+		},
+		Maintainability: scoring.CategoryDecomposition{
+			FinalScore: 9.0, FindingsImpact: nil,
+		},
+		Reliability: scoring.CategoryDecomposition{
+			FinalScore: 7.5, FindingsImpact: nil,
+		},
+		Overall: scoring.OverallDecomposition{
+			FinalScore: 7.2,
+			Formula:    "0.4*sec + 0.25*comp + 0.2*maint + 0.15*rel",
+			Components: []scoring.OverallComponent{
+				{Category: "Security", Score: 6.5, Weight: 0.4, Weighted: 2.60},
+				{Category: "Compliance", Score: 8.0, Weight: 0.25, Weighted: 2.00},
+				{Category: "Maintainability", Score: 9.0, Weight: 0.2, Weighted: 1.80},
+				{Category: "Reliability", Score: 7.5, Weight: 0.15, Weighted: 1.13},
+			},
+		},
+	}
+}
+
+func TestPrintScoreDecomposition_EN(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	d := makeDecomp(true, false, false)
+
+	out := captureStdout(t, func() { w.printScoreDecomposition(d, false) })
+
+	for _, want := range []string{
+		"Score Decomposition",
+		"Security", "6.5",
+		"Compliance", "8.0",
+		"Maintainability", "9.0",
+		"Reliability", "7.5",
+		"weighted_sum=4.30", "penalty=0.35", "resources=3",
+		"R001", "aws_instance.web", "HIGH", "3.0", "-1.50", "network", "iam",
+		"R002", "aws_s3_bucket.data", "MEDIUM", "2.0", "-0.80", "encryption",
+		"Overall Score", "7.2",
+		"Formula:", "0.4*sec",
+		"Security: 6.5",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, out)
+		}
+	}
+	// Should NOT contain BR labels
+	if strings.Contains(out, "Segurança") {
+		t.Error("EN output should not contain BR label Segurança")
+	}
+}
+
+func TestPrintScoreDecomposition_BR(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, Lang: "pt-BR", ExplainScores: true})
+	d := makeDecomp(true, true, true)
+
+	out := captureStdout(t, func() { w.printScoreDecomposition(d, true) })
+
+	for _, want := range []string{
+		"Decomposição do Score",
+		"Segurança", "6.5",
+		"floor applied: 1.0",
+		"blended with base 7.0",
+		"Conformidade", "8.0",
+		"Manutenibilidade", "9.0",
+		"Confiabilidade", "7.5",
+		"soma_ponderada=4.30", "penalidade=0.35", "recursos=3",
+		"R001", "R002",
+		"Score Geral", "7.2",
+		"Fórmula:", "0.4*sec",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in BR output, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestPrintScoreDecomposition_EmptyFindings(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	d := makeDecomp(false, false, false)
+
+	out := captureStdout(t, func() { w.printScoreDecomposition(d, false) })
+
+	// Categories present
+	for _, want := range []string{"Security", "Compliance", "Overall Score"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output", want)
+		}
+	}
+	// No findings detail lines
+	if strings.Contains(out, "weighted_sum") {
+		t.Error("empty findings should not print weighted_sum line")
+	}
+	if strings.Contains(out, "R001") {
+		t.Error("empty findings should not contain rule IDs")
+	}
+}
+
+func TestRenderMarkdownDecomposition_EN(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	d := makeDecomp(true, true, true)
+
+	var sb strings.Builder
+	w.renderMarkdownDecomposition(&sb, d, false)
+	md := sb.String()
+
+	for _, want := range []string{
+		"### Score Decomposition",
+		"**Security:** 6.5/10",
+		"_floor applied: 1.0_",
+		"(blended with base 7.0)",
+		"**Compliance:** 8.0/10",
+		"**Maintainability:** 9.0/10",
+		"**Reliability:** 7.5/10",
+		"| Rule | Resource | Severity | Weight | Impact | Vectors |",
+		"| `R001` | `aws_instance.web` | HIGH | 3.0 | -1.50 | network, iam |",
+		"| `R002` | `aws_s3_bucket.data` | MEDIUM | 2.0 | -0.80 | encryption |",
+		"**Overall Score:** 7.2/10",
+		"Formula: `0.4*sec",
+		"| Category | Score | Weight | Weighted |",
+		"| Security | 6.5 | 0.4 | 2.60 |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("expected %q in markdown, got:\n%s", want, md)
+		}
+	}
+	// Should not have BR labels
+	if strings.Contains(md, "Segurança") {
+		t.Error("EN markdown should not contain BR label")
+	}
+}
+
+func TestRenderMarkdownDecomposition_BR(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("pt-BR")
+	defer i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, Lang: "pt-BR", ExplainScores: true})
+	d := makeDecomp(true, false, false)
+
+	var sb strings.Builder
+	w.renderMarkdownDecomposition(&sb, d, true)
+	md := sb.String()
+
+	for _, want := range []string{
+		"### Decomposição do Score",
+		"**Segurança:** 6.5/10",
+		"**Conformidade:** 8.0/10",
+		"**Manutenibilidade:** 9.0/10",
+		"**Confiabilidade:** 7.5/10",
+		"| Regra | Recurso | Severidade | Peso | Impacto | Vetores |",
+		"| `R001` |",
+		"**Score Geral:** 7.2/10",
+		"Fórmula: `0.4*sec",
+		"| Categoria | Score | Peso | Ponderado |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("expected %q in BR markdown, got:\n%s", want, md)
+		}
+	}
+}
+
+func TestRenderMarkdownDecomposition_NoFindings(t *testing.T) {
+	ColorEnabled = false
+	defer func() { ColorEnabled = true }()
+	i18n.SetLang("en")
+
+	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	d := makeDecomp(false, false, false)
+
+	var sb strings.Builder
+	w.renderMarkdownDecomposition(&sb, d, false)
+	md := sb.String()
+
+	// Category scores present
+	for _, want := range []string{
+		"**Security:** 6.5/10",
+		"**Overall Score:** 7.2/10",
+		"| Category | Score | Weight | Weighted |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("expected %q in markdown", want)
+		}
+	}
+	// No findings table
+	if strings.Contains(md, "| Rule |") {
+		t.Error("no findings should omit Rule table")
+	}
+	if strings.Contains(md, "R001") {
+		t.Error("no findings should not contain rule IDs")
+	}
+}

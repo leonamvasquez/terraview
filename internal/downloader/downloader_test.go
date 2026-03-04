@@ -143,3 +143,47 @@ func TestDownload_InvalidURL(t *testing.T) {
 		t.Fatal("expected error for invalid URL, got nil")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Download with zero Timeout (default 5min branch)
+// ---------------------------------------------------------------------------
+
+func TestDownload_ZeroTimeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("hello zero timeout"))
+	}))
+	defer ts.Close()
+
+	dest := filepath.Join(t.TempDir(), "zero-timeout.bin")
+	opts := Options{Timeout: 0} // should default to 5 min
+	n, err := Download(ts.URL, dest, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != int64(len("hello zero timeout")) {
+		t.Errorf("expected %d bytes, got %d", len("hello zero timeout"), n)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Download to a read-only parent (MkdirAll fail)
+// ---------------------------------------------------------------------------
+
+func TestDownload_ReadOnlyParent(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data"))
+	}))
+	defer ts.Close()
+
+	roDir := filepath.Join(t.TempDir(), "readonly")
+	os.MkdirAll(roDir, 0555)
+	defer os.Chmod(roDir, 0755)
+
+	dest := filepath.Join(roDir, "subdir", "file.bin")
+	_, err := Download(ts.URL, dest, DefaultOptions())
+	if err == nil {
+		t.Fatal("expected error for read-only parent dir")
+	}
+}

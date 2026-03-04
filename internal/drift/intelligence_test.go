@@ -227,3 +227,174 @@ func TestFormatNarrative_OnlySuspicious(t *testing.T) {
 		t.Error("expected no intentional section when there are none")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// detectChangedFields
+// ---------------------------------------------------------------------------
+
+func TestDetectChangedFields_NilBefore(t *testing.T) {
+	r := parser.NormalizedResource{BeforeValues: nil, Values: map[string]interface{}{"a": 1}}
+	got := detectChangedFields(r)
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestDetectChangedFields_NilAfter(t *testing.T) {
+	r := parser.NormalizedResource{BeforeValues: map[string]interface{}{"a": 1}, Values: nil}
+	got := detectChangedFields(r)
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestDetectChangedFields_Changed(t *testing.T) {
+	r := parser.NormalizedResource{
+		BeforeValues: map[string]interface{}{"a": "old", "b": "same"},
+		Values:       map[string]interface{}{"a": "new", "b": "same"},
+	}
+	got := detectChangedFields(r)
+	if len(got) != 1 || got[0] != "a" {
+		t.Errorf("expected [a], got %v", got)
+	}
+}
+
+func TestDetectChangedFields_RemovedFields(t *testing.T) {
+	r := parser.NormalizedResource{
+		BeforeValues: map[string]interface{}{"a": "v1", "b": "v2"},
+		Values:       map[string]interface{}{"a": "v1"},
+	}
+	got := detectChangedFields(r)
+	if len(got) != 1 || got[0] != "b (removed)" {
+		t.Errorf("expected [b (removed)], got %v", got)
+	}
+}
+
+func TestDetectChangedFields_NewFields(t *testing.T) {
+	r := parser.NormalizedResource{
+		BeforeValues: map[string]interface{}{"a": "v1"},
+		Values:       map[string]interface{}{"a": "v1", "c": "new"},
+	}
+	got := detectChangedFields(r)
+	if len(got) != 1 || got[0] != "c" {
+		t.Errorf("expected [c], got %v", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// computeItemRisk
+// ---------------------------------------------------------------------------
+
+func TestComputeItemRisk_DataResource(t *testing.T) {
+	r := parser.NormalizedResource{Type: "aws_db_instance", Action: "delete"}
+	score, factors := computeItemRisk(r, nil)
+	if score < 5.0 {
+		t.Errorf("expected score >= 5.0 for data resource delete, got %.1f", score)
+	}
+	found := false
+	for _, f := range factors {
+		if strings.Contains(f, "data/storage") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected data/storage resource factor")
+	}
+}
+
+func TestComputeItemRisk_NetworkResource(t *testing.T) {
+	r := parser.NormalizedResource{Type: "aws_nat_gateway", Action: "update"}
+	score, factors := computeItemRisk(r, nil)
+	if score < 2.0 {
+		t.Errorf("expected score >= 2.0 for network update, got %.1f", score)
+	}
+	found := false
+	for _, f := range factors {
+		if strings.Contains(f, "network") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected network resource factor")
+	}
+}
+
+func TestComputeItemRisk_CappedAt10(t *testing.T) {
+	// Critical type + security resource + data resource + network + delete = way over 10
+	criticals := map[string]bool{"aws_iam_role": true}
+	r := parser.NormalizedResource{Type: "aws_iam_role", Action: "delete"}
+	score, _ := computeItemRisk(r, criticals)
+	if score > 10.0 {
+		t.Errorf("expected score capped at 10.0, got %.1f", score)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// classifyItem
+// ---------------------------------------------------------------------------
+
+func TestClassifyItem_SensitiveField(t *testing.T) {
+	r := parser.NormalizedResource{Type: "aws_instance", Action: "update"}
+	cls := classifyItem(r, []string{"policy_document"}, nil)
+	if cls != ClassSuspicious {
+		t.Errorf("expected suspicious for sensitive field, got %s", cls)
+	}
+}
+
+func TestClassifyItem_TagOnlyUpdate(t *testing.T) {
+	r := parser.NormalizedResource{Type: "aws_instance", Action: "update"}
+	cls := classifyItem(r, []string{"tags", "description"}, nil)
+	if cls != ClassIntentional {
+		t.Errorf("expected intentional for tag-only update, got %s", cls)
+	}
+}
+
+func TestClassifyItem_UnknownFallback(t *testing.T) {
+	r := parser.NormalizedResource{Type: "aws_instance", Action: "update"}
+	cls := classifyItem(r, []string{"instance_type"}, nil)
+	if cls != ClassUnknown {
+		t.Errorf("expected unknown, got %s", cls)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isNetworkResource
+// ---------------------------------------------------------------------------
+
+func TestIsNetworkResource_NatGateway(t *testing.T) {
+	if !isNetworkResource("aws_nat_gateway") {
+		t.Error("expected aws_nat_gateway to be network resource")
+	}
+}
+
+func TestIsNetworkResource_LB(t *testing.T) {
+	if !isNetworkResource("aws_lb_target_group") {
+		t.Error("expected aws_lb_target_group to be network resource")
+	}
+}
+
+func TestIsNetworkResource_NonNetwork(t *testing.T) {
+	if isNetworkResource("aws_iam_role") {
+		t.Error("expected aws_iam_role to NOT be network resource")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// evaluateReplace — critical type branch
+// ---------------------------------------------------------------------------
+
+func TestEvaluateReplace_CriticalType(t *testing.T) {
+	a := NewAnalyzer([]string{"aws_db_instance"})
+	r := parser.NormalizedResource{
+		Address: "aws_db_instance.main",
+		Type:    "aws_db_instance",
+		Action:  "replace",
+	}
+	findings := a.evaluateReplace(r)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if findings[0].Severity != "CRITICAL" {
+		t.Errorf("expected CRITICAL for critical type replace, got %s", findings[0].Severity)
+	}
+}

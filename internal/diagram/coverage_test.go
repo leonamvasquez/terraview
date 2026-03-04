@@ -1,9 +1,12 @@
 package diagram
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/leonamvasquez/terraview/internal/parser"
+	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
 // ---------------------------------------------------------------------------
@@ -195,5 +198,332 @@ func TestCenterText_Empty(t *testing.T) {
 	got := centerText("", 10)
 	if len(got) != 5 { // 5 spaces of padding left
 		t.Logf("centerText('', 10) = %q (len=%d)", got, len(got))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// actionIcon
+// ---------------------------------------------------------------------------
+
+func TestActionIcon(t *testing.T) {
+	tests := []struct {
+		action string
+		want   string
+	}{
+		{"create", "[+]"},
+		{"update", "[~]"},
+		{"delete", "[-]"},
+		{"replace", "[!]"},
+		{"unknown", "[ ]"},
+		{"", "[ ]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.action, func(t *testing.T) {
+			got := actionIcon(tc.action)
+			if got != tc.want {
+				t.Errorf("actionIcon(%q) = %q, want %q", tc.action, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// providerTitle
+// ---------------------------------------------------------------------------
+
+func TestProviderTitle(t *testing.T) {
+	tests := []struct {
+		provider string
+		want     string
+	}{
+		{"aws", "AWS"},
+		{"azure", "Azure"},
+		{"gcp", "Google Cloud"},
+		{"unknown", "Cloud"},
+		{"", "Cloud"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.provider, func(t *testing.T) {
+			got := providerTitle(tc.provider)
+			if got != tc.want {
+				t.Errorf("providerTitle(%q) = %q, want %q", tc.provider, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runeLen
+// ---------------------------------------------------------------------------
+
+func TestRuneLen(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"hello", 5},
+		{"", 0},
+		{"café", 4},
+		{"日本語", 3},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := runeLen(tc.input)
+			if got != tc.want {
+				t.Errorf("runeLen(%q) = %d, want %d", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildEdgeMap
+// ---------------------------------------------------------------------------
+
+func TestBuildEdgeMap_Empty(t *testing.T) {
+	graph := &topology.Graph{}
+	edges := buildEdgeMap(graph)
+	if len(edges) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(edges))
+	}
+}
+
+func TestBuildEdgeMap_WithEdges(t *testing.T) {
+	graph := &topology.Graph{
+		Edges: []topology.Edge{
+			{From: "a", To: "b"},
+			{From: "a", To: "c"},
+			{From: "b", To: "c"},
+		},
+	}
+	edges := buildEdgeMap(graph)
+	if len(edges["a"]) != 2 {
+		t.Errorf("expected 2 edges from a, got %d", len(edges["a"]))
+	}
+	if len(edges["b"]) != 1 {
+		t.Errorf("expected 1 edge from b, got %d", len(edges["b"]))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderLayerBoxes — coverage for single vs dual column paths
+// ---------------------------------------------------------------------------
+
+func TestRenderLayerBoxes_SingleBox(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	layer := Layer{
+		Name: "Compute",
+		Resources: []ResourceEntry{
+			{Address: "aws_instance.web", Type: "aws_instance", Action: "create", Label: "EC2 Instance (web)"},
+		},
+	}
+	g.renderLayerBoxes(&sb, layer, nil)
+	out := sb.String()
+	if !strings.Contains(out, "[+]") {
+		t.Error("expected [+] icon in output")
+	}
+	if !strings.Contains(out, "Compute") {
+		t.Error("expected Compute title in output")
+	}
+}
+
+func TestRenderLayerBoxes_DualColumn(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	resources := make([]ResourceEntry, 4)
+	for i := range resources {
+		resources[i] = ResourceEntry{
+			Address: fmt.Sprintf("aws_instance.node%d", i),
+			Type:    "aws_instance",
+			Action:  "create",
+			Label:   fmt.Sprintf("EC2 Instance (node%d)", i),
+		}
+	}
+	layer := Layer{
+		Name:      "Compute",
+		Resources: resources,
+	}
+	g.renderLayerBoxes(&sb, layer, nil)
+	out := sb.String()
+	if !strings.Contains(out, "Compute") {
+		t.Error("expected Compute title")
+	}
+	if strings.Count(out, "[+]") != 4 {
+		t.Errorf("expected 4 [+] icons, got %d", strings.Count(out, "[+]"))
+	}
+}
+
+func TestRenderSingleLayerBox_LongLabel(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	resources := []ResourceEntry{
+		{
+			Address: "aws_instance.very_long_name",
+			Type:    "aws_instance",
+			Action:  "create",
+			Label:   strings.Repeat("x", 200), // Very long label should be truncated
+		},
+	}
+	g.renderSingleLayerBox(&sb, "Test", resources)
+	out := sb.String()
+	if !strings.Contains(out, "...") {
+		t.Error("expected truncation with '...' for long label")
+	}
+}
+
+func TestRenderLayerBoxes_UnknownLayer(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	layer := Layer{
+		Name: "UnknownLayer",
+		Resources: []ResourceEntry{
+			{Address: "custom.res", Type: "custom", Action: "update", Label: "Custom Resource"},
+		},
+	}
+	g.renderLayerBoxes(&sb, layer, nil)
+	out := sb.String()
+	if out == "" {
+		t.Error("expected non-empty output for unknown layer")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Generate — additional edge cases
+// ---------------------------------------------------------------------------
+
+func TestGenerate_OnlyReadResources(t *testing.T) {
+	g := NewGenerator()
+	resources := []parser.NormalizedResource{
+		{Address: "data.aws_ami.latest", Action: "read", Type: "data.aws_ami"},
+	}
+	result := g.Generate(resources)
+	if !strings.Contains(result, "no resource changes") {
+		t.Error("expected 'no resource changes' for read-only resources")
+	}
+}
+
+func TestGenerate_MixedActions(t *testing.T) {
+	g := NewGenerator()
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+		{Address: "aws_instance.old", Action: "delete", Type: "aws_instance"},
+		{Address: "aws_s3_bucket.logs", Action: "update", Type: "aws_s3_bucket"},
+		{Address: "aws_iam_role.admin", Action: "replace", Type: "aws_iam_role"},
+	}
+	result := g.Generate(resources)
+	if !strings.Contains(result, "[+]") {
+		t.Error("expected [+] for create")
+	}
+	if !strings.Contains(result, "[-]") {
+		t.Error("expected [-] for delete")
+	}
+	if !strings.Contains(result, "[~]") {
+		t.Error("expected [~] for update")
+	}
+	if !strings.Contains(result, "[!]") {
+		t.Error("expected [!] for replace")
+	}
+}
+
+func TestGenerateWithGraph_NilGraph(t *testing.T) {
+	g := NewGenerator()
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
+	}
+	result := g.GenerateWithGraph(resources, nil)
+	if result == "" {
+		t.Error("expected non-empty output with nil graph")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderDualColumnBox — direct test for dual column rendering
+// ---------------------------------------------------------------------------
+
+func TestRenderDualColumnBox_UnequalColumns(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	left := []ResourceEntry{
+		{Address: "aws_instance.a", Action: "create", Label: "Instance A"},
+		{Address: "aws_instance.b", Action: "update", Label: "Instance B"},
+		{Address: "aws_instance.c", Action: "delete", Label: "Instance C"},
+	}
+	right := []ResourceEntry{
+		{Address: "aws_s3_bucket.x", Action: "create", Label: "Bucket X"},
+	}
+	g.renderDualColumnBox(&sb, "Test Box", left, right)
+	output := sb.String()
+	if !strings.Contains(output, "Test Box") {
+		t.Error("expected title in output")
+	}
+	if !strings.Contains(output, "Instance A") {
+		t.Error("expected left column resources")
+	}
+	if !strings.Contains(output, "Bucket X") {
+		t.Error("expected right column resources")
+	}
+}
+
+func TestRenderDualColumnBox_LongLabels(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	longLabel := "This is an extremely long resource label that should be truncated with ellipsis in the output"
+	left := []ResourceEntry{
+		{Address: "aws_instance.a", Action: "create", Label: longLabel},
+	}
+	right := []ResourceEntry{
+		{Address: "aws_instance.b", Action: "delete", Label: longLabel},
+	}
+	g.renderDualColumnBox(&sb, "Truncation Test", left, right)
+	output := sb.String()
+	if !strings.Contains(output, "...") {
+		t.Error("expected truncation ellipsis in output")
+	}
+}
+
+func TestRenderDualColumnBox_EmptyColumns(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	left := []ResourceEntry{
+		{Address: "aws_instance.a", Action: "create", Label: "Only Left"},
+	}
+	g.renderDualColumnBox(&sb, "One Side", left, nil)
+	output := sb.String()
+	if !strings.Contains(output, "One Side") {
+		t.Error("expected title")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderInnerDualBox — direct test for inner dual rendering
+// ---------------------------------------------------------------------------
+
+func TestRenderInnerDualBox_Basic(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	resources := []ResourceEntry{
+		{Address: "aws_instance.a", Action: "create", Label: "Instance A"},
+		{Address: "aws_instance.b", Action: "update", Label: "Instance B"},
+		{Address: "aws_instance.c", Action: "delete", Label: "Instance C"},
+		{Address: "aws_instance.d", Action: "create", Label: "Instance D"},
+	}
+	g.renderInnerDualBox(&sb, "Inner Box", resources, 80, 70)
+	output := sb.String()
+	if !strings.Contains(output, "Inner Box") {
+		t.Error("expected title in output")
+	}
+}
+
+func TestRenderInnerDualBox_NarrowWidth(t *testing.T) {
+	g := NewGenerator()
+	var sb strings.Builder
+	resources := []ResourceEntry{
+		{Address: "aws_instance.a", Action: "create", Label: "A really long label that needs truncation"},
+	}
+	g.renderInnerDualBox(&sb, "Narrow", resources, 40, 30)
+	output := sb.String()
+	if output == "" {
+		t.Error("expected non-empty output even with narrow width")
 	}
 }

@@ -636,3 +636,255 @@ func TestGlobalConfigPath(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && strings.Contains(s, substr)
 }
+
+// ---------------------------------------------------------------------------
+// SaveDefaultScanner
+// ---------------------------------------------------------------------------
+
+func TestSaveDefaultScanner(t *testing.T) {
+	// Override HOME so GlobalConfigPath resolves to a temp dir
+	origHome := os.Getenv("HOME")
+	dir := t.TempDir()
+	os.Setenv("HOME", dir)
+	defer os.Setenv("HOME", origHome)
+
+	err := SaveDefaultScanner("checkov")
+	if err != nil {
+		t.Fatalf("SaveDefaultScanner error: %v", err)
+	}
+
+	// Read the file and verify content
+	data, err := os.ReadFile(GlobalConfigPath())
+	if err != nil {
+		t.Fatalf("failed to read saved config: %v", err)
+	}
+	content := string(data)
+	if !contains(content, "checkov") {
+		t.Errorf("expected 'checkov' in config, got %s", content)
+	}
+	if !contains(content, "default") {
+		t.Errorf("expected 'default' in config, got %s", content)
+	}
+}
+
+func TestSaveDefaultScanner_OverwriteExisting(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	dir := t.TempDir()
+	os.Setenv("HOME", dir)
+	defer os.Setenv("HOME", origHome)
+
+	// First save
+	if err := SaveDefaultScanner("checkov"); err != nil {
+		t.Fatalf("first save error: %v", err)
+	}
+	// Overwrite
+	if err := SaveDefaultScanner("tfsec"); err != nil {
+		t.Fatalf("second save error: %v", err)
+	}
+
+	data, err := os.ReadFile(GlobalConfigPath())
+	if err != nil {
+		t.Fatalf("failed to read: %v", err)
+	}
+	content := string(data)
+	if !contains(content, "tfsec") {
+		t.Errorf("expected 'tfsec' in updated config, got %s", content)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// merge — Cache/CacheTTLHours/Redact/RedactLog/Scanner.Default/Output.Format
+// ---------------------------------------------------------------------------
+
+func TestLoad_MergeCacheAndRedactFields(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+llm:
+  cache: true
+  cache_ttl_hours: 48
+  redact: true
+  redact_log: true
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if !cfg.LLM.Cache {
+		t.Error("expected Cache=true")
+	}
+	if cfg.LLM.CacheTTLHours != 48 {
+		t.Errorf("expected CacheTTLHours=48, got %d", cfg.LLM.CacheTTLHours)
+	}
+	if !cfg.LLM.Redact {
+		t.Error("expected Redact=true")
+	}
+	if !cfg.LLM.RedactLog {
+		t.Error("expected RedactLog=true")
+	}
+}
+
+func TestLoad_MergeScannerDefault(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+scanner:
+  default: tfsec
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if cfg.Scanner.Default != "tfsec" {
+		t.Errorf("expected Scanner.Default=tfsec, got %q", cfg.Scanner.Default)
+	}
+}
+
+func TestLoad_MergeOutputFormat(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+output:
+  format: json
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if cfg.Output.Format != "json" {
+		t.Errorf("expected Output.Format=json, got %q", cfg.Output.Format)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// validate — negative num_ctx, negative max_memory_mb, negative min_free_memory_mb
+// ---------------------------------------------------------------------------
+
+func TestLoad_NegativeNumCtx(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+llm:
+  ollama:
+    num_ctx: -1
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for negative num_ctx")
+	}
+	if !strings.Contains(err.Error(), "num_ctx") {
+		t.Errorf("expected num_ctx in error, got %v", err)
+	}
+}
+
+func TestLoad_NegativeMaxResources(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+llm:
+  max_resources: -5
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for negative max_resources")
+	}
+	if !strings.Contains(err.Error(), "max_resources") {
+		t.Errorf("expected max_resources in error, got %v", err)
+	}
+}
+
+func TestLoad_NegativeCacheTTL(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `
+llm:
+  cache_ttl_hours: -1
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for negative cache_ttl_hours")
+	}
+	if !strings.Contains(err.Error(), "cache_ttl_hours") {
+		t.Errorf("expected cache_ttl_hours in error, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SaveGlobalLLMProvider — edge: model="" (should skip model key)
+// ---------------------------------------------------------------------------
+
+func TestSaveGlobalLLMProvider_NoModel(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	dir := t.TempDir()
+	os.Setenv("HOME", dir)
+	defer os.Setenv("HOME", origHome)
+
+	if err := SaveGlobalLLMProvider("openai", ""); err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+	data, err := os.ReadFile(GlobalConfigPath())
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+	content := string(data)
+	if !contains(content, "openai") {
+		t.Error("expected 'openai' in config")
+	}
+	// model should not be present (empty model is skipped)
+	if contains(content, "model:") {
+		t.Error("expected model key to be absent when empty")
+	}
+}
+
+func TestSaveGlobalLLMProvider_WithExistingConfig(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	dir := t.TempDir()
+	os.Setenv("HOME", dir)
+	defer os.Setenv("HOME", origHome)
+
+	// Create config with scanner section
+	configDir := filepath.Join(dir, ".terraview")
+	os.MkdirAll(configDir, 0755)
+	existing := "scanner:\n  default: checkov\n"
+	os.WriteFile(filepath.Join(configDir, ".terraview.yaml"), []byte(existing), 0644)
+
+	// Save provider — should not overwrite scanner section
+	if err := SaveGlobalLLMProvider("ollama", "llama3"); err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+	data, _ := os.ReadFile(GlobalConfigPath())
+	content := string(data)
+	if !contains(content, "ollama") {
+		t.Error("expected 'ollama' in config")
+	}
+	if !contains(content, "checkov") {
+		t.Error("expected scanner section preserved")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GlobalConfigDir — HOME unset fallback
+// ---------------------------------------------------------------------------
+
+func TestGlobalConfigDir_NoHome(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	os.Unsetenv("HOME")
+	defer os.Setenv("HOME", origHome)
+
+	dir := GlobalConfigDir()
+	if dir == "" {
+		t.Error("expected non-empty dir even with HOME unset")
+	}
+}

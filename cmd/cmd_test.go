@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -806,5 +807,118 @@ func TestVersionVariable(t *testing.T) {
 	Version = "test-v1.0.0"
 	if Version != "test-v1.0.0" {
 		t.Errorf("expected test version, got %q", Version)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// formatBytes
+// ---------------------------------------------------------------------------
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		input int64
+		want  string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1023, "1023 B"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1024 * 1024, "1.0 MB"},
+		{1024*1024 + 512*1024, "1.5 MB"},
+		{10 * 1024 * 1024, "10.0 MB"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.want, func(t *testing.T) {
+			got := formatBytes(tc.input)
+			if got != tc.want {
+				t.Errorf("formatBytes(%d) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectCurrentPlanHash
+// ---------------------------------------------------------------------------
+
+func TestDetectCurrentPlanHash_WithPlanJSON(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(dir)
+
+	content := []byte(`{"format_version":"1.0","resource_changes":[]}`)
+	os.WriteFile(filepath.Join(dir, "plan.json"), content, 0644)
+
+	hash := detectCurrentPlanHash()
+	if hash == "" {
+		t.Error("expected non-empty hash for existing plan.json")
+	}
+	if len(hash) != 64 { // SHA-256 hex
+		t.Errorf("expected 64-char hex hash, got len %d", len(hash))
+	}
+}
+
+func TestDetectCurrentPlanHash_WithTfplan(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(dir)
+
+	content := []byte("binary plan data here")
+	os.WriteFile(filepath.Join(dir, "tfplan"), content, 0644)
+
+	hash := detectCurrentPlanHash()
+	if hash == "" {
+		t.Error("expected non-empty hash for existing tfplan")
+	}
+}
+
+func TestDetectCurrentPlanHash_NoPlanFile(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(dir)
+
+	hash := detectCurrentPlanHash()
+	if hash != "" {
+		t.Errorf("expected empty hash when no plan file exists, got %q", hash)
+	}
+}
+
+func TestDetectCurrentPlanHash_EmptyPlanJSON(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(dir)
+
+	os.WriteFile(filepath.Join(dir, "plan.json"), []byte{}, 0644)
+
+	hash := detectCurrentPlanHash()
+	if hash != "" {
+		t.Errorf("expected empty hash for empty plan.json, got %q", hash)
+	}
+}
+
+func TestDetectCurrentPlanHash_PlanJSONPreferredOverTfplan(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(dir)
+
+	os.WriteFile(filepath.Join(dir, "plan.json"), []byte("json content"), 0644)
+	os.WriteFile(filepath.Join(dir, "tfplan"), []byte("binary content"), 0644)
+
+	hash := detectCurrentPlanHash()
+	if hash == "" {
+		t.Fatal("expected non-empty hash")
+	}
+
+	// Verify it's the plan.json hash (not tfplan)
+	os.Remove(filepath.Join(dir, "tfplan"))
+	hashOnlyJSON := detectCurrentPlanHash()
+	if hash != hashOnlyJSON {
+		t.Error("plan.json should be preferred over tfplan")
 	}
 }

@@ -234,3 +234,70 @@ func TestRemediationMerge(t *testing.T) {
 		t.Errorf("expected remediation merge, got %q", result.Resolved[0].Remediation)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// FormatResolutionBR — all branches
+// ---------------------------------------------------------------------------
+
+func TestFormatResolutionBR_Empty(t *testing.T) {
+	result := FormatResolutionBR(ConflictResult{})
+	if result != "" {
+		t.Errorf("expected empty string for no resolved findings, got %q", result)
+	}
+}
+
+func TestFormatResolutionBR_AllBranches(t *testing.T) {
+	cr := ConflictResult{
+		Resolved: []ResolvedFinding{
+			{Finding: rules.Finding{Resource: "r1"}},
+			{Finding: rules.Finding{Resource: "r2"}},
+			{Finding: rules.Finding{Resource: "r3"}},
+			{Finding: rules.Finding{Resource: "r4"}},
+		},
+		Confirmed:       1,
+		ScannerPriority: 1,
+		ScannerOnly:     1,
+		AIOnly:          1,
+	}
+	result := FormatResolutionBR(cr)
+	if result == "" {
+		t.Error("expected non-empty output")
+	}
+	wants := []string{
+		"Resolução de Conflitos",
+		"confirmados",
+		"prioridade-scanner",
+		"apenas-scanner",
+		"apenas-IA",
+	}
+	for _, w := range wants {
+		if !strings.Contains(result, w) {
+			t.Errorf("missing %q in output: %s", w, result)
+		}
+	}
+}
+
+func TestFormatResolutionBR_OnlyConfirmed(t *testing.T) {
+	cr := ConflictResult{
+		Resolved:  []ResolvedFinding{{Finding: rules.Finding{Resource: "r1"}}},
+		Confirmed: 1,
+	}
+	result := FormatResolutionBR(cr)
+	if !strings.Contains(result, "confirmados") {
+		t.Errorf("expected 'confirmados' in output: %s", result)
+	}
+	if strings.Contains(result, "apenas-scanner") {
+		t.Error("should not contain 'apenas-scanner'")
+	}
+}
+
+func TestFormatResolutionBR_OnlyAI(t *testing.T) {
+	cr := ConflictResult{
+		Resolved: []ResolvedFinding{{Finding: rules.Finding{Resource: "r1"}}},
+		AIOnly:   1,
+	}
+	result := FormatResolutionBR(cr)
+	if !strings.Contains(result, "apenas-IA") {
+		t.Errorf("expected 'apenas-IA' in output: %s", result)
+	}
+}

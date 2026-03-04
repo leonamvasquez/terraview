@@ -110,6 +110,22 @@ func TestPlatformInfo_DisplayArch(t *testing.T) {
 	}
 }
 
+func TestPlatformInfo_DisplayArch_UnknownArch(t *testing.T) {
+	p := PlatformInfo{Arch: "mips64"}
+	got := p.DisplayArch()
+	if got != "mips64" {
+		t.Errorf("DisplayArch(mips64) = %q, want %q", got, "mips64")
+	}
+}
+
+func TestPlatformInfo_DisplayOS_Unknown(t *testing.T) {
+	p := PlatformInfo{OS: "freebsd"}
+	got := p.DisplayOS()
+	if got != "freebsd" {
+		t.Errorf("DisplayOS(freebsd) = %q, want %q", got, "freebsd")
+	}
+}
+
 func TestPlatformInfo_String(t *testing.T) {
 	p := PlatformInfo{OS: "darwin", Arch: "arm64"}
 	if got := p.String(); got != "darwin/arm64" {
