@@ -217,14 +217,18 @@ main() {
         warn "Could not download assets. You can copy prompts/ and rules/ manually to ${ASSETS_DIR}/"
     fi
 
-    # Find extracted binary
-    local src_binary="${tmp_dir}/${BINARY_NAME}-${os}-${arch}${bin_ext}"
+    # Find extracted binary — goreleaser packs the binary as plain "terraview" inside the archive
+    local src_binary="${tmp_dir}/${BINARY_NAME}${bin_ext}"
     if [ ! -f "${src_binary}" ]; then
-        # Try without extension
+        # Fallback: platform-suffixed name
+        src_binary="${tmp_dir}/${BINARY_NAME}-${os}-${arch}${bin_ext}"
+    fi
+    if [ ! -f "${src_binary}" ]; then
         src_binary="${tmp_dir}/${BINARY_NAME}-${os}-${arch}"
     fi
     if [ ! -f "${src_binary}" ]; then
         error "Binary not found after extraction"
+        ls -la "${tmp_dir}/" >&2
         exit 1
     fi
 
