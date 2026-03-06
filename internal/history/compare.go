@@ -7,10 +7,10 @@ import (
 
 // CompareResult holds the comparison between two scans.
 type CompareResult struct {
-	Label    string
-	OldScan  ScanRecord
-	NewScan  ScanRecord
-	Deltas   []DeltaRow
+	Label   string
+	OldScan ScanRecord
+	NewScan ScanRecord
+	Deltas  []DeltaRow
 }
 
 // DeltaRow is a single metric comparison row.

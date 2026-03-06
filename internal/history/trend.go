@@ -8,14 +8,14 @@ import (
 
 // TrendData holds the computed trend for a metric.
 type TrendData struct {
-	Metric     string
-	Values     []float64
-	First      float64
-	Last       float64
-	DeltaPct   float64
-	DeltaAbs   float64
-	Sparkline  string
-	Direction  string // "↑", "↓", "→"
+	Metric    string
+	Values    []float64
+	First     float64
+	Last      float64
+	DeltaPct  float64
+	DeltaAbs  float64
+	Sparkline string
+	Direction string // "↑", "↓", "→"
 }
 
 // sparkBlocks are the Unicode block elements for sparklines.

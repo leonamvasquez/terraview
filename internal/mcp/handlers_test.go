@@ -201,13 +201,13 @@ func createTestPlan(t *testing.T) string {
 	dir := t.TempDir()
 
 	plan := map[string]interface{}{
-		"format_version": "1.2",
+		"format_version":    "1.2",
 		"terraform_version": "1.5.0",
 		"resource_changes": []map[string]interface{}{
 			{
-				"address": "aws_s3_bucket.test",
-				"type":    "aws_s3_bucket",
-				"name":    "test",
+				"address":       "aws_s3_bucket.test",
+				"type":          "aws_s3_bucket",
+				"name":          "test",
 				"provider_name": "registry.terraform.io/hashicorp/aws",
 				"change": map[string]interface{}{
 					"actions": []string{"create"},
@@ -218,9 +218,9 @@ func createTestPlan(t *testing.T) string {
 				},
 			},
 			{
-				"address": "aws_security_group.web",
-				"type":    "aws_security_group",
-				"name":    "web",
+				"address":       "aws_security_group.web",
+				"type":          "aws_security_group",
+				"name":          "web",
 				"provider_name": "registry.terraform.io/hashicorp/aws",
 				"change": map[string]interface{}{
 					"actions": []string{"create"},

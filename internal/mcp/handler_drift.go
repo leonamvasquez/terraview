@@ -15,8 +15,8 @@ type driftArgs struct {
 
 // driftResponse is the structured response for the drift tool.
 type driftResponse struct {
-	Drift        drift.DriftResult          `json:"drift"`
-	Intelligence *drift.IntelligenceResult  `json:"intelligence,omitempty"`
+	Drift        drift.DriftResult         `json:"drift"`
+	Intelligence *drift.IntelligenceResult `json:"intelligence,omitempty"`
 }
 
 func handleDrift(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult, error) {

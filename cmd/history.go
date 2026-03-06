@@ -15,15 +15,15 @@ import (
 )
 
 var (
-	historyAll        bool
-	historyLimit      int
-	historyProject    string
-	historySince      string
-	historyFormat     string
-	historyExportFmt  string
-	historyWith       int64
-	historyBefore     string
-	historyOutFile    string
+	historyAll       bool
+	historyLimit     int
+	historyProject   string
+	historySince     string
+	historyFormat    string
+	historyExportFmt string
+	historyWith      int64
+	historyBefore    string
+	historyOutFile   string
 )
 
 var historyCmd = &cobra.Command{
