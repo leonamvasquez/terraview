@@ -68,6 +68,15 @@ type Config struct {
 	Rules   RulesConfig   `yaml:"rules"`
 	Output  OutputConfig  `yaml:"output"`
 	Scanner ScannerConfig `yaml:"scanner"`
+	History HistoryConfig `yaml:"history"`
+}
+
+// HistoryConfig configures the scan history feature.
+type HistoryConfig struct {
+	Enabled       bool `yaml:"enabled"`
+	MaxSizeMB     int  `yaml:"max_size_mb"`
+	RetentionDays int  `yaml:"retention_days"`
+	AutoCleanup   bool `yaml:"auto_cleanup"`
 }
 
 // ScannerConfig holds scanner preferences.
@@ -164,6 +173,12 @@ func DefaultConfig() Config {
 		Scanner: ScannerConfig{
 			Default: "",
 		},
+		History: HistoryConfig{
+			Enabled:       true,
+			MaxSizeMB:     100,
+			RetentionDays: 90,
+			AutoCleanup:   true,
+		},
 	}
 }
 
@@ -223,6 +238,14 @@ type fileConfig struct {
 	Rules   *fileRulesConfig   `yaml:"rules"`
 	Output  *fileOutputConfig  `yaml:"output"`
 	Scanner *fileScannerConfig `yaml:"scanner"`
+	History *fileHistoryConfig `yaml:"history"`
+}
+
+type fileHistoryConfig struct {
+	Enabled       *bool `yaml:"enabled"`
+	MaxSizeMB     *int  `yaml:"max_size_mb"`
+	RetentionDays *int  `yaml:"retention_days"`
+	AutoCleanup   *bool `yaml:"auto_cleanup"`
 }
 
 type fileLLMConfig struct {
@@ -437,6 +460,21 @@ func (f *fileConfig) merge(defaults Config) Config {
 	if f.Scanner != nil {
 		if f.Scanner.Default != nil && *f.Scanner.Default != "" {
 			cfg.Scanner.Default = *f.Scanner.Default
+		}
+	}
+
+	if f.History != nil {
+		if f.History.Enabled != nil {
+			cfg.History.Enabled = *f.History.Enabled
+		}
+		if f.History.MaxSizeMB != nil {
+			cfg.History.MaxSizeMB = *f.History.MaxSizeMB
+		}
+		if f.History.RetentionDays != nil {
+			cfg.History.RetentionDays = *f.History.RetentionDays
+		}
+		if f.History.AutoCleanup != nil {
+			cfg.History.AutoCleanup = *f.History.AutoCleanup
 		}
 	}
 

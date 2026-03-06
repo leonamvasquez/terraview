@@ -21,6 +21,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/contextanalysis"
 	"github.com/leonamvasquez/terraview/internal/diagram"
+	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
@@ -232,6 +233,9 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 	}
 
 	result := mergeAndScore(rc, resources, topoGraph, sr)
+
+	// Auto-record to history — fail-safe, never blocks scan
+	recordToHistory(rc, result)
 
 	exitCode, err := renderOutput(rc, result, sr.scannerResult)
 	if err != nil {
@@ -942,4 +946,47 @@ func filterDisabledRules(findings []rules.Finding, disabled []string) []rules.Fi
 		}
 	}
 	return filtered
+}
+
+// recordToHistory stores the scan result in the local history database.
+// Fail-safe: any error is logged to stderr and silently ignored.
+func recordToHistory(rc reviewConfig, result aggregator.ReviewResult) {
+	if !rc.cfg.History.Enabled {
+		return
+	}
+
+	store, err := history.NewStore(history.DefaultDBPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[history] %v\n", err)
+		return
+	}
+	defer store.Close()
+
+	rec := history.NewRecordFromResult(
+		result,
+		resolveProjectDir(),
+		rc.scannerName,
+		rc.aiProvider,
+		rc.aiModel,
+		0, // duration_ms: populated per-pipeline if needed
+		staticOnly,
+	)
+
+	if _, err := store.Insert(rec); err != nil {
+		fmt.Fprintf(os.Stderr, "[history] %v\n", err)
+		return
+	}
+
+	// Auto-cleanup if enabled
+	if rc.cfg.History.AutoCleanup {
+		cleanupCfg := history.CleanupConfig{
+			RetentionDays: rc.cfg.History.RetentionDays,
+			MaxSizeMB:     rc.cfg.History.MaxSizeMB,
+		}
+		if removed, err := store.Cleanup(cleanupCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "[history] cleanup: %v\n", err)
+		} else if removed > 0 {
+			logVerbose("History cleanup: removed %d old records", removed)
+		}
+	}
 }
