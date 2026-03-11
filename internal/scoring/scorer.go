@@ -109,8 +109,22 @@ func (s *Scorer) computeCategoryScore(findings []rules.Finding, totalResources i
 		}
 	}
 
-	penaltyRatio := weightedSum / math.Max(float64(totalResources), 1.0)
-	score := 10.0 - math.Min(penaltyRatio*2.0, 10.0)
+	// Density penalty: proportional to findings-per-resource (original formula)
+	densityPenalty := (weightedSum / math.Max(float64(totalResources), 1.0)) * 2.0
+
+	// Volume penalty: logarithmic penalty based on absolute count of findings.
+	// Prevents large infrastructures from diluting many HIGH/CRITICAL findings.
+	// Uses high-equivalent count: normalises all findings relative to the HIGH weight.
+	highWeight := s.severityWeights[rules.SeverityHigh]
+	if highWeight == 0 {
+		highWeight = 1.0
+	}
+	highEquivCount := weightedSum / highWeight
+	volumePenalty := math.Log2(1+highEquivCount) * 0.5
+
+	// Take the harsher of the two penalties
+	penalty := math.Max(densityPenalty, volumePenalty)
+	score := 10.0 - math.Min(penalty, 10.0)
 
 	// MEDIUM alone can never reduce below 5.0
 	if onlyMediumOrBelow && score < 5.0 {

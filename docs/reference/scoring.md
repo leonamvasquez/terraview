@@ -55,18 +55,42 @@ Calculada separadamente, mas **não aparece como score individual** na saída. E
 
 Para cada eixo (Segurança, Conformidade, Manutenibilidade, Confiabilidade):
 
+### Penalidade Híbrida: Densidade + Volume
+
+O score usa o **maior** entre duas penalidades complementares:
+
 ```
 weighted_sum = Σ peso_severidade(finding)    para cada finding na categoria
-penalty_ratio = weighted_sum / max(total_recursos, 1)
-score = 10.0 − min(penalty_ratio × 2.0, 10.0)
+
+# Penalidade por densidade (proporcional a findings/recursos)
+density_penalty = (weighted_sum / max(total_recursos, 1)) × 2.0
+
+# Penalidade por volume (logarítmica, absoluta)
+high_equiv_count = weighted_sum / peso_HIGH
+volume_penalty   = log₂(1 + high_equiv_count) × 0.5
+
+# Toma a pior das duas
+penalty = max(density_penalty, volume_penalty)
+score   = 10.0 − min(penalty, 10.0)
 ```
 
 Onde:
 
 - `peso_severidade` é o peso configurável de cada nível de severidade
 - `total_recursos` é o número total de recursos no plano Terraform
-- `2.0` é o **fator de escala** (hardcoded)
+- `peso_HIGH` é o peso de HIGH (padrão: 3.0), usado para normalizar findings em "equivalentes HIGH"
+- `2.0` é o **fator de escala** da penalidade por densidade (hardcoded)
+- `0.5` é o **fator de escala** da penalidade por volume (hardcoded)
 - O resultado é arredondado para 1 casa decimal e limitado a `[0.0, 10.0]`
+
+### Por que duas penalidades?
+
+| Penalidade | Domina quando... | Exemplo |
+|------------|-------------------|--------|
+| **Densidade** | Infraestrutura pequena com muitos problemas | 5 HIGH em 5 recursos → density=6.0 vs volume=0.9 |
+| **Volume** | Infraestrutura grande com muitos problemas absolutos | 174 HIGH em 380 recursos → density=2.7 vs volume=3.7 |
+
+Isso evita que infraestruturas grandes "diluam" centenas de findings HIGH em scores próximos de 10.
 
 **Sem findings = 10.0.** Sem recursos = 10.0.
 

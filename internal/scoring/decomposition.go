@@ -149,8 +149,20 @@ func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int)
 		impacts = append(impacts, impact)
 	}
 
+	// Density penalty
+	densityPenalty := (weightedSum / math.Max(float64(totalResources), 1.0)) * 2.0
 	penaltyRatio := weightedSum / math.Max(float64(totalResources), 1.0)
-	rawScore := 10.0 - math.Min(penaltyRatio*2.0, 10.0)
+
+	// Volume penalty: logarithmic, prevents large infra from diluting many findings
+	highWeight := s.severityWeights[rules.SeverityHigh]
+	if highWeight == 0 {
+		highWeight = 1.0
+	}
+	highEquivCount := weightedSum / highWeight
+	volumePenalty := math.Log2(1+highEquivCount) * 0.5
+
+	penalty := math.Max(densityPenalty, volumePenalty)
+	rawScore := 10.0 - math.Min(penalty, 10.0)
 
 	floorApplied := ""
 	if onlyMediumOrBelow && rawScore < 5.0 {
