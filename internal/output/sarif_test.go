@@ -204,13 +204,13 @@ func TestBuildSARIF_WithRemediation(t *testing.T) {
 		},
 	}
 	report := buildSARIF(result, "test")
-	res := report.Runs[0].Results[0]
+	rule := report.Runs[0].Tool.Driver.Rules[0]
 
-	if len(res.Fixes) != 1 {
-		t.Fatalf("expected 1 fix, got %d", len(res.Fixes))
+	if rule.Help == nil {
+		t.Fatalf("expected rule.Help to be set, got nil")
 	}
-	if res.Fixes[0].Description.Text != "Restrict ingress to trusted CIDRs" {
-		t.Errorf("fix text = %q", res.Fixes[0].Description.Text)
+	if rule.Help.Text != "Restrict ingress to trusted CIDRs" {
+		t.Errorf("rule.Help.Text = %q, want %q", rule.Help.Text, "Restrict ingress to trusted CIDRs")
 	}
 }
 
@@ -221,10 +221,10 @@ func TestBuildSARIF_WithoutRemediation(t *testing.T) {
 		},
 	}
 	report := buildSARIF(result, "test")
-	res := report.Runs[0].Results[0]
+	rule := report.Runs[0].Tool.Driver.Rules[0]
 
-	if len(res.Fixes) != 0 {
-		t.Errorf("expected 0 fixes, got %d", len(res.Fixes))
+	if rule.Help != nil {
+		t.Errorf("expected rule.Help to be nil, got %q", rule.Help.Text)
 	}
 }
 

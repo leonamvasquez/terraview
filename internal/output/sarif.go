@@ -41,11 +41,12 @@ type SARIFDriver struct {
 
 // SARIFRule is a rule definition in SARIF.
 type SARIFRule struct {
-	ID               string             `json:"id"`
-	Name             string             `json:"name"`
-	ShortDescription SARIFMessage       `json:"shortDescription"`
-	DefaultConfig    SARIFDefaultConfig `json:"defaultConfiguration"`
-	Properties       SARIFRuleProps     `json:"properties,omitempty"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	ShortDescription SARIFMessage             `json:"shortDescription"`
+	DefaultConfig    SARIFDefaultConfig       `json:"defaultConfiguration"`
+	Help             *SARIFMultiformatMessage `json:"help,omitempty"`
+	Properties       SARIFRuleProps           `json:"properties,omitempty"`
 }
 
 // SARIFDefaultConfig is the default severity config.
@@ -58,6 +59,11 @@ type SARIFRuleProps struct {
 	Category string `json:"category,omitempty"`
 }
 
+// SARIFMultiformatMessage supports text (and optionally markdown) content.
+type SARIFMultiformatMessage struct {
+	Text string `json:"text"`
+}
+
 // SARIFResult is a single finding result.
 type SARIFResult struct {
 	RuleID    string          `json:"ruleId"`
@@ -65,7 +71,6 @@ type SARIFResult struct {
 	Level     string          `json:"level"`
 	Message   SARIFMessage    `json:"message"`
 	Locations []SARIFLocation `json:"locations,omitempty"`
-	Fixes     []SARIFFix      `json:"fixes,omitempty"`
 }
 
 // SARIFMessage is a text message.
@@ -87,11 +92,6 @@ type SARIFPhysicalLocation struct {
 // SARIFArtifactLocation is the file URI.
 type SARIFArtifactLocation struct {
 	URI string `json:"uri"`
-}
-
-// SARIFFix is a suggested fix.
-type SARIFFix struct {
-	Description SARIFMessage `json:"description"`
 }
 
 // WriteSARIF writes the review result as a SARIF 2.1.0 report.
@@ -120,7 +120,7 @@ func buildSARIF(result aggregator.ReviewResult, version string) SARIFReport {
 	for _, f := range result.Findings {
 		if _, exists := rulesMap[f.RuleID]; !exists {
 			rulesMap[f.RuleID] = len(sarifRules)
-			sarifRules = append(sarifRules, SARIFRule{
+			rule := SARIFRule{
 				ID:   f.RuleID,
 				Name: f.RuleID,
 				ShortDescription: SARIFMessage{
@@ -132,7 +132,11 @@ func buildSARIF(result aggregator.ReviewResult, version string) SARIFReport {
 				Properties: SARIFRuleProps{
 					Category: f.Category,
 				},
-			})
+			}
+			if f.Remediation != "" {
+				rule.Help = &SARIFMultiformatMessage{Text: f.Remediation}
+			}
+			sarifRules = append(sarifRules, rule)
 		}
 	}
 
@@ -157,14 +161,6 @@ func buildSARIF(result aggregator.ReviewResult, version string) SARIFReport {
 							URI: f.Resource,
 						},
 					},
-				},
-			}
-		}
-
-		if f.Remediation != "" {
-			r.Fixes = []SARIFFix{
-				{
-					Description: SARIFMessage{Text: f.Remediation},
 				},
 			}
 		}
