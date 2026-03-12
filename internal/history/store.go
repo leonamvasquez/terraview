@@ -316,7 +316,11 @@ func (s *Store) queryScans(query string, args ...interface{}) ([]ScanRecord, err
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
-		r.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		var parseErr error
+		r.Timestamp, parseErr = time.Parse(time.RFC3339, ts)
+		if parseErr != nil {
+			return nil, fmt.Errorf("scan row: invalid timestamp %q: %w", ts, parseErr)
+		}
 		if planHash.Valid {
 			r.PlanHash = planHash.String
 		}

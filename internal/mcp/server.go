@@ -8,6 +8,17 @@ import (
 	"log"
 )
 
+const (
+	// scannerBufSize is the initial buffer size for the JSON-RPC scanner.
+	scannerBufSize = 64 * 1024 // 64 KB
+
+	// maxMessageSize is the maximum allowed size for a single JSON-RPC message.
+	maxMessageSize = 10 * 1024 * 1024 // 10 MB
+
+	// mcpProtocolVersion is the MCP protocol version supported by this server.
+	mcpProtocolVersion = "2025-06-18"
+)
+
 // Server is a Model Context Protocol server that communicates over stdio.
 type Server struct {
 	version string
@@ -30,8 +41,7 @@ func NewServer(version string, r io.Reader, w io.Writer, logger *log.Logger) *Se
 // It returns nil on EOF.
 func (s *Server) Serve() error {
 	scanner := bufio.NewScanner(s.reader)
-	// Allow large messages (up to 10 MB)
-	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+	scanner.Buffer(make([]byte, scannerBufSize), maxMessageSize)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -87,7 +97,7 @@ func (s *Server) dispatch(req *Request) Response {
 
 func (s *Server) handleInitialize(req *Request) Response {
 	result := InitializeResult{
-		ProtocolVersion: "2025-06-18",
+		ProtocolVersion: mcpProtocolVersion,
 		Capabilities: ServerCaps{
 			Tools: &ToolsCap{},
 		},
@@ -128,6 +138,20 @@ func (s *Server) handleToolsCall(req *Request) Response {
 		result, err = handleDiagram(params.Arguments, s.logger)
 	case "terraview_drift":
 		result, err = handleDrift(params.Arguments, s.logger)
+	case "terraview_history":
+		result, err = handleHistory(params.Arguments, s.logger)
+	case "terraview_history_trend":
+		result, err = handleHistoryTrend(params.Arguments, s.logger)
+	case "terraview_history_compare":
+		result, err = handleHistoryCompare(params.Arguments, s.logger)
+	case "terraview_impact":
+		result, err = handleImpact(params.Arguments, s.logger)
+	case "terraview_cache":
+		result, err = handleCache(params.Arguments, s.logger)
+	case "terraview_scanners":
+		result, err = handleScanners(params.Arguments, s.logger)
+	case "terraview_version":
+		result, err = handleVersion(params.Arguments, s.logger, s.version)
 	default:
 		return NewErrorResponse(req.ID, CodeInvalidParams, "unknown tool: "+params.Name)
 	}

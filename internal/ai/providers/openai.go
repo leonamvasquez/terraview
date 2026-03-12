@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
@@ -39,30 +38,10 @@ type openaiProvider struct {
 
 // NewOpenAI creates a new OpenAI provider.
 func NewOpenAI(cfg ai.ProviderConfig) (ai.Provider, error) {
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("OPENAI_API_KEY")
-	}
-	if cfg.Model == "" {
-		cfg.Model = "gpt-4o-mini"
-	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.openai.com"
-	}
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 4096
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 2
-	}
-	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 120
-	}
-
+	applyDefaults(&cfg, "OPENAI_API_KEY", "gpt-4o-mini", "https://api.openai.com")
 	return &openaiProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
+		cfg:    cfg,
+		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }
 

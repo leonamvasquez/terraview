@@ -52,6 +52,78 @@ func AllTools() []ToolDef {
 				}
 			}`),
 		},
+		{
+			Name:        "terraview_history",
+			Description: "Query scan history for a Terraform project. Returns past scan records with scores and finding counts.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"dir":   { "type": "string", "description": "Terraform workspace directory.", "default": "." },
+					"limit": { "type": "integer", "description": "Maximum number of records to return.", "default": 10 },
+					"since": { "type": "string", "description": "Only return scans after this date (YYYY-MM-DD)." }
+				}
+			}`),
+		},
+		{
+			Name:        "terraview_history_trend",
+			Description: "Score trends over time for a Terraform project. Shows direction and deltas for security metrics.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"dir":   { "type": "string", "description": "Terraform workspace directory.", "default": "." },
+					"limit": { "type": "integer", "description": "Maximum number of records to analyze.", "default": 20 }
+				}
+			}`),
+		},
+		{
+			Name:        "terraview_history_compare",
+			Description: "Compare two scan records side by side. Shows score deltas and metric changes.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"dir":    { "type": "string", "description": "Terraform workspace directory.", "default": "." },
+					"before": { "type": "integer", "description": "Scan ID for the older scan. If omitted with after, compares the 2 most recent scans." },
+					"after":  { "type": "integer", "description": "Scan ID for the newer scan. If omitted with before, compares the 2 most recent scans." }
+				}
+			}`),
+		},
+		{
+			Name:        "terraview_impact",
+			Description: "Blast radius and dependency impact analysis. Shows how changes propagate through infrastructure.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"dir":  { "type": "string", "description": "Terraform workspace directory.", "default": "." },
+					"plan": { "type": "string", "description": "Path to pre-generated plan JSON." }
+				}
+			}`),
+		},
+		{
+			Name:        "terraview_cache",
+			Description: "AI cache status and management. View cache stats or clear cached AI analysis results.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"action": { "type": "string", "enum": ["status", "clear"], "description": "Cache action to perform.", "default": "status" }
+				}
+			}`),
+		},
+		{
+			Name:        "terraview_scanners",
+			Description: "List available security scanners and their installation status.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {}
+			}`),
+		},
+		{
+			Name:        "terraview_version",
+			Description: "Show terraview version and environment information.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {}
+			}`),
+		},
 	}
 }
 

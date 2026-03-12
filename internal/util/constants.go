@@ -1,8 +1,20 @@
 package util
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 const (
+	// DirPerm is the default permission for directories.
+	DirPerm os.FileMode = 0755
+
+	// FilePerm is the default permission for regular files.
+	FilePerm os.FileMode = 0644
+
+	// FilePermSecret is the permission for files containing sensitive data.
+	FilePermSecret os.FileMode = 0600
+
 	// DefaultOllamaURL is the default base URL for the Ollama API.
 	DefaultOllamaURL = "http://localhost:11434"
 

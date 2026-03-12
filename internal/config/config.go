@@ -35,7 +35,9 @@ func SaveGlobalLLMProvider(provider, model string) error {
 	// Read existing raw YAML to avoid overwriting other sections
 	existing := make(map[string]interface{})
 	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
+		if unmarshalErr := yaml.Unmarshal(data, &existing); unmarshalErr != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: failed to parse existing config %s: %v (will overwrite)\n", path, unmarshalErr)
+		}
 	}
 
 	// Update llm.provider and llm.model only
@@ -487,7 +489,9 @@ func SaveDefaultScanner(name string) error {
 
 	existing := make(map[string]interface{})
 	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
+		if unmarshalErr := yaml.Unmarshal(data, &existing); unmarshalErr != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: failed to parse existing config %s: %v (will overwrite)\n", path, unmarshalErr)
+		}
 	}
 
 	sc, _ := existing["scanner"].(map[string]interface{})

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
@@ -71,30 +70,10 @@ type geminiResponse struct {
 
 // NewGemini creates a new Gemini provider.
 func NewGemini(cfg ai.ProviderConfig) (ai.Provider, error) {
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("GEMINI_API_KEY")
-	}
-	if cfg.Model == "" {
-		cfg.Model = "gemini-2.5-flash"
-	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://generativelanguage.googleapis.com"
-	}
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 4096
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 2
-	}
-	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 120
-	}
-
+	applyDefaults(&cfg, "GEMINI_API_KEY", "gemini-2.5-flash", "https://generativelanguage.googleapis.com")
 	return &geminiProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
+		cfg:    cfg,
+		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }
 

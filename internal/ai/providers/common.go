@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -15,13 +17,55 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-// maxResponseBodySize is the upper bound for reading HTTP response bodies
-// from AI provider APIs. Prevents OOM from malformed or malicious responses.
-const maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
+const (
+	// maxResponseBodySize is the upper bound for reading HTTP response bodies
+	// from AI provider APIs. Prevents OOM from malformed or malicious responses.
+	maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
 
-// defaultMaxResources is the default number of resources included in the
-// AI prompt. Plans with more resources are truncated to fit context limits.
-const defaultMaxResources = 30
+	// defaultMaxResources is the default number of resources included in the
+	// AI prompt. Plans with more resources are truncated to fit context limits.
+	defaultMaxResources = 30
+
+	// defaultMaxTokens is the default max output tokens for AI providers.
+	defaultMaxTokens = 4096
+
+	// defaultMaxRetries is the default number of retry attempts for transient errors.
+	defaultMaxRetries = 2
+
+	// defaultTimeoutSecs is the default HTTP timeout for AI provider requests.
+	defaultTimeoutSecs = 120
+)
+
+// applyDefaults fills zero-valued fields in cfg with sensible defaults.
+// envKey is the environment variable name to check for the API key.
+// defaultModel and defaultBaseURL are provider-specific defaults.
+func applyDefaults(cfg *ai.ProviderConfig, envKey, defaultModel, defaultBaseURL string) {
+	if cfg.APIKey == "" && envKey != "" {
+		cfg.APIKey = os.Getenv(envKey)
+	}
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
+	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = defaultBaseURL
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = defaultMaxTokens
+	}
+	if cfg.MaxRetries <= 0 {
+		cfg.MaxRetries = defaultMaxRetries
+	}
+	if cfg.TimeoutSecs <= 0 {
+		cfg.TimeoutSecs = defaultTimeoutSecs
+	}
+}
+
+// newHTTPClient creates an HTTP client with the configured timeout.
+func newHTTPClient(timeoutSecs int) *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(timeoutSecs) * time.Second,
+	}
+}
 
 // readResponseBody reads an HTTP response body with a size limit to prevent OOM.
 func readResponseBody(body io.Reader) ([]byte, error) {

@@ -91,8 +91,8 @@ func TestServer_ToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 4 {
-		t.Errorf("expected 4 tools, got %d", len(tools))
+	if len(tools) != 11 {
+		t.Errorf("expected 11 tools, got %d", len(tools))
 	}
 }
 
@@ -285,8 +285,8 @@ func TestServer_FullSequence(t *testing.T) {
 		t.Fatal("tools/list should have result")
 	}
 	tools := result2["tools"].([]interface{})
-	if len(tools) != 4 {
-		t.Errorf("expected 4 tools, got %d", len(tools))
+	if len(tools) != 11 {
+		t.Errorf("expected 11 tools, got %d", len(tools))
 	}
 
 	// Third: tools/call for scan with nonexistent dir — should be tool error, not protocol error

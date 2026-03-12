@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
@@ -65,30 +64,10 @@ type claudeResponse struct {
 
 // NewClaude creates a new Claude provider.
 func NewClaude(cfg ai.ProviderConfig) (ai.Provider, error) {
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-	}
-	if cfg.Model == "" {
-		cfg.Model = "claude-haiku-4-5"
-	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.anthropic.com"
-	}
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 4096
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 2
-	}
-	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 120
-	}
-
+	applyDefaults(&cfg, "ANTHROPIC_API_KEY", "claude-haiku-4-5", "https://api.anthropic.com")
 	return &claudeProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
+		cfg:    cfg,
+		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }
 

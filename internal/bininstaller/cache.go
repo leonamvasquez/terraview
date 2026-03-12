@@ -2,6 +2,7 @@ package bininstaller
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -37,7 +38,9 @@ func LoadCache() *Cache {
 	if err != nil {
 		return c
 	}
-	_ = json.Unmarshal(data, c)
+	if err := json.Unmarshal(data, c); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to parse scanner cache %s: %v\n", cachePath(), err)
+	}
 	if c.Scanners == nil {
 		c.Scanners = make(map[string]CacheEntry)
 	}

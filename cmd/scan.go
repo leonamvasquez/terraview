@@ -254,7 +254,7 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 	logVerbose("Config loaded from %s", workDir)
 
 	resolvedPlan := planFile
-	if resolvedPlan == "" {
+	if resolvedPlan == "" && findingsFile == "" {
 		generated, _, err := generatePlan()
 		if err != nil {
 			return reviewConfig{}, err

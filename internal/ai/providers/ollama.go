@@ -60,27 +60,15 @@ type ollamaResponse struct {
 
 // NewOllama creates a new Ollama provider.
 func NewOllama(cfg ai.ProviderConfig) (ai.Provider, error) {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = util.DefaultOllamaURL
-	}
-	if cfg.Model == "" {
-		cfg.Model = "llama3.1:8b" // aligned with config.DefaultConfig()
-	}
-	if cfg.MaxTokens <= 0 {
+	applyDefaults(&cfg, "", "llama3.1:8b", util.DefaultOllamaURL)
+	// Ollama uses smaller default tokens since it runs locally
+	if cfg.MaxTokens == defaultMaxTokens {
 		cfg.MaxTokens = 2048
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 2
-	}
-	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 120
 	}
 
 	return &ollamaProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
+		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }
 

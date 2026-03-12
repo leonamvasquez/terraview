@@ -23,8 +23,9 @@ Usage:
 }
 
 var mcpServeCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "Start the MCP server over stdio",
+	Use:     "serve",
+	Aliases: []string{"server"},
+	Short:   "Start the MCP server over stdio",
 	Long: `Starts a Model Context Protocol server that reads JSON-RPC 2.0
 messages from stdin and writes responses to stdout.
 
@@ -44,10 +45,17 @@ Register with Cursor (.cursor/mcp.json):
   }
 
 Tools exposed:
-  terraview_scan      Security scan with scorecard
-  terraview_explain   AI infrastructure explanation
-  terraview_diagram   ASCII infrastructure diagram
-  terraview_drift     Drift detection and classification`,
+  terraview_scan             Security scan with scorecard
+  terraview_explain          AI infrastructure explanation
+  terraview_diagram          ASCII infrastructure diagram
+  terraview_drift            Drift detection and classification
+  terraview_history          Query scan history
+  terraview_history_trend    Score trends over time
+  terraview_history_compare  Compare two scans side by side
+  terraview_impact           Blast radius / dependency impact
+  terraview_cache            AI cache status and management
+  terraview_scanners         List available security scanners
+  terraview_version          Version and environment info`,
 	RunE: runMCPServe,
 }
 

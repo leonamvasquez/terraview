@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestAllTools_Returns4(t *testing.T) {
+func TestAllTools_Returns11(t *testing.T) {
 	tools := AllTools()
-	if len(tools) != 4 {
-		t.Fatalf("len(AllTools()) = %d, want 4", len(tools))
+	if len(tools) != 11 {
+		t.Fatalf("len(AllTools()) = %d, want 11", len(tools))
 	}
 }
 
@@ -25,10 +25,17 @@ func TestAllTools_UniqueNames(t *testing.T) {
 
 func TestAllTools_ExpectedNames(t *testing.T) {
 	expected := map[string]bool{
-		"terraview_scan":    false,
-		"terraview_explain": false,
-		"terraview_diagram": false,
-		"terraview_drift":   false,
+		"terraview_scan":            false,
+		"terraview_explain":         false,
+		"terraview_diagram":         false,
+		"terraview_drift":           false,
+		"terraview_history":         false,
+		"terraview_history_trend":   false,
+		"terraview_history_compare": false,
+		"terraview_impact":          false,
+		"terraview_cache":           false,
+		"terraview_scanners":        false,
+		"terraview_version":         false,
 	}
 
 	for _, tool := range AllTools() {
@@ -73,9 +80,12 @@ func TestAllTools_ValidJSONSchema(t *testing.T) {
 				t.Error("properties should be an object")
 			}
 
-			// All tools should have at least dir property
-			if _, ok := propsMap["dir"]; !ok {
-				t.Error("schema should have 'dir' property")
+			// Most tools have dir property, but some (scanners, version, cache) may not
+			noDir := map[string]bool{"terraview_scanners": true, "terraview_version": true, "terraview_cache": true}
+			if !noDir[tool.Name] {
+				if _, ok := propsMap["dir"]; !ok {
+					t.Error("schema should have 'dir' property")
+				}
 			}
 		})
 	}

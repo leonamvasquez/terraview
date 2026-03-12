@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
@@ -66,30 +65,10 @@ type chatResponse struct {
 
 // NewDeepSeek creates a new DeepSeek provider.
 func NewDeepSeek(cfg ai.ProviderConfig) (ai.Provider, error) {
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("DEEPSEEK_API_KEY")
-	}
-	if cfg.Model == "" {
-		cfg.Model = "deepseek-v3.2"
-	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.deepseek.com"
-	}
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 4096
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 2
-	}
-	if cfg.TimeoutSecs <= 0 {
-		cfg.TimeoutSecs = 120
-	}
-
+	applyDefaults(&cfg, "DEEPSEEK_API_KEY", "deepseek-v3.2", "https://api.deepseek.com")
 	return &deepseekProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
+		cfg:    cfg,
+		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }
 
