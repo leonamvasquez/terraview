@@ -268,3 +268,48 @@ func TestScorer_ReliabilityBlending(t *testing.T) {
 		t.Errorf("security should be affected by reliability finding, got %.1f", score.SecurityScore)
 	}
 }
+
+// TestScorer_LargeInfraVolumePenalty ensures that many HIGH findings on a
+// large plan are not diluted to near-perfect scores. This was the original
+// bug: 174 HIGH on 380 resources scored 8.2/10 with pure density formula.
+func TestScorer_LargeInfraVolumePenalty(t *testing.T) {
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
+	findings := make([]rules.Finding, 0, 174)
+	for i := 0; i < 174; i++ {
+		findings = append(findings, rules.Finding{
+			Severity: rules.SeverityHigh,
+			Category: rules.CategorySecurity,
+		})
+	}
+
+	score := scorer.Calculate(findings, 380)
+
+	// With volume penalty: log2(1+174)*0.5 ≈ 3.73 → score ≈ 6.3
+	// Must be significantly below 8.0 (old formula gave 8.2)
+	if score.SecurityScore >= 7.5 {
+		t.Errorf("174 HIGH on 380 resources should score below 7.5, got %.1f (volume penalty not effective)", score.SecurityScore)
+	}
+	// But should not be below 2.0 (HIGH floor)
+	if score.SecurityScore < 2.0 {
+		t.Errorf("HIGH-only floor violated: got %.1f", score.SecurityScore)
+	}
+}
+
+// TestScorer_SmallPlanDensityStillWorks ensures the density formula still
+// dominates for small plans where it matters more.
+func TestScorer_SmallPlanDensityStillWorks(t *testing.T) {
+	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
+	findings := []rules.Finding{
+		{Severity: rules.SeverityHigh, Category: rules.CategorySecurity},
+		{Severity: rules.SeverityHigh, Category: rules.CategorySecurity},
+	}
+
+	score := scorer.Calculate(findings, 2)
+
+	// density = (2*3/2)*2 = 6.0 → score = 4.0
+	// volume = log2(1+2)*0.5 = 0.79 → score = 9.2
+	// max(density, volume) = density → score = 4.0
+	if score.SecurityScore > 5.0 {
+		t.Errorf("2 HIGH on 2 resources should be significantly penalized, got %.1f", score.SecurityScore)
+	}
+}

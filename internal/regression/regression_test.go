@@ -399,3 +399,27 @@ func TestExitCode_Matrix(t *testing.T) {
 		})
 	}
 }
+
+// ================================================================
+// VOLUME PENALTY: large infra dilution fix
+// ================================================================
+
+func TestScoring_LargeInfraNotDiluted(t *testing.T) {
+	s := scoring.NewScorerWithWeights(5, 3, 1, 0.5)
+	findings := make([]rules.Finding, 0, 174)
+	for i := 0; i < 174; i++ {
+		findings = append(findings, rules.Finding{
+			Severity: rules.SeverityHigh,
+			Category: rules.CategorySecurity,
+		})
+	}
+	sc := s.Calculate(findings, 380)
+	// Old formula: 10-(174*3/380*2)=7.26 → too high
+	// New formula: volume penalty log2(175)*0.5 ≈ 3.73 → ~6.3
+	if sc.SecurityScore >= 7.5 {
+		t.Errorf("174 HIGH on 380 resources should be < 7.5, got %.1f", sc.SecurityScore)
+	}
+	if sc.SecurityScore < 2.0 {
+		t.Errorf("HIGH floor violated: got %.1f", sc.SecurityScore)
+	}
+}
