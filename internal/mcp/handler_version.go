@@ -14,7 +14,7 @@ type versionResponse struct {
 	Arch            string `json:"arch"`
 }
 
-func handleVersion(rawArgs json.RawMessage, logger *log.Logger, serverVersion string) (ToolsCallResult, error) {
+func handleVersion(_ json.RawMessage, logger *log.Logger, serverVersion string) (ToolsCallResult, error) {
 	resp := versionResponse{
 		Version:         serverVersion,
 		ProtocolVersion: "2025-06-18",

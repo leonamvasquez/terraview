@@ -18,8 +18,9 @@ func newTestServer(input string) (*Server, *bytes.Buffer, *bytes.Buffer) {
 
 func parseResponses(t *testing.T, buf *bytes.Buffer) []map[string]interface{} {
 	t.Helper()
-	var responses []map[string]interface{}
-	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	responses := make([]map[string]interface{}, 0, len(lines))
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}

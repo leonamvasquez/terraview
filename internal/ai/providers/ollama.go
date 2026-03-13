@@ -67,7 +67,7 @@ func NewOllama(cfg ai.ProviderConfig) (ai.Provider, error) {
 	}
 
 	return &ollamaProvider{
-		cfg: cfg,
+		cfg:    cfg,
 		client: newHTTPClient(cfg.TimeoutSecs),
 	}, nil
 }

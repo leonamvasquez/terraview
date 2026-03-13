@@ -14,7 +14,7 @@ type scannerInfo struct {
 	Version   string `json:"version,omitempty"`
 }
 
-func handleScanners(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult, error) {
+func handleScanners(_ json.RawMessage, logger *log.Logger) (ToolsCallResult, error) {
 	all := scanner.All()
 
 	names := make([]string, 0, len(all))

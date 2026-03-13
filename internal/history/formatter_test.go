@@ -21,12 +21,12 @@ func TestFormatList_Pretty_EmptyList(t *testing.T) {
 func TestFormatList_Pretty_WithRecords(t *testing.T) {
 	records := []ScanRecord{
 		{
-			ID:           1,
-			Timestamp:    time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
-			ProjectDir:   "/tmp/proj",
-			Scanner:      "checkov",
-			Provider:     "ollama",
-			ScoreOverall: 8.5,
+			ID:            1,
+			Timestamp:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+			ProjectDir:    "/tmp/proj",
+			Scanner:       "checkov",
+			Provider:      "ollama",
+			ScoreOverall:  8.5,
 			ScoreSecurity: 7.0,
 			CountCritical: 0,
 			CountHigh:     2,
@@ -57,12 +57,12 @@ func TestFormatList_Pretty_WithRecords(t *testing.T) {
 func TestFormatList_Pretty_StaticOnly(t *testing.T) {
 	records := []ScanRecord{
 		{
-			ID:           1,
-			Timestamp:    time.Now(),
-			ProjectDir:   "/tmp/proj",
-			Scanner:      "checkov",
-			StaticOnly:   true,
-			ScoreOverall: 7.0,
+			ID:            1,
+			Timestamp:     time.Now(),
+			ProjectDir:    "/tmp/proj",
+			Scanner:       "checkov",
+			StaticOnly:    true,
+			ScoreOverall:  7.0,
 			ScoreSecurity: 6.0,
 		},
 	}
@@ -163,12 +163,12 @@ func TestFormatList_CSV_Headers(t *testing.T) {
 func TestFormatList_CSV_Values(t *testing.T) {
 	records := []ScanRecord{
 		{
-			ID:           1,
-			Timestamp:    time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
-			ProjectDir:   "/tmp/proj",
-			Scanner:      "checkov",
-			Provider:     "ollama",
-			ScoreOverall: 8.0,
+			ID:            1,
+			Timestamp:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+			ProjectDir:    "/tmp/proj",
+			Scanner:       "checkov",
+			Provider:      "ollama",
+			ScoreOverall:  8.0,
 			CountCritical: 2,
 		},
 	}
