@@ -136,7 +136,7 @@ func handleScan(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult, e
 	if effectiveAI {
 		go func() {
 			start := time.Now()
-			findings, err := runMCPContextAnalysis(resources, topoGraph, cfg, planPath, logger)
+			findings, err := runMCPContextAnalysis(resources, topoGraph, cfg, logger)
 			aiCh <- aiOutput{
 				findings: findings,
 				err:      err,
@@ -261,7 +261,6 @@ func runMCPContextAnalysis(
 	resources []parser.NormalizedResource,
 	graph *topology.Graph,
 	cfg config.Config,
-	planPath string,
 	logger *log.Logger,
 ) ([]rules.Finding, error) {
 	providerName := cfg.LLM.Provider

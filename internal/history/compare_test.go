@@ -121,13 +121,13 @@ func TestDirectionArrow_Threshold(t *testing.T) {
 		higherIsBetter bool
 		want           string
 	}{
-		{0.005, true, "→"},   // Below threshold
-		{-0.005, true, "→"},  // Below threshold
-		{0.02, true, "↑"},    // Above threshold, higher better
-		{-0.02, true, "↓"},   // Above threshold, lower = worse
-		{0.02, false, "↓"},   // Above threshold, higher is worse for counts
-		{-0.02, false, "↑"},  // Above threshold, lower is better for counts
-		{0.0, true, "→"},     // Exact zero
+		{0.005, true, "→"},  // Below threshold
+		{-0.005, true, "→"}, // Below threshold
+		{0.02, true, "↑"},   // Above threshold, higher better
+		{-0.02, true, "↓"},  // Above threshold, lower = worse
+		{0.02, false, "↓"},  // Above threshold, higher is worse for counts
+		{-0.02, false, "↑"}, // Above threshold, lower is better for counts
+		{0.0, true, "→"},    // Exact zero
 	}
 
 	for _, tt := range tests {

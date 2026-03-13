@@ -29,10 +29,10 @@ func CompareTwoScans(label string, oldScan, newScan ScanRecord) CompareResult {
 		OldScan: oldScan,
 		NewScan: newScan,
 		Deltas: []DeltaRow{
-			scoreRow("Overall", oldScan.ScoreOverall, newScan.ScoreOverall, true),
-			scoreRow("Security", oldScan.ScoreSecurity, newScan.ScoreSecurity, true),
-			scoreRow("Compliance", oldScan.ScoreCompliance, newScan.ScoreCompliance, true),
-			scoreRow("Maintain", oldScan.ScoreMaintain, newScan.ScoreMaintain, true),
+			scoreRow("Overall", oldScan.ScoreOverall, newScan.ScoreOverall),
+			scoreRow("Security", oldScan.ScoreSecurity, newScan.ScoreSecurity),
+			scoreRow("Compliance", oldScan.ScoreCompliance, newScan.ScoreCompliance),
+			scoreRow("Maintain", oldScan.ScoreMaintain, newScan.ScoreMaintain),
 			countRow("CRITICAL", float64(oldScan.CountCritical), float64(newScan.CountCritical)),
 			countRow("HIGH", float64(oldScan.CountHigh), float64(newScan.CountHigh)),
 			countRow("MEDIUM", float64(oldScan.CountMedium), float64(newScan.CountMedium)),
@@ -43,9 +43,9 @@ func CompareTwoScans(label string, oldScan, newScan ScanRecord) CompareResult {
 
 // scoreRow creates a delta row for a score metric.
 // Higher scores are better, so positive delta = improvement = ↑.
-func scoreRow(metric string, old, new float64, higherIsBetter bool) DeltaRow {
+func scoreRow(metric string, old, new float64) DeltaRow {
 	delta := new - old
-	arrow := directionArrow(delta, higherIsBetter)
+	arrow := directionArrow(delta, true)
 	return DeltaRow{
 		Metric:   metric,
 		OldValue: old,
