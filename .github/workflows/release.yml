@@ -186,7 +186,7 @@ jobs:
 
       # Docker Scout: CVEs CRÍTICOS/HIGH bloqueiam a release
       - name: Docker Scout — CVE scan
-        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1
+        uses: docker/scout-action@1128f02d1e60f339af7306e0e62b9fdc13d9fab9 # v1.20.2
         with:
           command: cves
           image: docker.io/leonamvasquez/terraview:latest
@@ -196,7 +196,7 @@ jobs:
 
       # Docker Scout: recomendações de melhoria da imagem
       - name: Docker Scout — recommendations
-        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1
+        uses: docker/scout-action@1128f02d1e60f339af7306e0e62b9fdc13d9fab9 # v1.20.2
         with:
           command: recommendations
           image: docker.io/leonamvasquez/terraview:latest
