@@ -17,9 +17,9 @@ const customName = "custom"
 
 func init() {
 	ai.Register(customName, NewCustom, ai.ProviderInfo{
-		DisplayName: "Custom (OpenAI-compatible)",
-		RequiresKey: true,
-		EnvVarKey:   "CUSTOM_LLM_API_KEY",
+		DisplayName:  "Custom (OpenAI-compatible)",
+		RequiresKey:  true,
+		EnvVarKey:    "CUSTOM_LLM_API_KEY",
 		DefaultModel: "gpt-4o-mini",
 		SuggestedModels: []string{
 			"gpt-4o-mini",
