@@ -1,0 +1,60 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.0",
+  "planned_values": {
+    "root_module": {
+      "child_modules": [
+        {
+          "address": "module.vpc",
+          "resources": [
+            {"address": "module.vpc.aws_vpc.this", "type": "aws_vpc", "name": "this", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "schema_version": 1, "values": {"cidr_block": "10.0.0.0/16"}},
+            {"address": "module.vpc.aws_subnet.public[0]", "type": "aws_subnet", "name": "public", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "schema_version": 1, "values": {}},
+            {"address": "module.vpc.aws_subnet.private[0]", "type": "aws_subnet", "name": "private", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "schema_version": 1, "values": {}}
+          ]
+        },
+        {
+          "address": "module.rds",
+          "resources": [
+            {"address": "module.rds.aws_db_instance.this", "type": "aws_db_instance", "name": "this", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "schema_version": 1, "values": {}}
+          ]
+        },
+        {
+          "address": "module.custom_git",
+          "resources": [
+            {"address": "module.custom_git.aws_s3_bucket.this", "type": "aws_s3_bucket", "name": "this", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "schema_version": 0, "values": {}}
+          ]
+        },
+        {
+          "address": "module.insecure_http",
+          "resources": []
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {"address": "module.vpc.aws_vpc.this", "module_address": "module.vpc", "mode": "managed", "type": "aws_vpc", "name": "this", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["create"], "before": null, "after": {"cidr_block": "10.0.0.0/16"}}},
+    {"address": "module.rds.aws_db_instance.this", "module_address": "module.rds", "mode": "managed", "type": "aws_db_instance", "name": "this", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["create"], "before": null, "after": {}}}
+  ],
+  "configuration": {
+    "root_module": {
+      "module_calls": {
+        "vpc": {
+          "source": "terraform-aws-modules/vpc/aws",
+          "version_constraint": "~> 5.0"
+        },
+        "rds": {
+          "source": "terraform-aws-modules/rds/aws"
+        },
+        "custom_git": {
+          "source": "git::https://github.com/example/terraform-aws-custom.git?ref=main"
+        },
+        "insecure_http": {
+          "source": "http://example.com/module.zip"
+        },
+        "local_module": {
+          "source": "./modules/local"
+        }
+      }
+    }
+  }
+}

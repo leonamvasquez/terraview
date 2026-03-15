@@ -110,10 +110,10 @@ func retryAnalyze(
 		findings, summary, err := fn()
 		if err != nil {
 			lastErr = err
-			// Não retentar erros permanentes (401, 403, 400, validação)
+			// Do not retry permanent errors (401, 403, 400, validation)
 			if !ai.IsTransient(err) {
 				return ai.Completion{}, ai.NewProviderError(providerName, "analyze",
-					fmt.Errorf("erro permanente (sem retentativa): %w", err))
+					fmt.Errorf("permanent error (no retry): %w", err))
 			}
 			continue
 		}
@@ -127,7 +127,7 @@ func retryAnalyze(
 	}
 
 	return ai.Completion{}, ai.NewProviderError(providerName, "analyze",
-		fmt.Errorf("falhou após %d tentativas: %w", cfg.MaxRetries+1, lastErr))
+		fmt.Errorf("failed after %d attempts: %w", cfg.MaxRetries+1, lastErr))
 }
 
 type llmFinding struct {

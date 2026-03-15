@@ -7,10 +7,10 @@ import (
 )
 
 // --------------------------------------------------------------------------
-// Fixture: plano Terraform realista com múltiplos tipos de dados sensíveis
+// Fixture: realistic Terraform plan with multiple types of sensitive data
 // --------------------------------------------------------------------------
 
-// longBase64 é um blob base64 de >200 caracteres para testar a detecção.
+// longBase64 is a base64 blob >200 chars for testing detection.
 var longBase64 = strings.Repeat("QWxndW1hIGNvaXNhIHNlbnNpdmVsIGNvZGlmaWNhZGE=", 8)
 
 var realisticPlanJSON = `{
@@ -118,24 +118,24 @@ var realisticPlanJSON = `{
 }`
 
 // --------------------------------------------------------------------------
-// Teste principal: plano completo com todos os padrões
+// Main test: full plan with all patterns
 // --------------------------------------------------------------------------
 
 func TestSanitize_RealisticPlan(t *testing.T) {
 	sanitized, manifest, err := Sanitize([]byte(realisticPlanJSON))
 	if err != nil {
-		t.Fatalf("Sanitize() erro inesperado: %v", err)
+		t.Fatalf("Sanitize() unexpected error: %v", err)
 	}
 
-	// Verificar que o resultado é JSON válido
+	// Verify result is valid JSON
 	var result map[string]interface{}
 	if err := json.Unmarshal(sanitized, &result); err != nil {
-		t.Fatalf("JSON sanitizado inválido: %v", err)
+		t.Fatalf("invalid sanitized JSON: %v", err)
 	}
 
 	sanitizedStr := string(sanitized)
 
-	// Valores que DEVEM ter sido redatados
+	// Values that MUST have been redacted
 	sensitiveValues := []string{
 		"SuperSecret123!",
 		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
@@ -145,23 +145,23 @@ func TestSanitize_RealisticPlan(t *testing.T) {
 
 	for _, val := range sensitiveValues {
 		if strings.Contains(sanitizedStr, val) {
-			t.Errorf("valor sensível NÃO foi redatado: %q", truncate(val, 60))
+			t.Errorf("sensitive value NOT redacted: %q", truncate(val, 60))
 		}
 	}
 
-	// Valores que NÃO devem ser redatados (chaves, tipos, nomes)
+	// Values that must NOT be redacted (keys, types, names)
 	preservedValues := []string{
 		"aws_db_instance",
 		"aws_iam_access_key",
 		"aws_instance",
 		"tls_private_key",
 		"aws_lambda_function",
-		"password",        // chave, não valor
-		"secret",          // chave, não valor
-		"private_key_pem", // chave, não valor
-		"main",            // nome do recurso
-		"deployer",        // nome do recurso
-		"web",             // nome do recurso
+		"password",        // key, not value
+		"secret",          // key, not value
+		"private_key_pem", // key, not value
+		"main",            // resource name
+		"deployer",        // resource name
+		"web",             // resource name
 		"ami-0c55b159cbfafe1f0",
 		"t3.micro",
 		"postgres",
@@ -171,42 +171,42 @@ func TestSanitize_RealisticPlan(t *testing.T) {
 
 	for _, val := range preservedValues {
 		if !strings.Contains(sanitizedStr, val) {
-			t.Errorf("valor preservado foi removido: %q", val)
+			t.Errorf("preserved value was removed: %q", val)
 		}
 	}
 
 	// Verify that placeholders are present
 	if !strings.Contains(sanitizedStr, "[REDACTED-") {
-		t.Error("nenhum placeholder [REDACTED-NNN] encontrado no JSON sanitizado")
+		t.Error("no [REDACTED-NNN] placeholder found in sanitized JSON")
 	}
 
-	// Verificar que o manifest tem entradas
+	// Verify manifest has entries
 	if manifest.UniqueCount() == 0 {
-		t.Error("RedactionManifest vazio — nenhuma redação registrada")
+		t.Error("RedactionManifest empty — no redactions recorded")
 	}
 
 	if manifest.Count() == 0 {
-		t.Error("RedactionManifest sem caminhos — nenhum path registrado")
+		t.Error("RedactionManifest without paths — no paths recorded")
 	}
 
-	t.Logf("Redações: %d únicas, %d total", manifest.UniqueCount(), manifest.Count())
+	t.Logf("Redactions: %d unique, %d total", manifest.UniqueCount(), manifest.Count())
 	for plac, paths := range manifest.Entries {
 		t.Logf("  %s → %v", plac, paths)
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: mesmo valor em múltiplos locais recebe o MESMO placeholder
+// Test: same value at multiple locations receives the SAME placeholder
 // --------------------------------------------------------------------------
 
 func TestSanitize_SameValueSamePlaceholder(t *testing.T) {
 	sanitized, manifest, err := Sanitize([]byte(realisticPlanJSON))
 	if err != nil {
-		t.Fatalf("Sanitize() erro: %v", err)
+		t.Fatalf("Sanitize() error: %v", err)
 	}
 
-	// "SuperSecret123!" aparece em aws_db_instance.main E aws_db_instance.replica
-	// Deve ter o MESMO placeholder, com 2 caminhos no manifest
+	// "SuperSecret123!" appears in aws_db_instance.main AND aws_db_instance.replica
+	// Should have the SAME placeholder, with 2 paths in the manifest
 
 	var passwordPlaceholder string
 	for plac, paths := range manifest.Entries {
@@ -215,63 +215,63 @@ func TestSanitize_SameValueSamePlaceholder(t *testing.T) {
 				if passwordPlaceholder == "" {
 					passwordPlaceholder = plac
 				} else if passwordPlaceholder != plac {
-					t.Errorf("mesmo valor 'password' recebeu placeholders diferentes: %s vs %s", passwordPlaceholder, plac)
+					t.Errorf("same 'password' value received different placeholders: %s vs %s", passwordPlaceholder, plac)
 				}
 			}
 		}
 	}
 
 	if passwordPlaceholder == "" {
-		t.Fatal("nenhum placeholder encontrado para campos 'password'")
+		t.Fatal("no placeholder found for 'password' fields")
 	}
 
-	// Contar ocorrências do placeholder no JSON sanitizado
+	// Count placeholder occurrences in sanitized JSON
 	count := strings.Count(string(sanitized), passwordPlaceholder)
 	if count < 2 {
-		t.Errorf("placeholder %s deveria aparecer >= 2 vezes (main + replica), apareceu %d", passwordPlaceholder, count)
+		t.Errorf("placeholder %s should appear >= 2 times (main + replica), appeared %d", passwordPlaceholder, count)
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: estrutura JSON preservada após sanitização
+// Test: JSON structure preserved after sanitization
 // --------------------------------------------------------------------------
 
 func TestSanitize_PreservesJSONStructure(t *testing.T) {
 	sanitized, _, err := Sanitize([]byte(realisticPlanJSON))
 	if err != nil {
-		t.Fatalf("Sanitize() erro: %v", err)
+		t.Fatalf("Sanitize() error: %v", err)
 	}
 
 	var original, result map[string]interface{}
 	if err := json.Unmarshal([]byte(realisticPlanJSON), &original); err != nil {
-		t.Fatalf("parse original falhou: %v", err)
+		t.Fatalf("original parse failed: %v", err)
 	}
 	if err := json.Unmarshal(sanitized, &result); err != nil {
-		t.Fatalf("parse sanitizado falhou: %v", err)
+		t.Fatalf("sanitized parse failed: %v", err)
 	}
 
 	for key := range original {
 		if _, ok := result[key]; !ok {
-			t.Errorf("chave de primeiro nível %q ausente no resultado sanitizado", key)
+			t.Errorf("top-level key %q missing from sanitized result", key)
 		}
 	}
 
 	if result["format_version"] != original["format_version"] {
-		t.Errorf("format_version alterado: %v → %v", original["format_version"], result["format_version"])
+		t.Errorf("format_version changed: %v → %v", original["format_version"], result["format_version"])
 	}
 	if result["terraform_version"] != original["terraform_version"] {
-		t.Errorf("terraform_version alterado: %v → %v", original["terraform_version"], result["terraform_version"])
+		t.Errorf("terraform_version changed: %v → %v", original["terraform_version"], result["terraform_version"])
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: manifest contém mapeamentos corretos
+// Test: manifest contains correct mappings
 // --------------------------------------------------------------------------
 
 func TestSanitize_ManifestCorrectMappings(t *testing.T) {
 	_, manifest, err := Sanitize([]byte(realisticPlanJSON))
 	if err != nil {
-		t.Fatalf("Sanitize() erro: %v", err)
+		t.Fatalf("Sanitize() error: %v", err)
 	}
 
 	foundPassword := false
@@ -293,18 +293,18 @@ func TestSanitize_ManifestCorrectMappings(t *testing.T) {
 	}
 
 	if !foundPassword {
-		t.Error("manifest não contém redação para campo 'password'")
+		t.Error("manifest does not contain redaction for 'password' field")
 	}
 	if !foundSecret {
-		t.Error("manifest não contém redação para campo 'secret'")
+		t.Error("manifest does not contain redaction for 'secret' field")
 	}
 	if !foundPEM {
-		t.Error("manifest não contém redação para campo 'private_key_pem'")
+		t.Error("manifest does not contain redaction for 'private_key_pem' field")
 	}
 }
 
 // --------------------------------------------------------------------------
-// Table-driven tests: cada padrão individual
+// Table-driven tests: each individual pattern
 // --------------------------------------------------------------------------
 
 func TestSanitize_PatternDetection(t *testing.T) {
@@ -314,112 +314,112 @@ func TestSanitize_PatternDetection(t *testing.T) {
 		redacted bool
 	}{
 		{
-			name:     "campo password",
+			name:     "password field",
 			input:    `{"password": "MyP@ssw0rd!"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo secret",
+			name:     "secret field",
 			input:    `{"secret": "super-secret-value"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo token",
+			name:     "token field",
 			input:    `{"token": "ghp_abc123def456"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo private_key",
+			name:     "private_key field",
 			input:    `{"private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE..."}`,
 			redacted: true,
 		},
 		{
-			name:     "campo access_key",
+			name:     "access_key field",
 			input:    `{"access_key": "AKIAIOSFODNN7EXAMPLE"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo secret_key",
+			name:     "secret_key field",
 			input:    `{"secret_key": "wJalrXUtnFEMI/bPxRfiCYEXAMPLEKEY"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo api_key",
+			name:     "api_key field",
 			input:    `{"api_key": "sk-abc123def456"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo connection_string",
+			name:     "connection_string field",
 			input:    `{"connection_string": "postgresql://user:pass@host:5432/db"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo certificate",
+			name:     "certificate field",
 			input:    `{"certificate": "-----BEGIN CERTIFICATE-----\nMIIE..."}`,
 			redacted: true,
 		},
 		{
-			name:     "campo credentials",
+			name:     "credentials field",
 			input:    `{"credentials": "{\"key\": \"val\"}"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo com sensitive no nome",
+			name:     "field with sensitive in name",
 			input:    `{"db_sensitive_data": "secret-value"}`,
 			redacted: true,
 		},
 		{
-			name:     "campo com password no nome composto",
+			name:     "field with password in compound name",
 			input:    `{"db_password_hash": "hashed-value"}`,
 			redacted: true,
 		},
 		{
-			name:     "valor ARN com account ID",
+			name:     "ARN value with account ID",
 			input:    `{"role": "arn:aws:iam::123456789012:role/admin"}`,
 			redacted: true,
 		},
 		{
-			name:     "valor PEM private key",
+			name:     "PEM private key value",
 			input:    `{"data": "-----BEGIN EC PRIVATE KEY-----\nMHQ..."}`,
 			redacted: true,
 		},
 		{
-			name:     "valor JWT token",
+			name:     "JWT token value",
 			input:    `{"auth": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0"}`,
 			redacted: true,
 		},
 		{
-			name:     "valor base64 longo acima de 200 chars",
+			name:     "long base64 value over 200 chars",
 			input:    `{"data": "` + strings.Repeat("QUFB", 70) + `"}`,
 			redacted: true,
 		},
 		{
-			name:     "valor normal NAO redatado",
+			name:     "normal value NOT redacted",
 			input:    `{"instance_type": "t3.micro"}`,
 			redacted: false,
 		},
 		{
-			name:     "campo tags NAO redatado",
+			name:     "tags field NOT redacted",
 			input:    `{"tags": {"Name": "my-server"}}`,
 			redacted: false,
 		},
 		{
-			name:     "AMI NAO redatada",
+			name:     "AMI NOT redacted",
 			input:    `{"ami": "ami-0c55b159cbfafe1f0"}`,
 			redacted: false,
 		},
 		{
-			name:     "booleano NAO redatado",
+			name:     "boolean NOT redacted",
 			input:    `{"encrypted": true}`,
 			redacted: false,
 		},
 		{
-			name:     "numero NAO redatado",
+			name:     "number NOT redacted",
 			input:    `{"port": 5432}`,
 			redacted: false,
 		},
 		{
-			name:     "base64 curto NAO redatado",
+			name:     "short base64 NOT redacted",
 			input:    `{"data": "SGVsbG8gV29ybGQ="}`,
 			redacted: false,
 		},
@@ -429,107 +429,107 @@ func TestSanitize_PatternDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sanitized, manifest, err := Sanitize([]byte(tt.input))
 			if err != nil {
-				t.Fatalf("Sanitize() erro: %v", err)
+				t.Fatalf("Sanitize() error: %v", err)
 			}
 
 			hasRedaction := strings.Contains(string(sanitized), "[REDACTED-")
 			if tt.redacted && !hasRedaction {
-				t.Errorf("esperava redacao, mas nenhum placeholder encontrado.\nInput:  %s\nOutput: %s", tt.input, string(sanitized))
+				t.Errorf("expected redaction, but no placeholder found.\nInput:  %s\nOutput: %s", tt.input, string(sanitized))
 			}
 			if !tt.redacted && hasRedaction {
-				t.Errorf("NAO esperava redacao, mas placeholder encontrado.\nInput:  %s\nOutput: %s", tt.input, string(sanitized))
+				t.Errorf("did NOT expect redaction, but placeholder found.\nInput:  %s\nOutput: %s", tt.input, string(sanitized))
 			}
 
 			var result interface{}
 			if err := json.Unmarshal(sanitized, &result); err != nil {
-				t.Errorf("JSON sanitizado invalido: %v", err)
+				t.Errorf("invalid sanitized JSON: %v", err)
 			}
 
 			if tt.redacted && manifest.UniqueCount() == 0 {
-				t.Error("esperava entradas no manifest, mas esta vazio")
+				t.Error("expected entries in manifest, but it is empty")
 			}
 		})
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: JSON invalido retorna erro
+// Test: invalid JSON returns error
 // --------------------------------------------------------------------------
 
 func TestSanitize_InvalidJSON(t *testing.T) {
 	_, _, err := Sanitize([]byte(`{invalid json}`))
 	if err == nil {
-		t.Error("esperava erro para JSON invalido, mas Sanitize() retornou nil")
+		t.Error("expected error for invalid JSON, but Sanitize() returned nil")
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: JSON vazio/minimo funciona sem erro
+// Test: empty/minimal JSON works without error
 // --------------------------------------------------------------------------
 
 func TestSanitize_EmptyObject(t *testing.T) {
 	sanitized, manifest, err := Sanitize([]byte(`{}`))
 	if err != nil {
-		t.Fatalf("Sanitize() erro para objeto vazio: %v", err)
+		t.Fatalf("Sanitize() error for empty object: %v", err)
 	}
 	if string(sanitized) != `{}` {
-		t.Errorf("objeto vazio deveria permanecer igual, got: %s", string(sanitized))
+		t.Errorf("empty object should remain unchanged, got: %s", string(sanitized))
 	}
 	if manifest.UniqueCount() != 0 {
-		t.Error("manifest deveria estar vazio para objeto vazio")
+		t.Error("manifest should be empty for empty object")
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: campos numericos/booleanos com nomes sensiveis NAO sao redatados
+// Test: numeric/boolean fields with sensitive names are NOT redacted
 // --------------------------------------------------------------------------
 
 func TestSanitize_NonStringFieldsPreserved(t *testing.T) {
 	input := `{"password": 12345, "secret": true, "token": null}`
 	sanitized, _, err := Sanitize([]byte(input))
 	if err != nil {
-		t.Fatalf("Sanitize() erro: %v", err)
+		t.Fatalf("Sanitize() error: %v", err)
 	}
 
 	if strings.Contains(string(sanitized), "[REDACTED-") {
-		t.Error("valores nao-string com nomes sensiveis nao devem ser redatados")
+		t.Error("non-string values with sensitive names should not be redacted")
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: arrays de valores sensiveis
+// Test: arrays with sensitive values
 // --------------------------------------------------------------------------
 
 func TestSanitize_ArrayWithSensitiveValues(t *testing.T) {
 	input := `{"items": ["normal", "-----BEGIN RSA PRIVATE KEY-----\ndata", "also-normal"]}`
 	sanitized, manifest, err := Sanitize([]byte(input))
 	if err != nil {
-		t.Fatalf("Sanitize() erro: %v", err)
+		t.Fatalf("Sanitize() error: %v", err)
 	}
 
 	sanitizedStr := string(sanitized)
 
 	if strings.Contains(sanitizedStr, "-----BEGIN RSA PRIVATE KEY-----") {
-		t.Error("PEM key em array nao foi redatada")
+		t.Error("PEM key in array was not redacted")
 	}
 
 	if !strings.Contains(sanitizedStr, "normal") {
-		t.Error("valor normal em array foi removido")
+		t.Error("normal value in array was removed")
 	}
 
 	if manifest.UniqueCount() == 0 {
-		t.Error("manifest deveria ter pelo menos 1 entrada para PEM em array")
+		t.Error("manifest should have at least 1 entry for PEM in array")
 	}
 }
 
 // --------------------------------------------------------------------------
-// Teste: Session API para sanitizar maps diretamente
+// Test: Session API for sanitizing maps directly
 // --------------------------------------------------------------------------
 
 func TestSession_SanitizeMap(t *testing.T) {
 	sess := NewSession()
 
-	// Simula NormalizedResource.Values
+	// Simulate NormalizedResource.Values
 	values := map[string]interface{}{
 		"engine":        "postgres",
 		"password":      "SuperSecret123!",
@@ -539,25 +539,25 @@ func TestSession_SanitizeMap(t *testing.T) {
 
 	result := sess.SanitizeMap(values, "aws_db_instance.main.values")
 
-	// password e private_key devem ser redatados
+	// password and private_key should be redacted
 	if v, ok := result["password"].(string); !ok || !strings.Contains(v, "[REDACTED-") {
-		t.Errorf("password nao foi redatado: %v", result["password"])
+		t.Errorf("password was not redacted: %v", result["password"])
 	}
 	if v, ok := result["private_key"].(string); !ok || !strings.Contains(v, "[REDACTED-") {
-		t.Errorf("private_key nao foi redatado: %v", result["private_key"])
+		t.Errorf("private_key was not redacted: %v", result["private_key"])
 	}
 
-	// engine e instance_type preservados
+	// engine and instance_type preserved
 	if result["engine"] != "postgres" {
-		t.Errorf("engine foi alterado: %v", result["engine"])
+		t.Errorf("engine was changed: %v", result["engine"])
 	}
 	if result["instance_type"] != "t3.micro" {
-		t.Errorf("instance_type foi alterado: %v", result["instance_type"])
+		t.Errorf("instance_type was changed: %v", result["instance_type"])
 	}
 
 	manifest := sess.Manifest()
 	if manifest.UniqueCount() < 2 {
-		t.Errorf("manifest deveria ter pelo menos 2 entradas unicas, tem %d", manifest.UniqueCount())
+		t.Errorf("manifest should have at least 2 unique entries, got %d", manifest.UniqueCount())
 	}
 }
 
@@ -565,7 +565,7 @@ func TestSession_SanitizeMapNil(t *testing.T) {
 	sess := NewSession()
 	result := sess.SanitizeMap(nil, "test")
 	if result != nil {
-		t.Error("SanitizeMap(nil) deveria retornar nil")
+		t.Error("SanitizeMap(nil) should return nil")
 	}
 }
 
@@ -578,18 +578,18 @@ func TestSession_SharedPlaceholders(t *testing.T) {
 	r1 := sess.SanitizeMap(values1, "resource1.values")
 	r2 := sess.SanitizeMap(values2, "resource2.values")
 
-	// Mesmo valor deve ter o mesmo placeholder
+	// Same value should have the same placeholder
 	if r1["password"] != r2["password"] {
-		t.Errorf("mesmo valor recebeu placeholders diferentes: %v vs %v", r1["password"], r2["password"])
+		t.Errorf("same value got different placeholders: %v vs %v", r1["password"], r2["password"])
 	}
 
 	manifest := sess.Manifest()
-	// 1 valor unico, 2 caminhos
+	// 1 unique value, 2 paths
 	if manifest.UniqueCount() != 1 {
-		t.Errorf("esperava 1 valor unico, got %d", manifest.UniqueCount())
+		t.Errorf("expected 1 unique value, got %d", manifest.UniqueCount())
 	}
 	if manifest.Count() != 2 {
-		t.Errorf("esperava 2 caminhos totais, got %d", manifest.Count())
+		t.Errorf("expected 2 total paths, got %d", manifest.Count())
 	}
 }
 
@@ -605,7 +605,7 @@ func BenchmarkSanitize(b *testing.B) {
 	}
 }
 
-// truncate encurta uma string para exibicao em mensagens de erro.
+// truncate shortens a string for display in error messages.
 func truncate(s string, max int) string {
 	if len(s) <= max {
 		return s

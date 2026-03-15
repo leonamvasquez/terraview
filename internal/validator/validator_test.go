@@ -28,7 +28,7 @@ func mockGraph() *topology.Graph {
 	}
 }
 
-// validFinding cria um finding válido para uso em testes.
+// validFinding creates a valid finding for use in tests.
 func validFinding(resource, severity, category, message string) rules.Finding {
 	return rules.Finding{
 		RuleID:   "AI-TEST-001",
@@ -52,19 +52,19 @@ func TestValidateAIFindings_TodosValidos(t *testing.T) {
 	valid, discarded, report := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 3 {
-		t.Errorf("esperado 3 findings validos, obteve %d", len(valid))
+		t.Errorf("expected 3 valid findings, got %d", len(valid))
 	}
 	if len(discarded) != 0 {
-		t.Errorf("esperado 0 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 0 discarded, got %d", len(discarded))
 	}
 	if report.TotalReceived != 3 {
-		t.Errorf("esperado TotalReceived=3, obteve %d", report.TotalReceived)
+		t.Errorf("expected TotalReceived=3, got %d", report.TotalReceived)
 	}
 	if report.TotalValid != 3 {
-		t.Errorf("esperado TotalValid=3, obteve %d", report.TotalValid)
+		t.Errorf("expected TotalValid=3, got %d", report.TotalValid)
 	}
 	if report.TotalDiscard != 0 {
-		t.Errorf("esperado TotalDiscard=0, obteve %d", report.TotalDiscard)
+		t.Errorf("expected TotalDiscard=0, got %d", report.TotalDiscard)
 	}
 }
 
@@ -80,18 +80,18 @@ func TestValidateAIFindings_RecursoInexistente(t *testing.T) {
 	valid, discarded, report := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 1 {
-		t.Errorf("esperado 1 finding valido, obteve %d", len(valid))
+		t.Errorf("expected 1 valid finding, got %d", len(valid))
 	}
 	if len(discarded) != 2 {
-		t.Errorf("esperado 2 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 2 discarded, got %d", len(discarded))
 	}
 	for _, d := range discarded {
 		if d.Reason != ReasonResourceNotFound {
-			t.Errorf("esperado motivo '%s', obteve '%s'", ReasonResourceNotFound, d.Reason)
+			t.Errorf("expected reason '%s', got '%s'", ReasonResourceNotFound, d.Reason)
 		}
 	}
 	if report.TotalDiscard != 2 {
-		t.Errorf("esperado TotalDiscard=2, obteve %d", report.TotalDiscard)
+		t.Errorf("expected TotalDiscard=2, got %d", report.TotalDiscard)
 	}
 }
 
@@ -111,13 +111,13 @@ func TestValidateAIFindings_TipoRecursoDivergente(t *testing.T) {
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 1 {
-		t.Errorf("esperado 1 finding valido, obteve %d", len(valid))
+		t.Errorf("expected 1 valid finding, got %d", len(valid))
 	}
 	if len(discarded) != 1 {
-		t.Errorf("esperado 1 descartado, obteve %d", len(discarded))
+		t.Errorf("expected 1 discarded, got %d", len(discarded))
 	}
 	if len(discarded) > 0 && discarded[0].Reason != ReasonResourceTypeMismatch {
-		t.Errorf("esperado motivo '%s', obteve '%s'", ReasonResourceTypeMismatch, discarded[0].Reason)
+		t.Errorf("expected reason '%s', got '%s'", ReasonResourceTypeMismatch, discarded[0].Reason)
 	}
 }
 
@@ -134,14 +134,14 @@ func TestValidateAIFindings_SeveridadeInvalida(t *testing.T) {
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 2 {
-		t.Errorf("esperado 2 findings validos, obteve %d", len(valid))
+		t.Errorf("expected 2 valid findings, got %d", len(valid))
 	}
 	if len(discarded) != 2 {
-		t.Errorf("esperado 2 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 2 discarded, got %d", len(discarded))
 	}
 	for _, d := range discarded {
 		if d.Reason != ReasonInvalidSeverity {
-			t.Errorf("esperado motivo '%s', obteve '%s'", ReasonInvalidSeverity, d.Reason)
+			t.Errorf("expected reason '%s', got '%s'", ReasonInvalidSeverity, d.Reason)
 		}
 	}
 }
@@ -159,16 +159,16 @@ func TestValidateAIFindings_Duplicados(t *testing.T) {
 
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
-	// primeiro s3 security, s3 compliance, primeiro instance
+	// first s3 security, s3 compliance, first instance
 	if len(valid) != 3 {
-		t.Errorf("esperado 3 findings validos, obteve %d", len(valid))
+		t.Errorf("expected 3 valid findings, got %d", len(valid))
 	}
 	if len(discarded) != 2 {
-		t.Errorf("esperado 2 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 2 discarded, got %d", len(discarded))
 	}
 	for _, d := range discarded {
 		if d.Reason != ReasonDuplicate {
-			t.Errorf("esperado motivo '%s', obteve '%s'", ReasonDuplicate, d.Reason)
+			t.Errorf("expected reason '%s', got '%s'", ReasonDuplicate, d.Reason)
 		}
 	}
 }
@@ -215,14 +215,14 @@ func TestValidateAIFindings_CamposVazios(t *testing.T) {
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 1 {
-		t.Errorf("esperado 1 finding valido, obteve %d", len(valid))
+		t.Errorf("expected 1 valid finding, got %d", len(valid))
 	}
 	if len(discarded) != 4 {
-		t.Errorf("esperado 4 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 4 discarded, got %d", len(discarded))
 	}
 	for _, d := range discarded {
 		if d.Reason != ReasonEmptyFields {
-			t.Errorf("esperado motivo '%s', obteve '%s'", ReasonEmptyFields, d.Reason)
+			t.Errorf("expected reason '%s', got '%s'", ReasonEmptyFields, d.Reason)
 		}
 	}
 }
@@ -243,13 +243,13 @@ func TestValidateAIFindings_MistoValidoInvalido(t *testing.T) {
 	valid, discarded, report := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 3 {
-		t.Errorf("esperado 3 findings validos, obteve %d", len(valid))
+		t.Errorf("expected 3 valid findings, got %d", len(valid))
 	}
 	if len(discarded) != 4 {
-		t.Errorf("esperado 4 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 4 discarded, got %d", len(discarded))
 	}
 	if report.TotalReceived != 7 {
-		t.Errorf("esperado TotalReceived=7, obteve %d", report.TotalReceived)
+		t.Errorf("expected TotalReceived=7, got %d", report.TotalReceived)
 	}
 
 	validResources := make(map[string]bool)
@@ -259,7 +259,7 @@ func TestValidateAIFindings_MistoValidoInvalido(t *testing.T) {
 	expectedValid := []string{"aws_s3_bucket.data", "aws_vpc.main", "aws_security_group.web_sg"}
 	for _, r := range expectedValid {
 		if !validResources[r] {
-			t.Errorf("esperado recurso '%s' entre os validos", r)
+			t.Errorf("expected recurso '%s' entre os validos", r)
 		}
 	}
 
@@ -268,16 +268,16 @@ func TestValidateAIFindings_MistoValidoInvalido(t *testing.T) {
 		reasonCounts[d.Reason]++
 	}
 	if reasonCounts[ReasonResourceNotFound] != 1 {
-		t.Errorf("esperado 1 descarte por recurso inexistente, obteve %d", reasonCounts[ReasonResourceNotFound])
+		t.Errorf("expected 1 descarte por recurso inexistente, got %d", reasonCounts[ReasonResourceNotFound])
 	}
 	if reasonCounts[ReasonInvalidSeverity] != 1 {
-		t.Errorf("esperado 1 descarte por severidade invalida, obteve %d", reasonCounts[ReasonInvalidSeverity])
+		t.Errorf("expected 1 descarte por severidade invalida, got %d", reasonCounts[ReasonInvalidSeverity])
 	}
 	if reasonCounts[ReasonDuplicate] != 1 {
-		t.Errorf("esperado 1 descarte por duplicata, obteve %d", reasonCounts[ReasonDuplicate])
+		t.Errorf("expected 1 descarte por duplicata, got %d", reasonCounts[ReasonDuplicate])
 	}
 	if reasonCounts[ReasonEmptyFields] != 1 {
-		t.Errorf("esperado 1 descarte por campos vazios, obteve %d", reasonCounts[ReasonEmptyFields])
+		t.Errorf("expected 1 descarte por campos vazios, got %d", reasonCounts[ReasonEmptyFields])
 	}
 }
 
@@ -287,13 +287,13 @@ func TestValidateAIFindings_ListaVazia(t *testing.T) {
 	valid, discarded, report := ValidateAIFindings(nil, graph)
 
 	if valid != nil {
-		t.Errorf("esperado nil para findings validos, obteve %v", valid)
+		t.Errorf("expected nil para valid findings, got %v", valid)
 	}
 	if discarded != nil {
-		t.Errorf("esperado nil para descartados, obteve %v", discarded)
+		t.Errorf("expected nil para discarded, got %v", discarded)
 	}
 	if report.TotalReceived != 0 {
-		t.Errorf("esperado TotalReceived=0, obteve %d", report.TotalReceived)
+		t.Errorf("expected TotalReceived=0, got %d", report.TotalReceived)
 	}
 }
 
@@ -308,10 +308,10 @@ func TestValidateAIFindings_GrafoVazio(t *testing.T) {
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 0 {
-		t.Errorf("esperado 0 findings validos (grafo vazio), obteve %d", len(valid))
+		t.Errorf("expected 0 valid findings (grafo vazio), got %d", len(valid))
 	}
 	if len(discarded) != 2 {
-		t.Errorf("esperado 2 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 2 discarded, got %d", len(discarded))
 	}
 }
 
@@ -325,10 +325,10 @@ func TestValidateAIFindings_RecursoModulo(t *testing.T) {
 	valid, discarded, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 1 {
-		t.Errorf("esperado 1 finding valido para recurso de modulo, obteve %d", len(valid))
+		t.Errorf("expected 1 valid finding para recurso de modulo, got %d", len(valid))
 	}
 	if len(discarded) != 0 {
-		t.Errorf("esperado 0 descartados, obteve %d", len(discarded))
+		t.Errorf("expected 0 discarded, got %d", len(discarded))
 	}
 }
 
@@ -350,7 +350,7 @@ func TestExtractResourceType(t *testing.T) {
 		t.Run(tt.address, func(t *testing.T) {
 			got := extractResourceType(tt.address)
 			if got != tt.expected {
-				t.Errorf("extractResourceType(%q) = %q, esperado %q", tt.address, got, tt.expected)
+				t.Errorf("extractResourceType(%q) = %q, expected %q", tt.address, got, tt.expected)
 			}
 		})
 	}
@@ -362,10 +362,10 @@ func TestDeduplicationKey(t *testing.T) {
 	f3 := validFinding("aws_s3_bucket.data", "HIGH", "compliance", "Bucket sem criptografia")
 
 	if deduplicationKey(f1) != deduplicationKey(f2) {
-		t.Error("f1 e f2 deveriam ter a mesma chave de deduplicacao")
+		t.Error("f1 and f2 should have the same dedup key")
 	}
 	if deduplicationKey(f1) == deduplicationKey(f3) {
-		t.Error("f1 e f3 deveriam ter chaves de deduplicacao diferentes")
+		t.Error("f1 and f3 should have different dedup keys")
 	}
 }
 
@@ -394,7 +394,7 @@ func TestCheckSeverity_CaseInsensitive(t *testing.T) {
 			reason, _ := checkSeverity(f)
 			isValid := reason == ""
 			if isValid != tc.valid {
-				t.Errorf("checkSeverity(%q): esperado valid=%v, obteve valid=%v", tc.severity, tc.valid, isValid)
+				t.Errorf("checkSeverity(%q): expected valid=%v, got valid=%v", tc.severity, tc.valid, isValid)
 			}
 		})
 	}
@@ -414,7 +414,7 @@ func TestValidateAIFindings_TodasSeveridadesValidas(t *testing.T) {
 	valid, _, _ := ValidateAIFindings(findings, graph)
 
 	if len(valid) != 5 {
-		t.Errorf("esperado 5 findings validos (todas severidades), obteve %d", len(valid))
+		t.Errorf("expected 5 valid findings (todas severidades), got %d", len(valid))
 	}
 }
 
@@ -430,15 +430,15 @@ func TestValidationReport_Completo(t *testing.T) {
 	_, _, report := ValidateAIFindings(findings, graph)
 
 	if report.TotalReceived != 3 {
-		t.Errorf("TotalReceived: esperado 3, obteve %d", report.TotalReceived)
+		t.Errorf("TotalReceived: expected 3, got %d", report.TotalReceived)
 	}
 	if report.TotalValid != 1 {
-		t.Errorf("TotalValid: esperado 1, obteve %d", report.TotalValid)
+		t.Errorf("TotalValid: expected 1, got %d", report.TotalValid)
 	}
 	if report.TotalDiscard != 2 {
-		t.Errorf("TotalDiscard: esperado 2, obteve %d", report.TotalDiscard)
+		t.Errorf("TotalDiscard: expected 2, got %d", report.TotalDiscard)
 	}
 	if len(report.Discarded) != 2 {
-		t.Errorf("Discarded len: esperado 2, obteve %d", len(report.Discarded))
+		t.Errorf("Discarded len: expected 2, got %d", len(report.Discarded))
 	}
 }

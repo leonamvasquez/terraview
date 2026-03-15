@@ -19,7 +19,7 @@ var (
 	// ErrInvalidResponse is returned when the provider returns unparseable output.
 	ErrInvalidResponse = errors.New("ai provider returned invalid response")
 
-	// ErrNonTransient indica um erro permanente que não deve ser retentado.
+	// ErrNonTransient indicates a permanent error that should not be retried.
 	ErrNonTransient = errors.New("non-transient error")
 )
 
@@ -43,52 +43,52 @@ func NewProviderError(provider, op string, err error) *ProviderError {
 	return &ProviderError{Provider: provider, Op: op, Err: err}
 }
 
-// IsTransient retorna true se o erro é transiente e pode ser retentado.
-// Erros transientes: timeout, HTTP 429, 500, 502, 503, 504, erros de rede.
-// Erros permanentes (NÃO retentar): HTTP 400, 401, 403, validação, resposta inválida.
+// IsTransient returns true if the error is transient and can be retried.
+// Transient errors: timeout, HTTP 429, 500, 502, 503, 504, network errors.
+// Permanent errors (do NOT retry): HTTP 400, 401, 403, validation, invalid response.
 func IsTransient(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	// Erros de contexto (timeout, cancelamento) são transientes
+	// Context errors (timeout, cancellation) are transient
 	if errors.Is(err, ErrProviderTimeout) {
 		return true
 	}
 
-	// Erros de validação e resposta inválida NÃO são transientes
+	// Validation and invalid response errors are NOT transient
 	if errors.Is(err, ErrProviderValidation) || errors.Is(err, ErrInvalidResponse) {
 		return false
 	}
 
-	// Erros marcados explicitamente como não transientes
+	// Errors explicitly marked as non-transient
 	if errors.Is(err, ErrNonTransient) {
 		return false
 	}
 
 	msg := strings.ToLower(err.Error())
 
-	// HTTP 401, 403, 400 → NÃO transiente
+	// HTTP 401, 403, 400 → NOT transient
 	for _, code := range []string{"status 400", "status 401", "status 403", "invalid api key", "unauthorized", "forbidden", "bad request"} {
 		if strings.Contains(msg, code) {
 			return false
 		}
 	}
 
-	// HTTP 429, 500, 502, 503, 504 → transiente
+	// HTTP 429, 500, 502, 503, 504 → transient
 	for _, code := range []string{"status 429", "status 500", "status 502", "status 503", "status 504", "rate limit", "too many requests"} {
 		if strings.Contains(msg, code) {
 			return true
 		}
 	}
 
-	// Erros de rede/timeout → transiente
+	// Network/timeout errors → transient
 	for _, pattern := range []string{"timeout", "timed out", "connection refused", "connection reset", "no such host", "eof", "broken pipe"} {
 		if strings.Contains(msg, pattern) {
 			return true
 		}
 	}
 
-	// Default: considerar transiente para não perder retentativas em erros desconhecidos
+	// Default: consider transient to avoid losing retries on unknown errors
 	return true
 }

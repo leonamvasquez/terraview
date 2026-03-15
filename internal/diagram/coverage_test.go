@@ -26,8 +26,8 @@ func TestGetLayer_HeuristicBranches(t *testing.T) {
 		{"aws_custom_storage_account", "Data"},
 		{"aws_custom_bucket_policy", "Data"},
 		{"aws_custom_s3_replication", "Data"},
-		{"aws_custom_sqs_queue", "Data"},
-		{"aws_custom_sns_topic", "Data"},
+		{"aws_custom_sqs_queue", "Messaging"},
+		{"aws_custom_sns_topic", "Messaging"},
 		// DNS layer
 		{"aws_custom_cloudfront_dist", "DNS"},
 		{"aws_custom_route53_zone", "DNS"},
@@ -38,7 +38,7 @@ func TestGetLayer_HeuristicBranches(t *testing.T) {
 		{"aws_custom_gateway_route", "Access"},
 		// Security layer
 		{"aws_custom_security_rule", "Security"},
-		{"aws_custom_iam_user", "Security"},
+		{"aws_custom_iam_user", "IAM"},
 		{"aws_custom_kms_key", "Security"},
 		{"aws_custom_firewall_rule", "Security"},
 		{"aws_custom_waf_acl", "Security"},
@@ -525,5 +525,198 @@ func TestRenderInnerDualBox_NarrowWidth(t *testing.T) {
 	output := sb.String()
 	if output == "" {
 		t.Error("expected non-empty output even with narrow width")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// New layer mappings — IAM, Messaging, Secrets, CICD
+// ---------------------------------------------------------------------------
+
+func TestGetLayer_NewCategories(t *testing.T) {
+	tests := []struct {
+		resType string
+		want    string
+	}{
+		// IAM (split from Security)
+		{"aws_iam_role", "IAM"},
+		{"aws_iam_policy", "IAM"},
+		{"aws_iam_role_policy_attachment", "IAM"},
+		{"aws_iam_instance_profile", "IAM"},
+		{"aws_iam_user", "IAM"},
+		{"aws_iam_group", "IAM"},
+		{"aws_iam_openid_connect_provider", "IAM"},
+		{"aws_iam_service_linked_role", "IAM"},
+
+		// Security (without IAM)
+		{"aws_security_group", "Security"},
+		{"aws_kms_key", "Security"},
+		{"aws_acm_certificate", "Security"},
+		{"aws_wafv2_web_acl", "Security"},
+		{"aws_guardduty_detector", "Security"},
+		{"aws_shield_protection", "Security"},
+
+		// Messaging (split from Data)
+		{"aws_sqs_queue", "Messaging"},
+		{"aws_sns_topic", "Messaging"},
+		{"aws_sns_topic_subscription", "Messaging"},
+		{"aws_eventbridge_rule", "Messaging"},
+		{"aws_cloudwatch_event_rule", "Messaging"},
+		{"aws_msk_cluster", "Messaging"},
+		{"aws_sfn_state_machine", "Messaging"},
+
+		// Secrets & Config
+		{"aws_ssm_parameter", "Secrets"},
+		{"aws_secretsmanager_secret", "Secrets"},
+		{"aws_appconfig_application", "Secrets"},
+
+		// CI/CD & Registry
+		{"aws_ecr_repository", "CICD"},
+		{"aws_codebuild_project", "CICD"},
+		{"aws_codepipeline", "CICD"},
+		{"aws_codedeploy_app", "CICD"},
+		{"aws_codecommit_repository", "CICD"},
+
+		// Data (new additions)
+		{"aws_efs_file_system", "Data"},
+		{"aws_redshift_cluster", "Data"},
+		{"aws_opensearch_domain", "Data"},
+		{"aws_kinesis_stream", "Data"},
+		{"aws_glue_job", "Data"},
+		{"aws_backup_vault", "Data"},
+
+		// Network (new additions)
+		{"aws_vpc_endpoint", "Network"},
+		{"aws_transit_gateway", "Network"},
+		{"aws_vpn_connection", "Network"},
+
+		// Compute (new additions)
+		{"aws_eks_addon", "Compute"},
+		{"aws_eks_fargate_profile", "Compute"},
+		{"aws_lambda_layer_version", "Compute"},
+		{"aws_batch_compute_environment", "Compute"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.resType, func(t *testing.T) {
+			got := getLayer(tc.resType)
+			if got != tc.want {
+				t.Errorf("getLayer(%q) = %q, want %q", tc.resType, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetLayer_HeuristicNewCategories(t *testing.T) {
+	tests := []struct {
+		resType string
+		want    string
+	}{
+		// Messaging heuristics
+		{"aws_custom_sqs_dlq", "Messaging"},
+		{"aws_custom_sns_platform", "Messaging"},
+		{"aws_custom_eventbridge_bus", "Messaging"},
+		{"aws_custom_ses_template", "Messaging"},
+		{"aws_custom_msk_config", "Messaging"},
+		{"aws_custom_sfn_workflow", "Messaging"},
+
+		// IAM heuristic
+		{"aws_custom_iam_policy", "IAM"},
+
+		// Secrets heuristics
+		{"aws_custom_ssm_patch", "Secrets"},
+		{"aws_custom_secretsmanager_rotation", "Secrets"},
+		{"aws_custom_appconfig_deploy", "Secrets"},
+
+		// CICD heuristics
+		{"aws_custom_ecr_image", "CICD"},
+		{"aws_custom_codebuild_webhook", "CICD"},
+		{"aws_custom_codepipeline_webhook", "CICD"},
+		{"aws_custom_codedeploy_config", "CICD"},
+
+		// Data heuristics (new keywords)
+		{"aws_custom_efs_policy", "Data"},
+		{"aws_custom_redshift_subnet", "Data"},
+		{"aws_custom_kinesis_analytics", "Data"},
+		{"aws_custom_glue_connection", "Data"},
+		{"aws_custom_opensearch_policy", "Data"},
+		{"aws_custom_backup_selection", "Data"},
+
+		// Security heuristics (new keywords)
+		{"aws_custom_guardduty_member", "Security"},
+		{"aws_custom_shield_group", "Security"},
+		{"aws_custom_macie_session", "Security"},
+		{"aws_custom_inspector_template", "Security"},
+
+		// Monitoring heuristics (new keywords)
+		{"aws_custom_xray_group", "Monitoring"},
+		{"aws_custom_budgets_action", "Monitoring"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.resType, func(t *testing.T) {
+			got := getLayer(tc.resType)
+			if got != tc.want {
+				t.Errorf("getLayer(%q) = %q, want %q", tc.resType, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestServiceLabels_NewEntries(t *testing.T) {
+	tests := map[string]string{
+		// New services
+		"aws_ecr_repository":              "ECR Repository",
+		"aws_ssm_parameter":               "SSM Parameter",
+		"aws_secretsmanager_secret":       "Secrets Manager",
+		"aws_codebuild_project":           "CodeBuild Project",
+		"aws_eventbridge_rule":            "EventBridge Rule",
+		"aws_sfn_state_machine":           "Step Functions",
+		"aws_efs_file_system":             "Amazon EFS",
+		"aws_opensearch_domain":           "OpenSearch",
+		"aws_guardduty_detector":          "GuardDuty",
+		"aws_transit_gateway":             "Transit Gateway",
+		"aws_eks_addon":                   "EKS Add-on",
+		"aws_vpc_endpoint":                "VPC Endpoint",
+		"aws_kinesis_stream":              "Kinesis Stream",
+		"aws_msk_cluster":                 "Amazon MSK",
+		"aws_redshift_cluster":            "Amazon Redshift",
+		"aws_backup_vault":                "Backup Vault",
+		"aws_glue_job":                    "Glue Job",
+		"aws_iam_openid_connect_provider": "OIDC Provider",
+	}
+	for resType, want := range tests {
+		got, ok := serviceLabels[resType]
+		if !ok {
+			t.Errorf("serviceLabels missing entry for %s", resType)
+			continue
+		}
+		if got != want {
+			t.Errorf("serviceLabels[%s] = %s, want %s", resType, got, want)
+		}
+	}
+}
+
+func TestGenerate_NewLayersAppear(t *testing.T) {
+	gen := NewGenerator()
+	resources := []parser.NormalizedResource{
+		{Address: "aws_iam_role.eks", Action: "create", Type: "aws_iam_role"},
+		{Address: "aws_ecr_repository.app", Action: "create", Type: "aws_ecr_repository"},
+		{Address: "aws_ssm_parameter.config", Action: "create", Type: "aws_ssm_parameter"},
+		{Address: "aws_sqs_queue.events", Action: "create", Type: "aws_sqs_queue"},
+		{Address: "aws_security_group.web", Action: "create", Type: "aws_security_group"},
+	}
+	result := gen.Generate(resources)
+
+	for _, want := range []string{"IAM", "CI/CD & Registry", "Secrets & Config", "Messaging & Events", "Security"} {
+		if !strings.Contains(result, want) {
+			t.Errorf("expected layer %q in output", want)
+		}
+	}
+}
+
+func TestDiagramWidth_Increased(t *testing.T) {
+	if diagramWidth != 100 {
+		t.Errorf("diagramWidth = %d, want 100", diagramWidth)
+	}
+	if maxBoxWidth != 70 {
+		t.Errorf("maxBoxWidth = %d, want 70", maxBoxWidth)
 	}
 }

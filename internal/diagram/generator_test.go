@@ -58,7 +58,7 @@ func TestGetLayer(t *testing.T) {
 		"aws_subnet":         "Network",
 		"aws_instance":       "Compute",
 		"aws_s3_bucket":      "Data",
-		"aws_iam_role":       "Security",
+		"aws_iam_role":       "IAM",
 		"aws_security_group": "Security",
 		"aws_unknown_thing":  "Other",
 	}

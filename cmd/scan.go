@@ -45,10 +45,10 @@ var (
 	explainFlag       bool
 	diagramFlag       bool
 	impactFlag        bool
-	explainScoresFlag bool // --explain-scores: mostra decomposição do scoring
+	explainScoresFlag bool // --explain-scores: show scoring decomposition
 	findingsFile      string
 	allFlag           bool
-	noRedactFlag      bool // --no-redact: desabilita redação de dados sensíveis
+	noRedactFlag      bool // --no-redact: disable sensitive data redaction
 )
 
 var scanCmd = &cobra.Command{
@@ -338,7 +338,7 @@ func parsePlan(planPath string) ([]parser.NormalizedResource, *topology.Graph, e
 }
 
 // runScanners executes the security scanner and AI context analysis in parallel.
-// Ambos os componentes degradam graciosamente: falha parcial gera resultado parcial com aviso.
+// Both components degrade gracefully: partial failure produces a partial result with a warning.
 func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph) (scanResult, error) {
 	type scannerOutput struct {
 		findings   []rules.Finding
@@ -356,7 +356,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 	scannerCh := make(chan scannerOutput, 1)
 	contextCh := make(chan contextOutput, 1)
 
-	// Status do pipeline (preenchido conforme os componentes finalizam)
+	// Pipeline status (populated as components finish)
 	ps := &aggregator.PipelineStatus{}
 
 	// Scanner goroutine
@@ -414,7 +414,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 		logVerbose("AI contextual analysis disabled (no provider configured or --static)")
 	}
 
-	// Coletar resultados do scanner (agora degradação graciosa, não fatal)
+	// Collect scanner results (graceful degradation, non-fatal)
 	scanOut := <-scannerCh
 	var scannerStatus *aggregator.ComponentStatus
 	if rc.scannerName != "" {
@@ -425,9 +425,9 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 		if scanOut.err != nil {
 			scannerStatus.Status = "failed"
 			scannerStatus.Error = scanOut.err.Error()
-			fmt.Fprintf(os.Stderr, "%s ⚠ Scanner falhou: %v. Exibindo apenas resultados da IA (confiança reduzida).\n",
+			fmt.Fprintf(os.Stderr, "%s ⚠ Scanner failed: %v. Showing AI results only (reduced confidence).\n",
 				output.Prefix(), scanOut.err)
-			logVerbose("Scanner falhou (não-fatal): %v", scanOut.err)
+			logVerbose("Scanner failed (non-fatal): %v", scanOut.err)
 		} else {
 			scannerStatus.Status = "success"
 			if scanOut.result != nil {
@@ -441,7 +441,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 	}
 	ps.Scanner = scannerStatus
 
-	// Coletar resultados da IA (degradação graciosa — erros são avisos)
+	// Collect AI results (graceful degradation — errors are warnings)
 	ctxOut := <-contextCh
 	var contextFindings []rules.Finding
 	var contextSummary string
@@ -455,9 +455,9 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 		if ctxOut.err != nil {
 			aiStatus.Status = "failed"
 			aiStatus.Error = ctxOut.err.Error()
-			fmt.Fprintf(os.Stderr, "%s ⚠ Análise IA falhou: %v. Exibindo apenas resultados do scanner.\n",
+			fmt.Fprintf(os.Stderr, "%s ⚠ AI analysis failed: %v. Showing scanner results only.\n",
 				output.Prefix(), ctxOut.err)
-			logVerbose("Análise IA falhou (não-fatal): %v", ctxOut.err)
+			logVerbose("AI analysis failed (non-fatal): %v", ctxOut.err)
 		} else {
 			aiStatus.Status = "success"
 			contextFindings = ctxOut.findings
@@ -469,7 +469,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 	}
 	ps.AI = aiStatus
 
-	// Determinar completude do resultado
+	// Determine result completeness
 	scannerOK := scannerStatus == nil || scannerStatus.Status == "success"
 	aiOK := aiStatus == nil || aiStatus.Status == "success"
 
@@ -481,7 +481,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 	case !scannerOK && aiOK:
 		ps.ResultCompleteness = "partial_ai_only"
 	default:
-		// Ambos falharam → erro fatal
+		// Both failed → fatal error
 		scanErr := ""
 		aiErr := ""
 		if scannerStatus != nil {
@@ -491,18 +491,18 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 			aiErr = aiStatus.Error
 		}
 		return scanResult{pipelineStatus: ps}, fmt.Errorf(
-			"ambos scanner e IA falharam.\n  Scanner: %s\n  IA: %s", scanErr, aiErr)
+			"both scanner and AI failed.\n  Scanner: %s\n  AI: %s", scanErr, aiErr)
 	}
 
-	// Se o scanner não foi solicitado, não considerar como falha
+	// If scanner was not requested, don't consider it a failure
 	if rc.scannerName == "" {
-		// Sem scanner → resultado depende apenas da IA
+		// No scanner → result depends only on AI
 		if aiOK || aiStatus == nil {
 			ps.ResultCompleteness = "complete"
 		}
 	}
 	if !rc.effectiveAI {
-		// Sem IA → resultado depende apenas do scanner
+		// No AI → result depends only on scanner
 		if scannerOK {
 			ps.ResultCompleteness = "complete"
 		}
@@ -533,7 +533,7 @@ func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGra
 func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph, sr scanResult) aggregator.ReviewResult {
 	hardFindings := sr.hardFindings
 
-	// Validar findings da IA contra o grafo de topologia (descartar alucinações)
+	// Validate AI findings against the topology graph (discard hallucinations)
 	var aiValidationReport *aggregator.AIValidationReport
 	validatedAIFindings := sr.contextFindings
 	if len(sr.contextFindings) > 0 && topoGraph != nil {
@@ -541,15 +541,15 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		validatedAIFindings = valid
 
 		if report.TotalDiscard > 0 {
-			fmt.Fprintf(os.Stderr, "%s ⚠ Descartados %d findings da IA (alucinados/inválidos)\n",
+			fmt.Fprintf(os.Stderr, "%s ⚠ Discarded %d AI findings (hallucinated/invalid)\n",
 				output.Prefix(), report.TotalDiscard)
 
-			// Em modo verbose, logar cada finding descartado com motivo
+			// In verbose mode, log each discarded finding with reason
 			for _, d := range discarded {
 				logVerbose("  ✗ [%s] %s: %s — %s", d.Reason, d.Finding.Resource, d.Finding.Message, d.Detail)
 			}
 
-			// Montar relatório para JSON de saída
+			// Build report for JSON output
 			aiReport := &aggregator.AIValidationReport{
 				TotalReceived: report.TotalReceived,
 				TotalValid:    report.TotalValid,
@@ -566,11 +566,11 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 			aiValidationReport = aiReport
 		}
 
-		logVerbose("Validação IA: %d recebidos, %d válidos, %d descartados",
+		logVerbose("AI validation: %d received, %d valid, %d discarded",
 			report.TotalReceived, report.TotalValid, report.TotalDiscard)
 	}
 
-	// Merge all findings: scanner + AI context (já validados)
+	// Merge all findings: scanner + AI context (already validated)
 	if len(hardFindings) > 0 || len(validatedAIFindings) > 0 {
 		dr := normalizer.Deduplicate(hardFindings, validatedAIFindings)
 		hardFindings = dr.Findings
@@ -586,7 +586,7 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 	// Attach pipeline status for observability
 	result.PipelineStatus = sr.pipelineStatus
 
-	// Attach AI validation report (findings descartados por alucinação/invalidez)
+	// Attach AI validation report (findings discarded due to hallucination/invalidity)
 	result.AIValidation = aiValidationReport
 
 	// Score decomposition for audit (--explain-scores)
@@ -790,10 +790,9 @@ func runCodeContextAnalysis(
 
 	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt)
 
-	// ── Sanitização de dados sensíveis ─────────────────────────────────
-	// Redatar valores sensíveis (passwords, tokens, ARNs, PEM, etc.)
-	// antes de enviar os recursos ao provedor de IA.
-	// Ollama é local e não precisa de redação por padrão.
+	// ── Sensitive data sanitization ─────────────────────────────────
+	// Redact sensitive values (passwords, tokens, ARNs, PEM, etc.)
+	// Ollama is local and does not need redaction by default.
 	shouldRedact := cfg.LLM.Redact && !noRedactFlag
 	if providerName == "ollama" && !cfg.LLM.Redact {
 		shouldRedact = false
@@ -809,7 +808,7 @@ func runCodeContextAnalysis(
 		}
 		manifest := sess.Manifest()
 		if manifest.Count() > 0 {
-			fmt.Fprintf(os.Stderr, "%s ⚠ Redatados %d valores sensíveis (%d únicos) antes do envio à IA\n",
+			fmt.Fprintf(os.Stderr, "%s ⚠ Redacted %d sensitive values (%d unique) before sending to AI\n",
 				output.Prefix(), manifest.Count(), manifest.UniqueCount())
 			if cfg.LLM.RedactLog {
 				for plac, paths := range manifest.Entries {
@@ -818,16 +817,16 @@ func runCodeContextAnalysis(
 			}
 		}
 	} else {
-		logVerbose("Redação de dados sensíveis desabilitada")
+		logVerbose("Sensitive data redaction disabled")
 	}
 
-	// Construir chave de cache baseada no hash SHA-256 do conteúdo do plano
+	// Build cache key based on SHA-256 hash of plan content
 	var diskCache *aicache.DiskCache
 	var planHash string
 	if cfg.LLM.Cache {
 		rawPlan, readErr := os.ReadFile(planPath)
 		if readErr != nil {
-			logVerbose("cache: falha ao ler plano %s: %v", planPath, readErr)
+			logVerbose("cache: failed to read plan %s: %v", planPath, readErr)
 		} else {
 			planHash = aicache.PlanHash(rawPlan)
 		}
@@ -839,8 +838,8 @@ func runCodeContextAnalysis(
 
 		if planHash != "" {
 			if cached, ok := diskCache.Get(planHash); ok {
-				logVerbose("cache hit para análise de contexto IA (%s/%s, hash=%s)", providerName, model, planHash[:12])
-				// Limpar antes de retornar
+				logVerbose("cache hit for AI context analysis (%s/%s, hash=%s)", providerName, model, planHash[:12])
+				// Clean up before returning
 				if monitor != nil {
 					monitor.Stop()
 				}
@@ -881,7 +880,7 @@ func runCodeContextAnalysis(
 		cached := cachedAnalysis{Findings: result.Findings, Summary: result.Summary}
 		if data, err := json.Marshal(cached); err == nil {
 			diskCache.Put(planHash, string(data))
-			logVerbose("resultado da análise IA cacheado (%s/%s, hash=%s)", providerName, model, planHash[:12])
+			logVerbose("AI analysis result cached (%s/%s, hash=%s)", providerName, model, planHash[:12])
 		}
 	}
 

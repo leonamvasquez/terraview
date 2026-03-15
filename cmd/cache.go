@@ -73,7 +73,7 @@ func runCacheStatus(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
 		pick("Path:", "Caminho:"), dir)
 
-	// Verificar se estamos em um diretório Terraform e mostrar hash do plano atual
+	// Check if we're in a Terraform directory and show current plan hash
 	currentPlanHash := detectCurrentPlanHash()
 	if currentPlanHash != "" {
 		fmt.Fprintf(os.Stdout, "\n  %s %s\n",
@@ -98,15 +98,15 @@ func runCacheStatus(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// detectCurrentPlanHash procura plan.json ou tfplan no diretório atual
-// e calcula o hash SHA-256 do conteúdo para comparação com o cache.
+// detectCurrentPlanHash looks for plan.json or tfplan in the current directory
+// and computes the SHA-256 hash of the contents for cache comparison.
 func detectCurrentPlanHash() string {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
 
-	// Procurar arquivos de plano em ordem de preferência
+	// Look for plan files in order of preference
 	for _, name := range []string{"plan.json", "tfplan"} {
 		planPath := filepath.Join(cwd, name)
 		data, err := os.ReadFile(planPath)

@@ -16,15 +16,15 @@ import (
 	"sync"
 )
 
-// RedactionManifest mapeia cada placeholder ao campo onde a redação ocorreu.
-// Usado para auditoria: permite saber exatamente o que foi removido e onde.
+// RedactionManifest maps each placeholder to the fields where redaction occurred.
+// Used for auditing: allows knowing exactly what was removed and where.
 type RedactionManifest struct {
-	// Entries mapeia placeholder → lista de caminhos JSON onde o valor apareceu.
-	// Exemplo: "[REDACTED-001]" → ["resources[0].values.password", "resources[1].values.db_password"]
+	// Entries maps placeholder → list of JSON paths where the value appeared.
+	// Example: "[REDACTED-001]" → ["resources[0].values.password", "resources[1].values.db_password"]
 	Entries map[string][]string
 }
 
-// Count retorna o número total de redações realizadas (não-único).
+// Count returns the total number of redactions performed (non-unique).
 func (m *RedactionManifest) Count() int {
 	total := 0
 	for _, paths := range m.Entries {
@@ -33,7 +33,7 @@ func (m *RedactionManifest) Count() int {
 	return total
 }
 
-// UniqueCount retorna o número de valores distintos redatados.
+// UniqueCount returns the number of distinct redacted values.
 func (m *RedactionManifest) UniqueCount() int {
 	return len(m.Entries)
 }
@@ -66,12 +66,12 @@ var (
 	// PEM private key blocks
 	pemPattern = regexp.MustCompile(`-----BEGIN\s[A-Z\s]*PRIVATE\sKEY-----`)
 
-	// JWT tokens: header.payload (ambos base64url começando com eyJ)
+	// JWT tokens: header.payload (both base64url starting with eyJ)
 	jwtPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+`)
 )
 
-// minBase64Length é o comprimento mínimo de um blob base64 para ser redatado.
-// Valores menores que isso geralmente são hashes curtos ou IDs legítimos.
+// minBase64Length is the minimum length of a base64 blob to be redacted.
+// Values shorter than this are usually short hashes or legitimate IDs.
 const minBase64Length = 200
 
 var base64Pattern = regexp.MustCompile(`^[A-Za-z0-9+/=]{200,}$`)
@@ -79,7 +79,7 @@ var base64Pattern = regexp.MustCompile(`^[A-Za-z0-9+/=]{200,}$`)
 type sanitizer struct {
 	mu          sync.Mutex
 	counter     int
-	valueToPlac map[string]string // valor original → placeholder
+	valueToPlac map[string]string // original value → placeholder
 	manifest    *RedactionManifest
 }
 
@@ -148,15 +148,15 @@ func isSensitiveValue(value string) bool {
 	return false
 }
 
-// Sanitize redige dados sensíveis do JSON de um plano Terraform.
-// Retorna o JSON sanitizado, o manifesto de redações e qualquer erro.
+// Sanitize redacts sensitive data from a Terraform plan JSON.
+// Returns the sanitized JSON, the redaction manifest, and any error.
 //
-// A função preserva a estrutura JSON completa — chaves, tipos de recurso
-// e nomes de recurso permanecem intactos. Apenas valores são substituídos.
+// The function preserves the complete JSON structure — keys, resource types
+// and resource names remain intact. Only values are replaced.
 func Sanitize(plan []byte) ([]byte, *RedactionManifest, error) {
 	var data interface{}
 	if err := json.Unmarshal(plan, &data); err != nil {
-		return nil, nil, fmt.Errorf("falha ao decodificar JSON do plano: %w", err)
+		return nil, nil, fmt.Errorf("failed to decode plan JSON: %w", err)
 	}
 
 	s := newSanitizer()
@@ -164,7 +164,7 @@ func Sanitize(plan []byte) ([]byte, *RedactionManifest, error) {
 
 	result, err := json.Marshal(sanitized)
 	if err != nil {
-		return nil, nil, fmt.Errorf("falha ao codificar JSON sanitizado: %w", err)
+		return nil, nil, fmt.Errorf("failed to encode sanitized JSON: %w", err)
 	}
 
 	return result, s.manifest, nil
@@ -198,7 +198,7 @@ func (s *sanitizer) walkMap(m map[string]interface{}, path string) map[string]in
 			fieldPath = fieldPath + "." + key
 		}
 
-		// Se o nome do campo é sensível, redatar o valor (se for string)
+		// If the field name is sensitive, redact the value (if string)
 		if isSensitiveFieldName(key) {
 			if strVal, ok := val.(string); ok && strVal != "" {
 				result[key] = s.redact(strVal, fieldPath)
@@ -206,7 +206,7 @@ func (s *sanitizer) walkMap(m map[string]interface{}, path string) map[string]in
 			}
 		}
 
-		// Recursão para valores compostos ou verificação de padrão em strings
+		// Recurse into composite values or check pattern in strings
 		result[key] = s.walk(val, fieldPath)
 	}
 
@@ -232,9 +232,9 @@ func NewSession() *Session {
 	return &Session{s: newSanitizer()}
 }
 
-// SanitizeMap redige valores sensíveis de um map[string]interface{} já
-// deserializado (ex.: NormalizedResource.Values). basePath é o prefixo
-// usado nos caminhos do manifest (ex.: "aws_instance.web.values").
+// SanitizeMap redacts sensitive values from a deserialized map[string]interface{}
+// (e.g., NormalizedResource.Values). basePath is the prefix used in manifest
+// paths (e.g., "aws_instance.web.values").
 func (sess *Session) SanitizeMap(data map[string]interface{}, basePath string) map[string]interface{} {
 	if data == nil {
 		return nil
@@ -242,7 +242,7 @@ func (sess *Session) SanitizeMap(data map[string]interface{}, basePath string) m
 	return sess.s.walkMap(data, basePath)
 }
 
-// Manifest retorna o manifesto acumulado de todas as redações da sessão.
+// Manifest returns the accumulated manifest of all redactions in the session.
 func (sess *Session) Manifest() *RedactionManifest {
 	return sess.s.manifest
 }

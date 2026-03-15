@@ -7,8 +7,8 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-// ScoreDecomposition contém a decomposição completa do cálculo de score,
-// permitindo auditoria de como cada finding contribuiu para o resultado final.
+// ScoreDecomposition contains the full scoring calculation breakdown,
+// enabling auditing of how each finding contributed to the final result.
 type ScoreDecomposition struct {
 	Security        CategoryDecomposition `json:"security"`
 	Compliance      CategoryDecomposition `json:"compliance"`
@@ -17,7 +17,7 @@ type ScoreDecomposition struct {
 	Overall         OverallDecomposition  `json:"overall"`
 }
 
-// CategoryDecomposition detalha o cálculo de uma categoria.
+// CategoryDecomposition details the calculation of a category.
 type CategoryDecomposition struct {
 	RawScore       float64         `json:"raw_score"`
 	FinalScore     float64         `json:"final_score"`
@@ -29,7 +29,7 @@ type CategoryDecomposition struct {
 	FindingsImpact []FindingImpact `json:"findings_impact"`
 }
 
-// FindingImpact detalha a contribuição de um finding individual.
+// FindingImpact details the contribution of an individual finding.
 type FindingImpact struct {
 	RuleID        string   `json:"rule_id"`
 	Resource      string   `json:"resource"`
@@ -41,14 +41,14 @@ type FindingImpact struct {
 	ImpactOnScore float64  `json:"impact_on_score"`
 }
 
-// OverallDecomposition detalha o cálculo do Score Geral.
+// OverallDecomposition details the calculation of the Overall Score.
 type OverallDecomposition struct {
 	Formula    string             `json:"formula"`
 	Components []OverallComponent `json:"components"`
 	FinalScore float64            `json:"final_score"`
 }
 
-// OverallComponent é um peso × score usado no cálculo do Overall.
+// OverallComponent is a weight × score used in the Overall calculation.
 type OverallComponent struct {
 	Category string  `json:"category"`
 	Score    float64 `json:"score"`
@@ -56,9 +56,9 @@ type OverallComponent struct {
 	Weighted float64 `json:"weighted"`
 }
 
-// Decompose calcula a decomposição completa do scoring para auditoria.
-// Deve ser chamado com os mesmos parâmetros usados em Calculate() para
-// garantir que os números sejam idênticos.
+// Decompose computes the full scoring breakdown for auditing.
+// Must be called with the same parameters used in Calculate() to
+// ensure the numbers are identical.
 func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDecomposition {
 	if len(findings) == 0 || totalResources == 0 {
 		return s.emptyDecomposition(totalResources)
@@ -74,15 +74,15 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 	maintDecomp := s.decomposeCategory(maintFindings, totalResources)
 	relDecomp := s.decomposeCategory(relFindings, totalResources)
 
-	// Aplicar blending de confiabilidade
+	// Apply reliability blending
 	if len(relFindings) > 0 {
 		blendedSec := (secDecomp.RawScore*2 + relDecomp.RawScore) / 3
 		secDecomp.FinalScore = clampScore(blendedSec)
-		secDecomp.BlendingNote = "Blended com reliability: (sec×2 + rel) / 3"
+		secDecomp.BlendingNote = "Blended with reliability: (sec×2 + rel) / 3"
 
 		blendedComp := (compDecomp.RawScore*2 + relDecomp.RawScore) / 3
 		compDecomp.FinalScore = clampScore(blendedComp)
-		compDecomp.BlendingNote = "Blended com reliability: (comp×2 + rel) / 3"
+		compDecomp.BlendingNote = "Blended with reliability: (comp×2 + rel) / 3"
 	}
 
 	// Calculate Overall
@@ -134,7 +134,7 @@ func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int)
 			onlyMediumOrBelow = false
 		}
 
-		// Impacto individual: quanto este finding contribui para a penalização
+		// Individual impact: how much this finding contributes to the penalty
 		individualPenalty := w / math.Max(float64(totalResources), 1.0) * 2.0
 		impact := FindingImpact{
 			RuleID:        f.RuleID,
@@ -167,11 +167,11 @@ func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int)
 	floorApplied := ""
 	if onlyMediumOrBelow && rawScore < 5.0 {
 		rawScore = 5.0
-		floorApplied = "Piso 5.0: apenas findings MEDIUM ou inferior"
+		floorApplied = "Floor 5.0: only MEDIUM or below findings"
 	}
 	if hasHigh && !hasCritical && rawScore < 2.0 {
 		rawScore = 2.0
-		floorApplied = "Piso 2.0: HIGH sem CRITICAL"
+		floorApplied = "Floor 2.0: HIGH without CRITICAL"
 	}
 
 	finalScore := clampScore(rawScore)
@@ -234,7 +234,7 @@ func inferRiskVectors(f rules.Finding) []string {
 			containsAny(ruleID, "iam") {
 			vectors = append(vectors, "identity")
 		}
-		// Se nenhum vetor específico, default para criptografia (mais comum em security)
+		// If no specific vector, default to encryption (most common in security)
 		if len(vectors) == 0 {
 			vectors = append(vectors, "encryption")
 		}

@@ -20,23 +20,23 @@ type Verdict struct {
 	Confidence string   `json:"confidence"` // "high", "medium", "low"
 }
 
-// PipelineStatus descreve o estado de execução do pipeline scanner + IA.
+// PipelineStatus describes the execution state of the scanner + AI pipeline.
 type PipelineStatus struct {
 	Scanner            *ComponentStatus `json:"scanner,omitempty"`
 	AI                 *ComponentStatus `json:"ai,omitempty"`
 	ResultCompleteness string           `json:"result_completeness"` // "complete", "partial_scanner_only", "partial_ai_only", "failed"
 }
 
-// ComponentStatus registra o estado de um componente do pipeline.
+// ComponentStatus records the state of a pipeline component.
 type ComponentStatus struct {
 	Status     string `json:"status"`                // "success", "failed", "skipped"
-	Error      string `json:"error,omitempty"`       // mensagem de erro (se falhou)
-	DurationMs int64  `json:"duration_ms,omitempty"` // duração em milissegundos
-	Tool       string `json:"tool,omitempty"`        // nome da ferramenta (checkov, tfsec, etc.)
-	Version    string `json:"version,omitempty"`     // versão da ferramenta
-	Provider   string `json:"provider,omitempty"`    // provedor IA (gemini, claude, etc.)
-	Model      string `json:"model,omitempty"`       // modelo IA
-	Retries    int    `json:"retries,omitempty"`     // número de retentativas feitas
+	Error      string `json:"error,omitempty"`       // error message (if failed)
+	DurationMs int64  `json:"duration_ms,omitempty"` // duration in milliseconds
+	Tool       string `json:"tool,omitempty"`        // tool name (checkov, tfsec, etc.)
+	Version    string `json:"version,omitempty"`     // tool version
+	Provider   string `json:"provider,omitempty"`    // AI provider (gemini, claude, etc.)
+	Model      string `json:"model,omitempty"`       // AI model
+	Retries    int    `json:"retries,omitempty"`     // number of retries performed
 }
 
 // ReviewResult is the final aggregated result of a review.
@@ -60,8 +60,8 @@ type ReviewResult struct {
 	ExitCode           int                         `json:"exit_code"`
 }
 
-// AIValidationReport contém as estatísticas da validação de findings da IA
-// contra o grafo de topologia. Incluído no JSON de saída quando há findings descartados.
+// AIValidationReport contains the validation statistics for AI findings
+// against the topology graph. Included in JSON output when findings are discarded.
 type AIValidationReport struct {
 	TotalReceived int                  `json:"total_received"`
 	TotalValid    int                  `json:"total_valid"`
@@ -69,7 +69,7 @@ type AIValidationReport struct {
 	Discarded     []AIDiscardedFinding `json:"discarded,omitempty"`
 }
 
-// AIDiscardedFinding representa um finding descartado com o motivo.
+// AIDiscardedFinding represents a discarded finding with its reason.
 type AIDiscardedFinding struct {
 	Resource string `json:"resource"`
 	Message  string `json:"message"`

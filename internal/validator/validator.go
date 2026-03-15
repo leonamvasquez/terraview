@@ -17,30 +17,30 @@ import (
 	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
-// DiscardReason descreve o motivo pelo qual um finding foi descartado.
+// DiscardReason describes the reason a finding was discarded.
 type DiscardReason string
 
 const (
-	// ReasonResourceNotFound indica que o recurso não existe no grafo de topologia.
-	ReasonResourceNotFound DiscardReason = "recurso_nao_encontrado"
-	// ReasonResourceTypeMismatch indica divergência de tipo entre finding e grafo.
-	ReasonResourceTypeMismatch DiscardReason = "tipo_recurso_divergente"
-	// ReasonInvalidSeverity indica severidade fora do conjunto permitido.
-	ReasonInvalidSeverity DiscardReason = "severidade_invalida"
-	// ReasonDuplicate indica finding duplicado (mesmo recurso + categoria/descrição).
-	ReasonDuplicate DiscardReason = "duplicado"
-	// ReasonEmptyFields indica campos obrigatórios ausentes.
-	ReasonEmptyFields DiscardReason = "campos_obrigatorios_vazios"
+	// ReasonResourceNotFound indicates the resource does not exist in the topology graph.
+	ReasonResourceNotFound DiscardReason = "resource_not_found"
+	// ReasonResourceTypeMismatch indicates a type mismatch between finding and graph.
+	ReasonResourceTypeMismatch DiscardReason = "resource_type_mismatch"
+	// ReasonInvalidSeverity indicates severity outside the allowed set.
+	ReasonInvalidSeverity DiscardReason = "invalid_severity"
+	// ReasonDuplicate indicates a duplicate finding (same resource + category/description).
+	ReasonDuplicate DiscardReason = "duplicate"
+	// ReasonEmptyFields indicates missing required fields.
+	ReasonEmptyFields DiscardReason = "empty_required_fields"
 )
 
-// DiscardedFinding agrupa um finding descartado com o motivo.
+// DiscardedFinding groups a discarded finding with its reason.
 type DiscardedFinding struct {
 	Finding rules.Finding `json:"finding"`
 	Reason  DiscardReason `json:"reason"`
 	Detail  string        `json:"detail"`
 }
 
-// ValidationReport contém as estatísticas da validação de findings da IA.
+// ValidationReport contains the AI findings validation statistics.
 type ValidationReport struct {
 	TotalReceived int                `json:"total_received"`
 	TotalValid    int                `json:"total_valid"`
@@ -48,7 +48,7 @@ type ValidationReport struct {
 	Discarded     []DiscardedFinding `json:"discarded,omitempty"`
 }
 
-// validSeverities contém as severidades aceitas.
+// validSeverities contains the accepted severities.
 var validSeverities = map[string]bool{
 	rules.SeverityCritical: true,
 	rules.SeverityHigh:     true,
@@ -57,10 +57,10 @@ var validSeverities = map[string]bool{
 	rules.SeverityInfo:     true,
 }
 
-// ValidateAIFindings filtra findings gerados por IA, descartando os que não
-// correspondem a recursos reais no grafo de topologia ou que são inválidos.
+// ValidateAIFindings filters AI-generated findings, discarding those that do not
+// match real resources in the topology graph or that are invalid.
 //
-// Retorna os findings válidos, os descartados e um relatório de validação.
+// Returns the valid findings, the discarded ones, and a validation report.
 func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid []rules.Finding, discarded []DiscardedFinding, report *ValidationReport) {
 	report = &ValidationReport{
 		TotalReceived: len(findings),
@@ -70,14 +70,14 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 		return nil, nil, report
 	}
 
-	// Construir índice de nós do grafo: address → Node
+	// Build graph node index: address → Node
 	nodeIndex := buildNodeIndex(graph)
 
 	// Track duplicates: key = resource|category|descNorm
 	seen := make(map[string]bool)
 
 	for _, f := range findings {
-		// Regra 5: campos obrigatórios
+		// Rule 5: required fields
 		if reason, detail := checkEmptyFields(f); reason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
@@ -87,7 +87,7 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 			continue
 		}
 
-		// Regra 3: severidade válida
+		// Rule 3: valid severity
 		if reason, detail := checkSeverity(f); reason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
@@ -97,7 +97,7 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 			continue
 		}
 
-		// Regra 1 + 2: existência e tipo do recurso
+		// Rule 1 + 2: resource existence and type
 		if reason, detail := checkResource(f, nodeIndex); reason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
@@ -107,7 +107,7 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 			continue
 		}
 
-		// Regra 4: detecção de duplicates
+		// Rule 4: duplicate detection
 		if reason, detail := checkDuplicate(f, seen); reason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
@@ -140,13 +140,13 @@ func checkEmptyFields(f rules.Finding) (DiscardReason, string) {
 	message := strings.TrimSpace(f.Message)
 
 	if resource == "" && message == "" {
-		return ReasonEmptyFields, "resource e message estão vazios"
+		return ReasonEmptyFields, "resource and message are empty"
 	}
 	if resource == "" {
-		return ReasonEmptyFields, "resource está vazio"
+		return ReasonEmptyFields, "resource is empty"
 	}
 	if message == "" {
-		return ReasonEmptyFields, "message está vazio"
+		return ReasonEmptyFields, "message is empty"
 	}
 	return "", ""
 }
@@ -154,7 +154,7 @@ func checkEmptyFields(f rules.Finding) (DiscardReason, string) {
 func checkSeverity(f rules.Finding) (DiscardReason, string) {
 	sev := strings.ToUpper(strings.TrimSpace(f.Severity))
 	if !validSeverities[sev] {
-		return ReasonInvalidSeverity, fmt.Sprintf("severidade '%s' não é válida (esperado: CRITICAL|HIGH|MEDIUM|LOW|INFO)", f.Severity)
+		return ReasonInvalidSeverity, fmt.Sprintf("severity '%s' is not valid (expected: CRITICAL|HIGH|MEDIUM|LOW|INFO)", f.Severity)
 	}
 	return "", ""
 }
@@ -164,14 +164,14 @@ func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (Discard
 
 	node, exists := nodeIndex[resource]
 	if !exists {
-		return ReasonResourceNotFound, fmt.Sprintf("recurso '%s' não existe no plano Terraform", resource)
+		return ReasonResourceNotFound, fmt.Sprintf("resource '%s' does not exist in the Terraform plan", resource)
 	}
 
-	// Extrair tipo do endereço do finding (ex: "aws_s3_bucket" de "aws_s3_bucket.my_bucket")
+	// Extract type from finding address (e.g., "aws_s3_bucket" from "aws_s3_bucket.my_bucket")
 	findingType := extractResourceType(resource)
 	if findingType != "" && node.Type != "" && findingType != node.Type {
 		return ReasonResourceTypeMismatch, fmt.Sprintf(
-			"tipo do finding '%s' diverge do grafo '%s' para recurso '%s'",
+			"finding type '%s' diverges from graph type '%s' for resource '%s'",
 			findingType, node.Type, resource,
 		)
 	}
@@ -182,14 +182,14 @@ func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (Discard
 func checkDuplicate(f rules.Finding, seen map[string]bool) (DiscardReason, string) {
 	key := deduplicationKey(f)
 	if seen[key] {
-		return ReasonDuplicate, fmt.Sprintf("finding duplicado para recurso '%s' com categoria '%s'", f.Resource, f.Category)
+		return ReasonDuplicate, fmt.Sprintf("duplicate finding for resource '%s' with category '%s'", f.Resource, f.Category)
 	}
 	seen[key] = true
 	return "", ""
 }
 
-// deduplicationKey gera uma chave única para detecção de duplicates.
-// Usa recurso + categoria + primeiros 80 caracteres da mensagem normalizada.
+// deduplicationKey generates a unique key for duplicate detection.
+// Uses resource + category + first 80 characters of the normalized message.
 func deduplicationKey(f rules.Finding) string {
 	msg := strings.ToLower(strings.TrimSpace(f.Message))
 	if len(msg) > 80 {
@@ -202,29 +202,29 @@ func deduplicationKey(f rules.Finding) string {
 	)
 }
 
-// extractResourceType extrai o tipo do recurso a partir do endereço Terraform.
-// Ex: "aws_s3_bucket.my_bucket" → "aws_s3_bucket"
+// extractResourceType extracts the resource type from a Terraform address.
+// E.g., "aws_s3_bucket.my_bucket" → "aws_s3_bucket"
 //
 //	"module.vpc.aws_subnet.private" → "aws_subnet"
 func extractResourceType(address string) string {
-	// Lidar com endereços de módulo: module.vpc.aws_subnet.private[0]
+	// Handle module addresses: module.vpc.aws_subnet.private[0]
 	parts := strings.Split(address, ".")
 	if len(parts) < 2 {
 		return ""
 	}
 
-	// Percorrer de trás para frente para encontrar tipo.nome
-	// O tipo é o penúltimo segmento que não começa com "module"
+	// Walk backwards to find type.name
+	// The type is the second-to-last segment that doesn't start with "module"
 	for i := len(parts) - 2; i >= 0; i-- {
 		if parts[i] == "module" || (i > 0 && parts[i-1] == "module") {
 			continue
 		}
-		// Remover índice se presente: "aws_subnet" de "aws_subnet[0]"
+		// Remove index if present: "aws_subnet" from "aws_subnet[0]"
 		candidate := parts[i]
 		if idx := strings.Index(candidate, "["); idx != -1 {
 			candidate = candidate[:idx]
 		}
-		// Tipo de recurso Terraform sempre contém underscore e não é "module"
+		// Terraform resource type always contains underscore and is not "module"
 		if strings.Contains(candidate, "_") && candidate != "module" {
 			return candidate
 		}

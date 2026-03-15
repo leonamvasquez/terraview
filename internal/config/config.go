@@ -99,8 +99,8 @@ type LLMConfig struct {
 	Ollama         OllamaConfig `yaml:"ollama"`
 	Cache          bool         `yaml:"cache"`
 	CacheTTLHours  int          `yaml:"cache_ttl_hours"`
-	Redact         bool         `yaml:"redact"`     // redatar dados sensíveis antes de enviar à IA
-	RedactLog      bool         `yaml:"redact_log"` // exibir manifest de redação em modo verbose
+	Redact         bool         `yaml:"redact"`     // redact sensitive data before sending to AI
+	RedactLog      bool         `yaml:"redact_log"` // show redaction manifest in verbose mode
 }
 
 // OllamaConfig holds Ollama-specific resource limits.

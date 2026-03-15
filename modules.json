@@ -1,0 +1,79 @@
+{
+  "modules": [
+    {
+      "name": "vpc",
+      "source": "terraform-aws-modules/vpc/aws",
+      "version_constraint": "~\u003e 5.0",
+      "source_type": "registry",
+      "depth": 1,
+      "resource_count": 3
+    },
+    {
+      "name": "rds",
+      "source": "terraform-aws-modules/rds/aws",
+      "source_type": "registry",
+      "depth": 1,
+      "resource_count": 1
+    },
+    {
+      "name": "custom_git",
+      "source": "git::https://github.com/example/terraform-aws-custom.git?ref=main",
+      "source_type": "git",
+      "depth": 1,
+      "resource_count": 1
+    },
+    {
+      "name": "insecure_http",
+      "source": "http://example.com/module.zip",
+      "source_type": "http",
+      "depth": 1,
+      "resource_count": 0
+    },
+    {
+      "name": "local_module",
+      "source": "./modules/local",
+      "source_type": "local",
+      "depth": 1,
+      "resource_count": 0
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "MOD_001",
+      "severity": "HIGH",
+      "module": "module.rds",
+      "source": "terraform-aws-modules/rds/aws",
+      "message": "Registry module has no version constraint — any version will be installed",
+      "remediation": "Add a version constraint: module \"rds\" { version = \"~\u003e X.Y\" }"
+    },
+    {
+      "rule_id": "MOD_002",
+      "severity": "HIGH",
+      "module": "module.custom_git",
+      "source": "git::https://github.com/example/terraform-aws-custom.git?ref=main",
+      "message": "Git module pinned to branch \"main\" — any push to this branch will change your infrastructure",
+      "remediation": "Pin to a semver tag (e.g., ?ref=v1.2.3) or a full commit SHA."
+    },
+    {
+      "rule_id": "MOD_005",
+      "severity": "HIGH",
+      "module": "module.insecure_http",
+      "source": "http://example.com/module.zip",
+      "message": "Module downloaded over plain HTTP — vulnerable to man-in-the-middle attacks",
+      "remediation": "Use HTTPS: https://example.com/module.zip"
+    }
+  ],
+  "summary": {
+    "total_modules": 5,
+    "by_source_type": {
+      "git": 1,
+      "http": 1,
+      "local": 1,
+      "registry": 2
+    },
+    "findings_by_severity": {
+      "HIGH": 3
+    },
+    "max_nesting_depth": 1
+  }
+}

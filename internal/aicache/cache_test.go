@@ -232,25 +232,25 @@ func TestDiskCache_HitWithoutProvider(t *testing.T) {
 	planData := []byte(`{"resources":[{"type":"aws_s3_bucket"}]}`)
 	planHash := PlanHash(planData)
 
-	// Primeira instância: armazenar um valor
+	// First instance: store a value
 	dc1 := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	dc1.Put(planHash, `{"findings":[],"summary":"all good"}`)
 
-	// Segunda instância: mesmo provider/model → hit
+	// Second instance: same provider/model → hit
 	dc2 := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	got, ok := dc2.Get(planHash)
 	if !ok {
-		t.Fatal("esperado cache hit com mesmo provider/model")
+		t.Fatal("expected cache hit with same provider/model")
 	}
 	if got != `{"findings":[],"summary":"all good"}` {
-		t.Errorf("valor inesperado: %q", got)
+		t.Errorf("unexpected value: %q", got)
 	}
 
-	// Terceira instância: provider diferente → miss
+	// Third instance: different provider → miss
 	dc3 := NewDiskCache(dir, "ollama", "llama3.1:8b", "checkov", 24)
 	_, ok = dc3.Get(planHash)
 	if ok {
-		t.Error("esperado cache miss para provider diferente")
+		t.Error("expected cache miss for different provider")
 	}
 }
 
@@ -261,25 +261,25 @@ func TestDiskCache_TTLExpiration(t *testing.T) {
 
 	now := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	// Armazenar entrada com relógio fixo
+	// Store entry with fixed clock
 	dc1 := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	dc1.now = func() time.Time { return now }
 	dc1.Put(planHash, `{"findings":[],"summary":"cached"}`)
 
-	// Ler dentro do TTL (12 horas depois)
+	// Read within TTL (12 hours later)
 	dc2 := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	dc2.now = func() time.Time { return now.Add(12 * time.Hour) }
 	_, ok := dc2.Get(planHash)
 	if !ok {
-		t.Fatal("esperado cache hit dentro do TTL")
+		t.Fatal("expected cache hit within TTL")
 	}
 
-	// Ler após TTL (25 horas depois)
+	// Read after TTL (25 hours later)
 	dc3 := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	dc3.now = func() time.Time { return now.Add(25 * time.Hour) }
 	_, ok = dc3.Get(planHash)
 	if ok {
-		t.Error("esperado cache miss após expiração TTL")
+		t.Error("expected cache miss after TTL expiration")
 	}
 }
 
@@ -291,49 +291,49 @@ func TestDiskCache_PersistsToDisk(t *testing.T) {
 	dc := NewDiskCache(dir, "ollama", "llama3.1:8b", "tfsec", 24)
 	dc.Put(planHash, "test-value")
 
-	// Verificar que ambos os arquivos foram escritos
+	// Verify both files were written
 	metaPath := filepath.Join(dir, planHash+".meta")
 	dataPath := filepath.Join(dir, planHash+".json")
 
 	if _, err := os.Stat(metaPath); err != nil {
-		t.Fatalf("arquivo .meta não escrito: %v", err)
+		t.Fatalf(".meta file not written: %v", err)
 	}
 	if _, err := os.Stat(dataPath); err != nil {
-		t.Fatalf("arquivo .json não escrito: %v", err)
+		t.Fatalf(".json file not written: %v", err)
 	}
 
-	// Verificar conteúdo do arquivo de dados
+	// Verify data file content
 	data, err := os.ReadFile(dataPath)
 	if err != nil {
-		t.Fatalf("falha ao ler .json: %v", err)
+		t.Fatalf("failed to read .json: %v", err)
 	}
 	if string(data) != "test-value" {
-		t.Errorf("conteúdo inesperado: %q", string(data))
+		t.Errorf("unexpected content: %q", string(data))
 	}
 
-	// Verificar metadados
+	// Verify metadata
 	metaData, err := os.ReadFile(metaPath)
 	if err != nil {
-		t.Fatalf("falha ao ler .meta: %v", err)
+		t.Fatalf("failed to read .meta: %v", err)
 	}
 	var meta CacheMeta
 	if err := json.Unmarshal(metaData, &meta); err != nil {
-		t.Fatalf("falha ao decodificar .meta: %v", err)
+		t.Fatalf("failed to decode .meta: %v", err)
 	}
 	if meta.Provider != "ollama" {
-		t.Errorf("provider esperado 'ollama', obteve %q", meta.Provider)
+		t.Errorf("expected provider 'ollama', got %q", meta.Provider)
 	}
 	if meta.Model != "llama3.1:8b" {
-		t.Errorf("model esperado 'llama3.1:8b', obteve %q", meta.Model)
+		t.Errorf("expected model 'llama3.1:8b', got %q", meta.Model)
 	}
 	if meta.Scanner != "tfsec" {
-		t.Errorf("scanner esperado 'tfsec', obteve %q", meta.Scanner)
+		t.Errorf("expected scanner 'tfsec', got %q", meta.Scanner)
 	}
 	if meta.PlanHash != planHash {
-		t.Errorf("plan_hash esperado %q, obteve %q", planHash, meta.PlanHash)
+		t.Errorf("expected plan_hash %q, got %q", planHash, meta.PlanHash)
 	}
 	if meta.TTLHours != 24 {
-		t.Errorf("ttl_hours esperado 24, obteve %d", meta.TTLHours)
+		t.Errorf("expected ttl_hours 24, got %d", meta.TTLHours)
 	}
 }
 
@@ -349,13 +349,13 @@ func TestDiskCache_Stats(t *testing.T) {
 
 	hits, misses, size := dc.Stats()
 	if hits != 1 {
-		t.Errorf("esperado 1 hit, obteve %d", hits)
+		t.Errorf("expected 1 hit, got %d", hits)
 	}
 	if misses != 1 {
-		t.Errorf("esperado 1 miss, obteve %d", misses)
+		t.Errorf("expected 1 miss, got %d", misses)
 	}
 	if size != 1 {
-		t.Errorf("esperado tamanho 1, obteve %d", size)
+		t.Errorf("expected size 1, got %d", size)
 	}
 }
 
@@ -364,13 +364,13 @@ func TestAnalysisKey_Deterministic(t *testing.T) {
 	k1 := AnalysisKey(data, "claude", "sonnet")
 	k2 := AnalysisKey(data, "claude", "sonnet")
 	if k1 != k2 {
-		t.Errorf("chaves de análise devem ser determinísticas: %q != %q", k1, k2)
+		t.Errorf("analysis keys must be deterministic: %q != %q", k1, k2)
 	}
 
-	// Provider diferente = chave diferente
+	// Different provider = different key
 	k3 := AnalysisKey(data, "ollama", "sonnet")
 	if k1 == k3 {
-		t.Error("providers diferentes devem produzir chaves diferentes")
+		t.Error("different providers must produce different keys")
 	}
 }
 
@@ -379,10 +379,10 @@ func TestPlanHash_Deterministic(t *testing.T) {
 	h1 := PlanHash(plan)
 	h2 := PlanHash(plan)
 	if h1 != h2 {
-		t.Errorf("PlanHash deve ser determinístico: %q != %q", h1, h2)
+		t.Errorf("PlanHash must be deterministic: %q != %q", h1, h2)
 	}
 	if len(h1) != 64 {
-		t.Errorf("esperado SHA256 hex (64 chars), obteve %d chars", len(h1))
+		t.Errorf("expected SHA256 hex (64 chars), got %d chars", len(h1))
 	}
 }
 
@@ -392,7 +392,7 @@ func TestPlanHash_DifferentPlans(t *testing.T) {
 	h1 := PlanHash(plan1)
 	h2 := PlanHash(plan2)
 	if h1 == h2 {
-		t.Error("planos diferentes devem produzir hashes diferentes")
+		t.Error("different plans must produce different hashes")
 	}
 }
 
@@ -403,40 +403,40 @@ func TestClearDisk(t *testing.T) {
 	dc := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	dc.Put(planHash, "v1")
 
-	// Verificar que os arquivos existem
+	// Verify files exist
 	metaPath := filepath.Join(dir, planHash+".meta")
 	dataPath := filepath.Join(dir, planHash+".json")
 	if _, err := os.Stat(metaPath); err != nil {
-		t.Fatalf("arquivo .meta deveria existir antes do clear: %v", err)
+		t.Fatalf(".meta file should exist before clear: %v", err)
 	}
 
 	if err := ClearDisk(dir); err != nil {
-		t.Fatalf("ClearDisk falhou: %v", err)
+		t.Fatalf("ClearDisk failed: %v", err)
 	}
 
 	if _, err := os.Stat(metaPath); !os.IsNotExist(err) {
-		t.Error("arquivo .meta deveria ser removido após ClearDisk")
+		t.Error(".meta file should be removed after ClearDisk")
 	}
 	if _, err := os.Stat(dataPath); !os.IsNotExist(err) {
-		t.Error("arquivo .json deveria ser removido após ClearDisk")
+		t.Error(".json file should be removed after ClearDisk")
 	}
 
-	// Clear em diretório vazio não deve errar
+	// Clear on empty directory should not error
 	if err := ClearDisk(dir); err != nil {
-		t.Errorf("ClearDisk em diretório vazio não deveria errar: %v", err)
+		t.Errorf("ClearDisk on empty directory should not error: %v", err)
 	}
 }
 
 func TestDiskStats(t *testing.T) {
 	dir := t.TempDir()
 
-	// Sem arquivos = entradas legado
+	// No files = legacy entries
 	_, _, _, _, err := DiskStats(dir)
 	if err == nil {
-		t.Error("esperado erro para diretório sem cache")
+		t.Error("expected error for directory without cache")
 	}
 
-	// Escrever entradas
+	// Write entries
 	dc := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	now := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
 	dc.now = func() time.Time { return now }
@@ -449,41 +449,41 @@ func TestDiskStats(t *testing.T) {
 
 	entries, totalSize, oldest, newest, err := DiskStats(dir)
 	if err != nil {
-		t.Fatalf("DiskStats falhou: %v", err)
+		t.Fatalf("DiskStats failed: %v", err)
 	}
 	if entries != 2 {
-		t.Errorf("esperado 2 entradas, obteve %d", entries)
+		t.Errorf("expected 2 entries, got %d", entries)
 	}
 	if totalSize == 0 {
-		t.Error("esperado tamanho total > 0")
+		t.Error("expected total size > 0")
 	}
 	if !oldest.Equal(now) {
-		t.Errorf("esperado oldest=%v, obteve %v", now, oldest)
+		t.Errorf("expected oldest=%v, got %v", now, oldest)
 	}
 	if !newest.Equal(now.Add(2 * time.Hour)) {
-		t.Errorf("esperado newest=%v, obteve %v", now.Add(2*time.Hour), newest)
+		t.Errorf("expected newest=%v, got %v", now.Add(2*time.Hour), newest)
 	}
 }
 
-// ── Novos testes: cache baseado em hash de conteúdo ──────────────────────
+// ── New tests: content-hash-based cache ──────────────────────
 
 func TestDiskCache_SamePlan_CacheHit(t *testing.T) {
 	dir := t.TempDir()
 	plan := []byte(`{"resource_changes":[{"type":"aws_instance","change":{"actions":["create"]}}]}`)
 	planHash := PlanHash(plan)
 
-	// Armazenar resultado
+	// Store result
 	dc1 := NewDiskCache(dir, "gemini", "gemini-2.5-flash", "checkov", 24)
 	dc1.Put(planHash, `{"findings":[{"rule":"CKV_001"}],"summary":"1 finding"}`)
 
-	// Mesmo plano → hit
+	// Same plan → hit
 	dc2 := NewDiskCache(dir, "gemini", "gemini-2.5-flash", "checkov", 24)
 	got, ok := dc2.Get(planHash)
 	if !ok {
-		t.Fatal("mesmo plano deveria resultar em cache hit")
+		t.Fatal("same plan should result in cache hit")
 	}
 	if got != `{"findings":[{"rule":"CKV_001"}],"summary":"1 finding"}` {
-		t.Errorf("resposta inesperada: %q", got)
+		t.Errorf("unexpected response: %q", got)
 	}
 }
 
@@ -494,14 +494,14 @@ func TestDiskCache_DifferentPlan_CacheMiss(t *testing.T) {
 	hash1 := PlanHash(plan1)
 	hash2 := PlanHash(plan2)
 
-	// Armazenar resultado para plan1
+	// Store result for plan1
 	dc := NewDiskCache(dir, "gemini", "gemini-2.5-flash", "checkov", 24)
 	dc.Put(hash1, `{"findings":[],"summary":"ok"}`)
 
-	// Buscar com plan2 (hash diferente) → miss, mesmo dentro do TTL
+	// Fetch with plan2 (different hash) → miss, even within TTL
 	_, ok := dc.Get(hash2)
 	if ok {
-		t.Error("plano diferente deveria resultar em cache miss, mesmo dentro do TTL")
+		t.Error("different plan should result in cache miss, even within TTL")
 	}
 }
 
@@ -512,17 +512,17 @@ func TestDiskCache_SamePlanTTLExpired_CacheMiss(t *testing.T) {
 
 	now := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	// Armazenar resultado
+	// Store result
 	dc1 := NewDiskCache(dir, "claude", "opus", "tfsec", 24)
 	dc1.now = func() time.Time { return now }
 	dc1.Put(planHash, `{"findings":[],"summary":"cached"}`)
 
-	// Mesmo plano, mas TTL expirado (48h depois)
+	// Same plan, but TTL expired (48h later)
 	dc2 := NewDiskCache(dir, "claude", "opus", "tfsec", 24)
 	dc2.now = func() time.Time { return now.Add(48 * time.Hour) }
 	_, ok := dc2.Get(planHash)
 	if ok {
-		t.Error("mesmo plano com TTL expirado deveria resultar em cache miss")
+		t.Error("same plan with expired TTL should result in cache miss")
 	}
 }
 
@@ -535,25 +535,25 @@ func TestDiskCache_ClearRemovesAll(t *testing.T) {
 		dc.Put(h, fmt.Sprintf("response-%d", i))
 	}
 
-	// Verificar que 5 entradas existem
+	// Verify that 5 entries exist
 	metas, _ := filepath.Glob(filepath.Join(dir, "*.meta"))
 	if len(metas) != 5 {
-		t.Fatalf("esperado 5 entradas antes do clear, obteve %d", len(metas))
+		t.Fatalf("expected 5 entries before clear, got %d", len(metas))
 	}
 
-	// Limpar tudo
+	// Clear all
 	if err := ClearDisk(dir); err != nil {
-		t.Fatalf("ClearDisk falhou: %v", err)
+		t.Fatalf("ClearDisk failed: %v", err)
 	}
 
-	// Verificar que tudo foi removido
+	// Verify everything was removed
 	remaining, _ := filepath.Glob(filepath.Join(dir, "*.meta"))
 	if len(remaining) != 0 {
-		t.Errorf("esperado 0 entradas após clear, obteve %d", len(remaining))
+		t.Errorf("expected 0 entries after clear, got %d", len(remaining))
 	}
 	remainJSON, _ := filepath.Glob(filepath.Join(dir, "*.json"))
 	if len(remainJSON) != 0 {
-		t.Errorf("esperado 0 arquivos .json após clear, obteve %d", len(remainJSON))
+		t.Errorf("expected 0 .json files after clear, got %d", len(remainJSON))
 	}
 }
 
@@ -576,22 +576,22 @@ func TestDiskCache_ConcurrentWrites(t *testing.T) {
 
 	wg.Wait()
 
-	// Verificar que exatamente 10 entradas únicas existem (sem corrupção)
+	// Verify that exactly 10 unique entries exist (no corruption)
 	metas, _ := filepath.Glob(filepath.Join(dir, "*.meta"))
 	if len(metas) != 10 {
-		t.Errorf("esperado 10 entradas únicas, obteve %d", len(metas))
+		t.Errorf("expected 10 unique entries, got %d", len(metas))
 	}
 
-	// Verificar que cada .meta é JSON válido
+	// Verify that each .meta is valid JSON
 	for _, mp := range metas {
 		data, err := os.ReadFile(mp)
 		if err != nil {
-			t.Errorf("falha ao ler %s: %v", mp, err)
+			t.Errorf("failed to read %s: %v", mp, err)
 			continue
 		}
 		var meta CacheMeta
 		if err := json.Unmarshal(data, &meta); err != nil {
-			t.Errorf("arquivo .meta corrompido %s: %v", mp, err)
+			t.Errorf("corrupted .meta file %s: %v", mp, err)
 		}
 	}
 }
@@ -606,54 +606,54 @@ func TestDiskCache_MetaContainsAllFields(t *testing.T) {
 	dc.now = func() time.Time { return now }
 	dc.Put(planHash, `{"findings":[],"summary":"clean"}`)
 
-	// Ler e validar metadados
+	// Read and validate metadata
 	meta, err := LookupPlanHash(dir, planHash)
 	if err != nil {
-		t.Fatalf("LookupPlanHash falhou: %v", err)
+		t.Fatalf("LookupPlanHash failed: %v", err)
 	}
 
 	if !meta.CreatedAt.Equal(now) {
-		t.Errorf("created_at: esperado %v, obteve %v", now, meta.CreatedAt)
+		t.Errorf("created_at: expected %v, got %v", now, meta.CreatedAt)
 	}
 	if meta.PlanHash != planHash {
-		t.Errorf("plan_hash: esperado %q, obteve %q", planHash, meta.PlanHash)
+		t.Errorf("plan_hash: expected %q, got %q", planHash, meta.PlanHash)
 	}
 	if meta.Provider != "openrouter" {
-		t.Errorf("provider: esperado 'openrouter', obteve %q", meta.Provider)
+		t.Errorf("provider: expected 'openrouter', got %q", meta.Provider)
 	}
 	if meta.Model != "anthropic/claude-3.5-sonnet" {
-		t.Errorf("model: esperado 'anthropic/claude-3.5-sonnet', obteve %q", meta.Model)
+		t.Errorf("model: expected 'anthropic/claude-3.5-sonnet', got %q", meta.Model)
 	}
 	if meta.Scanner != "terrascan" {
-		t.Errorf("scanner: esperado 'terrascan', obteve %q", meta.Scanner)
+		t.Errorf("scanner: expected 'terrascan', got %q", meta.Scanner)
 	}
 	if meta.TTLHours != 48 {
-		t.Errorf("ttl_hours: esperado 48, obteve %d", meta.TTLHours)
+		t.Errorf("ttl_hours: expected 48, got %d", meta.TTLHours)
 	}
 }
 
 func TestDiskCache_LegacyEntriesTreatedAsExpired(t *testing.T) {
 	dir := t.TempDir()
 
-	// Simular entrada legada (ai-cache.json) sem arquivos .meta
+	// Simulate legacy entry (ai-cache.json) without .meta files
 	legacyData := `{"abc123":{"response":"legacy","cached_at":"2025-01-01T00:00:00Z","provider":"claude","model":"sonnet"}}`
 	legacyPath := filepath.Join(dir, "ai-cache.json")
 	os.WriteFile(legacyPath, []byte(legacyData), 0600)
 
-	// Novo DiskCache não encontra .meta para o hash → miss
+	// New DiskCache does not find .meta for the hash → miss
 	dc := NewDiskCache(dir, "claude", "sonnet", "checkov", 24)
 	_, ok := dc.Get("abc123")
 	if ok {
-		t.Error("entradas legadas sem .meta devem ser tratadas como cache miss")
+		t.Error("legacy entries without .meta should be treated as cache miss")
 	}
 
-	// DiskStats em diretório sem .meta cai no fallback legado
+	// DiskStats on directory without .meta falls back to legacy
 	entries, _, _, _, err := DiskStats(dir)
 	if err != nil {
-		t.Fatalf("DiskStats falhou com fallback legado: %v", err)
+		t.Fatalf("DiskStats failed with legacy fallback: %v", err)
 	}
 	if entries != 1 {
-		t.Errorf("DiskStats legado deveria encontrar 1 entrada, obteve %d", entries)
+		t.Errorf("legacy DiskStats should find 1 entry, got %d", entries)
 	}
 }
 
@@ -667,14 +667,14 @@ func TestDiskCache_ListEntries(t *testing.T) {
 
 	entries, err := ListEntries(dir)
 	if err != nil {
-		t.Fatalf("ListEntries falhou: %v", err)
+		t.Fatalf("ListEntries failed: %v", err)
 	}
 	if len(entries) != 3 {
-		t.Errorf("esperado 3 entradas, obteve %d", len(entries))
+		t.Errorf("expected 3 entries, got %d", len(entries))
 	}
 	for _, e := range entries {
 		if e.Provider != "gemini" {
-			t.Errorf("provider esperado 'gemini', obteve %q", e.Provider)
+			t.Errorf("expected provider 'gemini', got %q", e.Provider)
 		}
 	}
 }
@@ -684,35 +684,35 @@ func TestDiskCache_OverwriteOnProviderChange(t *testing.T) {
 	plan := []byte(`{"resource_changes":[{"type":"aws_vpc"}]}`)
 	planHash := PlanHash(plan)
 
-	// Armazenar com provider A
+	// Store with provider A
 	dc1 := NewDiskCache(dir, "gemini", "2.5-flash", "checkov", 24)
 	dc1.Put(planHash, `{"findings":[],"summary":"gemini result"}`)
 
-	// Provider B com mesmo plano → miss (meta tem provider A)
+	// Provider B with same plan → miss (meta has provider A)
 	dc2 := NewDiskCache(dir, "claude", "opus", "checkov", 24)
 	_, ok := dc2.Get(planHash)
 	if ok {
-		t.Error("provider diferente deveria resultar em miss")
+		t.Error("different provider should result in miss")
 	}
 
-	// Provider B escreve → sobrescreve
+	// Provider B writes → overwrites
 	dc2.Put(planHash, `{"findings":[],"summary":"claude result"}`)
 
-	// Agora provider B encontra o resultado
+	// Now provider B finds the result
 	dc3 := NewDiskCache(dir, "claude", "opus", "checkov", 24)
 	got, ok := dc3.Get(planHash)
 	if !ok {
-		t.Fatal("esperado hit após sobrescrita")
+		t.Fatal("expected hit after overwrite")
 	}
 	if got != `{"findings":[],"summary":"claude result"}` {
-		t.Errorf("resultado inesperado: %q", got)
+		t.Errorf("unexpected result: %q", got)
 	}
 
-	// Provider A agora recebe miss
+	// Provider A now gets miss
 	dc4 := NewDiskCache(dir, "gemini", "2.5-flash", "checkov", 24)
 	_, ok = dc4.Get(planHash)
 	if ok {
-		t.Error("provider original deveria receber miss após sobrescrita")
+		t.Error("original provider should get miss after overwrite")
 	}
 }
 
