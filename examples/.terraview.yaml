@@ -31,6 +31,7 @@ llm:
   #   openrouter  — OpenRouter (multiple models)
   #   gemini-cli  — Gemini via CLI
   #   claude-code — Claude Code via CLI
+  #   custom      — any OpenAI-compatible API (Grok, Groq, Mistral, etc.)
   provider: ollama
 
   # Model to use. Each provider has a cost-effective default:
@@ -125,6 +126,23 @@ rules:
 output:
   # Format: pretty (default), compact, json, sarif
   format: pretty
+
+# ---------------------------------------------------------------------------
+# scanner — Default security scanner
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# history — Scan history tracking (SQLite)
+# ---------------------------------------------------------------------------
+history:
+  # Enable automatic scan result recording (default: false).
+  # When enabled, every scan stores scores, findings, and metadata in SQLite.
+  enabled: true
+
+  # Auto-delete records older than N days (default: 90).
+  # retention_days: 90
+
+  # Maximum database size in MB (default: 50).
+  # max_size_mb: 50
 
 # ---------------------------------------------------------------------------
 # scanner — Default security scanner

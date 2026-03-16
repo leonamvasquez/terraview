@@ -27,12 +27,15 @@ terraview scan checkov
 ## Features Principais
 
 - **Scanners de segurança** — Checkov, tfsec e Terrascan integrados automaticamente
-- **IA contextual em paralelo** — 8 providers: Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code
+- **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **Scorecard unificado** — scores de Segurança, Compliance, Manutenibilidade e Overall (0–10)
 - **Vetores de risco** — análise em 5 eixos por recurso: rede, criptografia, identidade, governança, observabilidade
 - **Diagrama ASCII** — visualização da infraestrutura direto no terminal
 - **Análise de impacto** — raio de dependências das mudanças
 - **Drift detection** — detecção e classificação de drift com scoring avançado
+- **Análise de módulos** — versionamento, higiene de source, profundidade de nesting
+- **Histórico de scans** — tracking em SQLite com trends (sparklines), comparação e exportação
+- **MCP Server** — integração com agentes AI (Claude Code, Cursor, Windsurf) via Model Context Protocol
 - **CI/CD nativo** — exit codes semânticos + saída SARIF, JSON, Markdown
 - **Zero configuração** — detecta projetos Terraform e roda automaticamente
 - **Cache persistente** — re-execuções com o mesmo plan evitam chamadas à API
@@ -65,5 +68,7 @@ terraview scan checkov
 - [Instalação](getting-started/installation.md) — todos os métodos de instalação
 - [Configuração Rápida](getting-started/quickstart.md) — primeiro scan passo a passo
 - [Comandos](usage/commands.md) — referência completa dos comandos
-- [AI Providers](usage/ai-providers.md) — configuração dos 8 providers
+- [AI Providers](usage/ai-providers.md) — todos os providers suportados
+- [Histórico](usage/history.md) — tracking de scans com trends e comparação
+- [MCP Server](usage/mcp.md) — integração com agentes AI
 - [Integração CI/CD](integration/cicd.md) — GitHub Actions, GitLab CI, Azure DevOps

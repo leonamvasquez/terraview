@@ -9,6 +9,8 @@
 | `OPENAI_API_KEY`     | OpenAI      | API key da OpenAI             |
 | `DEEPSEEK_API_KEY`   | DeepSeek    | API key do DeepSeek           |
 | `OPENROUTER_API_KEY` | OpenRouter  | API key do OpenRouter         |
+| `CUSTOM_LLM_API_KEY` | Custom      | API key para provider customizado (OpenAI-compatible) |
+| `CUSTOM_LLM_BASE_URL`| Custom      | URL base para provider customizado (alternativa ao `url` no config) |
 
 O Ollama não requer API key. Os providers `gemini-cli` e `claude-code` autenticam via suas respectivas assinaturas CLI.
 

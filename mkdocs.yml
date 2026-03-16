@@ -38,6 +38,8 @@ nav:
     - AI Providers: usage/ai-providers.md
     - Scanners: usage/scanners.md
     - Cache: usage/cache.md
+    - Histórico: usage/history.md
+    - MCP Server: usage/mcp.md
   - Integração:
     - CI/CD: integration/cicd.md
     - Docker: integration/docker.md

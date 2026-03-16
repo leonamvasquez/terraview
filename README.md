@@ -15,7 +15,7 @@
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
 
-Análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA rodando **em paralelo**. Binário único, zero dependências, 8 providers de IA suportados.
+Análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA rodando **em paralelo**. Binário único, zero dependências, múltiplos providers de IA suportados.
 
 ## Início Rápido
 
@@ -33,12 +33,15 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 ## Features
 
 - **Scanners de segurança** — Checkov, tfsec, Terrascan integrados automaticamente
-- **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code
+- **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **Scorecard unificado** — Segurança, Compliance, Manutenibilidade (0–10)
 - **Vetores de risco** — 5 eixos por recurso (rede, criptografia, identidade, governança, observabilidade)
 - **Diagrama ASCII** — `--diagram` para visualização no terminal
 - **Análise de impacto** — `--impact` para blast radius
+- **Análise de módulos** — versionamento, source e nesting com `terraview modules`
 - **Drift detection** — detecção e classificação com `--intelligence`
+- **Histórico de scans** — tracking em SQLite com trends, comparação e exportação
+- **MCP Server** — integração com agentes AI (Claude Code, Cursor, Windsurf)
 - **CI/CD nativo** — exit codes semânticos + SARIF, JSON, Markdown
 - **Cache persistente** — re-execuções evitam chamadas repetidas à API
 - **Supply chain** — SBOM, cosign, SLSA Level 3
@@ -67,7 +70,7 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 - [Instalação](https://leonamvasquez.github.io/terraview/getting-started/installation/) — todos os métodos
 - [Configuração Rápida](https://leonamvasquez.github.io/terraview/getting-started/quickstart/) — primeiro scan passo a passo
 - [Comandos](https://leonamvasquez.github.io/terraview/usage/commands/) — scan, apply, diagram, explain, drift
-- [AI Providers](https://leonamvasquez.github.io/terraview/usage/ai-providers/) — 8 providers, API vs CLI
+- [AI Providers](https://leonamvasquez.github.io/terraview/usage/ai-providers/) — API, CLI, Custom e local
 - [Configuração](https://leonamvasquez.github.io/terraview/usage/configuration/) — `.terraview.yaml`
 - [CI/CD](https://leonamvasquez.github.io/terraview/integration/cicd/) — GitHub Actions, GitLab CI, Azure DevOps
 - [Metodologia de Scoring](https://leonamvasquez.github.io/terraview/reference/scoring/) — fórmulas e exemplos

@@ -11,6 +11,8 @@ Core Commands:
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
   drift       Detect and classify infrastructure drift
+  modules     Analyze Terraform module usage and health
+  history     View scan history and trends
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
@@ -20,6 +22,10 @@ Provider Management:
 Scanner Management:
   scanners    Manage security scanners
               scanners list | install | default
+
+Integration:
+  mcp         Model Context Protocol server for AI agents
+              mcp serve
 
 Utilities:
   cache       Manage the AI response cache
@@ -187,6 +193,126 @@ terraview scanners install --all --force    # forçar reinstalação de todos
 terraview scanners default checkov          # definir scanner padrão
 terraview scanners default                  # exibir scanner padrão atual
 ```
+
+---
+
+## Modules
+
+Analisa módulos Terraform no plan para versionamento, higiene de source e profundidade de nesting. Determinístico, não requer IA.
+
+```bash
+terraview modules                           # analisar módulos do diretório atual
+terraview modules --plan plan.json          # analisar de plan existente
+terraview modules --check-registry          # verificar versões no Terraform Registry (requer rede)
+terraview modules --format json             # saída JSON
+terraview modules --terragrunt              # suporte a Terragrunt
+terraview modules --terragrunt -d modules/vpc
+```
+
+### Regras verificadas
+
+| Regra | Descrição |
+|-------|-----------|
+| `MOD_001` | Módulo do Registry sem constraint de versão |
+| `MOD_002` | Source Git fixado em branch em vez de tag |
+| `MOD_003` | Source Git sem nenhum ref |
+| `MOD_004` | Nesting de módulo excede profundidade recomendada |
+| `MOD_005` | Source de módulo usa HTTP em vez de HTTPS |
+| `MOD_006` | Módulo do Registry tem versão mais nova disponível (requer `--check-registry`) |
+
+Exit codes: `0` = sem issues, `1` = findings HIGH, `2` = findings CRITICAL.
+
+---
+
+## History
+
+Visualiza o histórico de scans armazenado localmente em SQLite. Todo scan do terraview registra resultados automaticamente quando o history está habilitado.
+
+```bash
+terraview history                           # últimos 20 scans, projeto atual
+terraview history --all                     # todos os projetos
+terraview history --limit 50                # limitar quantidade
+terraview history --since 7d                # scans dos últimos 7 dias
+terraview history --since 2025-01-01        # scans desde uma data
+terraview history --format json             # saída JSON
+terraview history --format csv              # saída CSV
+```
+
+### Subcomandos
+
+```bash
+terraview history trend                     # tendências com sparklines
+terraview history trend --limit 30          # últimos 30 scans
+
+terraview history compare                   # último vs anterior
+terraview history compare --with 5          # último vs scan #5
+terraview history compare --since 7d        # último vs mais antigo em 7 dias
+
+terraview history clear                     # limpar projeto atual
+terraview history clear --all               # limpar todos os projetos
+terraview history clear --before 30d        # limpar mais antigos que 30 dias
+
+terraview history export --format csv -o scans.csv   # exportar para CSV
+terraview history export --format json -o scans.json # exportar para JSON
+```
+
+### Configuração
+
+Habilite no `.terraview.yaml`:
+
+```yaml
+history:
+  enabled: true
+  retention_days: 90      # auto-limpeza de registros antigos
+  max_size_mb: 50         # tamanho máximo do banco SQLite
+```
+
+---
+
+## MCP (Model Context Protocol)
+
+Servidor MCP para integração com agentes AI. Expõe funcionalidades do terraview via JSON-RPC 2.0 sobre stdio, permitindo que Claude Code, Cursor e Windsurf chamem tools programaticamente.
+
+```bash
+terraview mcp serve                         # iniciar servidor MCP
+```
+
+### Registro com agentes
+
+**Claude Code:**
+
+```bash
+claude mcp add terraview -- terraview mcp serve
+```
+
+**Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "terraview": {
+      "command": "terraview",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Tools expostas
+
+| Tool | Descrição |
+|------|-----------|
+| `terraview_scan` | Security scan com scorecard |
+| `terraview_explain` | Explicação da infraestrutura por IA |
+| `terraview_diagram` | Diagrama ASCII da infraestrutura |
+| `terraview_drift` | Detecção e classificação de drift |
+| `terraview_history` | Consultar histórico de scans |
+| `terraview_history_trend` | Tendências de scores ao longo do tempo |
+| `terraview_history_compare` | Comparar dois scans lado a lado |
+| `terraview_impact` | Blast radius / análise de impacto |
+| `terraview_cache` | Status e gerenciamento do cache de IA |
+| `terraview_scanners` | Listar scanners disponíveis |
+| `terraview_version` | Versão e informações do ambiente |
 
 ---
 
