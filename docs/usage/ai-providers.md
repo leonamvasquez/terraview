@@ -1,6 +1,6 @@
 # AI Providers
 
-O terraview suporta **8 providers de IA** organizados em três categorias.
+O terraview suporta **múltiplos providers de IA** organizados em quatro categorias. Com os providers OpenRouter e Custom, é possível acessar virtualmente qualquer modelo de IA disponível no mercado.
 
 ---
 
@@ -87,6 +87,49 @@ terraview drift --intelligence --provider gemini-cli
 
 ---
 
+## Provider customizado (OpenAI-compatible)
+
+| Provider | Variável de ambiente | URL obrigatória | Modelo padrão |
+|----------|---------------------|-----------------|---------------|
+| **custom** | `CUSTOM_LLM_API_KEY` | Sim (`url` no config) | gpt-4o-mini |
+
+O provider `custom` funciona com qualquer API compatível com o padrão `/v1/chat/completions` da OpenAI, incluindo: **Grok (xAI)**, **Groq**, **Mistral**, **Together AI**, **Fireworks**, **Perplexity**, **LM Studio**, **vLLM** e Ollama em modo OpenAI.
+
+### Configuração
+
+```yaml
+# .terraview.yaml
+llm:
+  provider: custom
+  model: grok-3-mini
+  url: https://api.x.ai
+  # api_key via CUSTOM_LLM_API_KEY env var
+```
+
+### Uso
+
+```bash
+# Grok (xAI)
+export CUSTOM_LLM_API_KEY="xai-..."
+terraview scan checkov --provider custom --model grok-3-mini
+
+# Groq
+export CUSTOM_LLM_API_KEY="gsk_..."
+terraview provider use custom llama-3.3-70b
+# url: https://api.groq.com/openai no .terraview.yaml
+
+# Mistral
+export CUSTOM_LLM_API_KEY="..."
+terraview provider use custom mistral-large-latest
+# url: https://api.mistral.ai no .terraview.yaml
+```
+
+### Modelos sugeridos
+
+`gpt-4o-mini`, `gpt-4o`, `grok-3`, `grok-3-mini`, `mistral-large-latest`, `llama-3.3-70b`, `deepseek-v3`
+
+---
+
 ## API vs CLI (subscription) — quando usar cada um
 
 | Aspecto | API (key) | CLI (subscription) |
@@ -96,7 +139,7 @@ terraview drift --intelligence --provider gemini-cli
 | **Ideal para** | CI/CD, pipelines automatizadas | Desenvolvimento local, uso pessoal |
 | **Rate limits** | Limites da API (varia por tier) | Limites da assinatura |
 | **Offline** | Não | Não (mas Ollama sim) |
-| **Providers** | gemini, claude, openai, deepseek, openrouter | gemini-cli, claude-code |
+| **Providers** | gemini, claude, openai, deepseek, openrouter, custom | gemini-cli, claude-code |
 
 !!! tip "Dica"
     Para uso local no dia a dia, providers por assinatura são a escolha mais prática — zero configuração de keys, billing simples. Para CI/CD, prefira providers via API (ou Ollama para ambientes air-gapped).

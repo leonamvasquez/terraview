@@ -296,8 +296,11 @@ Quando múltiplas fontes (scanner + IA + externo) reportam o mesmo recurso:
 ```
 findings security: [CRITICAL(5.0), HIGH(3.0)]
 weighted_sum = 5.0 + 3.0 = 8.0
-penalty_ratio = 8.0 / 3 = 2.667
-score = 10.0 − min(2.667 × 2.0, 10.0) = 10.0 − 5.333 = 4.667
+density_penalty = (8.0 / 3) × 2.0 = 5.333
+high_equiv = 8.0 / 3.0 = 2.667
+volume_penalty = log₂(1 + 2.667) × 0.5 = 0.937
+penalty = max(5.333, 0.937) = 5.333  (density domina — plano pequeno)
+score = 10.0 − 5.333 = 4.667
 floor: tem CRITICAL → sem piso → score = 4.7
 ```
 
@@ -306,8 +309,11 @@ floor: tem CRITICAL → sem piso → score = 4.7
 ```
 findings compliance: [MEDIUM(1.0)]
 weighted_sum = 1.0
-penalty_ratio = 1.0 / 3 = 0.333
-score = 10.0 − min(0.333 × 2.0, 10.0) = 10.0 − 0.667 = 9.333
+density_penalty = (1.0 / 3) × 2.0 = 0.667
+high_equiv = 1.0 / 3.0 = 0.333
+volume_penalty = log₂(1 + 0.333) × 0.5 = 0.208
+penalty = max(0.667, 0.208) = 0.667
+score = 10.0 − 0.667 = 9.333
 floor: apenas MEDIUM → piso 5.0 (não se aplica, score > 5.0) → score = 9.3
 ```
 
@@ -316,8 +322,11 @@ floor: apenas MEDIUM → piso 5.0 (não se aplica, score > 5.0) → score = 9.3
 ```
 findings maintainability: [LOW(0.5)]
 weighted_sum = 0.5
-penalty_ratio = 0.5 / 3 = 0.167
-score = 10.0 − min(0.167 × 2.0, 10.0) = 10.0 − 0.333 = 9.667 → 9.7
+density_penalty = (0.5 / 3) × 2.0 = 0.333
+high_equiv = 0.5 / 3.0 = 0.167
+volume_penalty = log₂(1 + 0.167) × 0.5 = 0.112
+penalty = max(0.333, 0.112) = 0.333
+score = 10.0 − 0.333 = 9.667 → 9.7
 floor: apenas LOW → piso 5.0 (não se aplica) → score = 9.7
 ```
 
@@ -372,7 +381,10 @@ overall = (4.7 × 3.0 + 9.3 × 2.0 + 9.7 × 1.5 + 10.0 × 1.0) / 7.5
 ```
 findings security: [HIGH(3.0), MEDIUM(1.0)]
 weighted_sum = 4.0
-penalty_ratio = 4.0 / 2 = 2.0
+density_penalty = (4.0 / 2) × 2.0 = 4.0
+high_equiv = 4.0 / 3.0 = 1.333
+volume_penalty = log₂(1 + 1.333) × 0.5 = 0.611
+penalty = max(4.0, 0.611) = 4.0  (density domina)
 score = 10.0 − 4.0 = 6.0
 floor: tem HIGH sem CRITICAL → piso 2.0 (não se aplica) → score = 6.0
 ```
@@ -397,7 +409,7 @@ overall = (7.0 × 3.0 + 9.0 × 2.0 + 10.0 × 1.5 + 9.0 × 1.0) / 7.5
 
 ## Notas
 
-1. O fator de escala (`2.0`) da fórmula `penalty_ratio × scale_factor` é hardcoded e não configurável via `.terraview.yaml`.
+1. Os fatores de escala (densidade: `2.0`, volume: `0.5`) são hardcoded e não configuráveis via `.terraview.yaml`.
 
 2. O struct `Finding` não possui campo `confidence` por finding. A confiança aplica-se apenas ao veredito global e às correlações da meta-análise.
 

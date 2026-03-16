@@ -16,7 +16,7 @@ Veja [`examples/.terraview.yaml`](https://github.com/leonamvasquez/terraview/blo
 ```yaml
 llm:
   enabled: true
-  provider: ollama              # ollama, gemini, claude, openai, deepseek, openrouter, gemini-cli, claude-code
+  provider: ollama              # ollama, gemini, claude, openai, deepseek, openrouter, gemini-cli, claude-code, custom
   model: llama3.1:8b            # modelo específico do provider
   url: http://localhost:11434   # URL customizada (relevante apenas para ollama)
   # api_key: ""                 # prefira variáveis de ambiente (ver aviso acima)
@@ -49,6 +49,11 @@ rules:
   disabled_rules:               # silenciar rule IDs específicos
     - CKV_AWS_79
   # enabled_rules: []           # se definido, apenas estas rules são avaliadas
+
+history:
+  enabled: true                 # habilitar gravação automática de resultados
+  retention_days: 90            # auto-limpeza de registros antigos
+  max_size_mb: 50               # tamanho máximo do banco SQLite
 
 output:
   format: pretty                # pretty, compact, json, sarif
@@ -106,6 +111,23 @@ Configurações específicas para o provider Ollama (local).
 | `required_tags` | []string | — | Tags obrigatórias em recursos |
 | `disabled_rules` | []string | — | Rule IDs a silenciar |
 | `enabled_rules` | []string | — | Se definido, apenas estas rules |
+
+### `history`
+
+Configura o armazenamento local de histórico de scans em SQLite.
+
+| Campo | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `enabled` | bool | `false` | Habilita gravação automática de resultados |
+| `retention_days` | int | `90` | Auto-limpeza de registros mais antigos |
+| `max_size_mb` | int | `50` | Tamanho máximo do banco SQLite |
+
+```yaml
+history:
+  enabled: true
+  retention_days: 90
+  max_size_mb: 50
+```
 
 ### `output`
 

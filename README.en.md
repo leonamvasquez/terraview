@@ -17,7 +17,7 @@
 
 Terraview is a security analysis tool for Terraform plans that combines static scanners (Checkov, tfsec, Terrascan) with AI contextual analysis running **in parallel**.
 
-It scans cloud infrastructure provisioned with Terraform, detects security and compliance misconfigurations using open-source static analysis scanners, and automatically enriches the results with multi-provider AI contextual analysis (Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code) when a provider is configured.
+It scans cloud infrastructure provisioned with Terraform, detects security and compliance misconfigurations using open-source static analysis scanners, and automatically enriches the results with multi-provider AI contextual analysis when a provider is configured. Supports Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code, and any OpenAI-compatible API via Custom provider.
 
 Terraview runs as a single binary with no external dependencies. When an AI provider is configured, scanner and AI run in parallel automatically. Use `--static` to run scanner only, without AI.
 
@@ -35,6 +35,9 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - [Diagram](#diagram)
 - [Explain](#explain)
 - [Drift](#drift)
+- [Modules](#modules)
+- [History](#history)
+- [MCP Server](#mcp-server)
 - [Provider Management](#provider-management)
 - [Scanner Management](#scanner-management)
 - [AI Cache](#ai-cache)
@@ -56,9 +59,10 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 
 - **Security Scanners** — automatic integration with Checkov, tfsec and Terrascan; detects what's installed and runs automatically
 - **AI contextual analysis (default)** — when an AI provider is configured, AI runs **in parallel** with the scanner, analyzing cross-resource relationships, dependency chains and architectural anti-patterns that scanners cannot detect.
-- **Multi-Provider AI** — two categories:
+- **Multi-Provider AI** — three categories:
   - **API**: Ollama (local), Google Gemini, Anthropic Claude, OpenAI, DeepSeek and OpenRouter
   - **CLI (subscription)**: Gemini CLI and Claude Code — use your personal subscription, no API key required
+  - **Custom**: any OpenAI-compatible API (Grok/xAI, Groq, Mistral, Together AI, Fireworks, etc.)
 - **Automatic integration test** — when selecting a provider via `provider list`, terraview tests connectivity and returns type-specific feedback (CLI installed, API key valid, service reachable)
 - **Conflict Resolution** — scanner × AI: scanner wins on disagreement (confidence 0.80); agreement boosts confidence to 1.00
 - **Unified Scorecard** with Security, Compliance, Maintainability and Overall scores (0–10)
@@ -68,6 +72,9 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - **AI Explanation** — natural language explanation of your infrastructure via `explain`
 - **Zero Configuration** — detects Terraform projects and runs `init + plan + show` automatically
 - **Drift Detection** — detects and classifies infrastructure drift with optional `--intelligence` for advanced risk scoring
+- **Module Analysis** — version pinning, source hygiene, and nesting depth checks via `terraview modules`
+- **Scan History** — SQLite-backed tracking with sparkline trends, side-by-side comparison, and CSV/JSON export
+- **MCP Server** — Model Context Protocol integration for AI agents (Claude Code, Cursor, Windsurf) via `terraview mcp serve`
 - **Native CI/CD** — semantic exit codes (0/1/2) + SARIF, JSON, Markdown output for GitHub Actions, GitLab CI and Azure DevOps
 - **Supply chain hardening** — SBOM (CycloneDX), cosign signatures, SLSA Build Provenance Level 3 on every release
 - **Bilingual (en/pt-BR)** — `--br` flag available on all commands
@@ -409,6 +416,81 @@ terraview drift --format json               # JSON output
 
 Exit codes: `0` = no drift or low-risk only, `1` = HIGH risk, `2` = CRITICAL risk.
 
+### Modules
+
+Analyzes Terraform module calls for version pinning, source hygiene, and nesting depth. Deterministic, no AI required.
+
+```bash
+terraview modules                           # analyze modules in current directory
+terraview modules --plan plan.json          # analyze from existing plan
+terraview modules --check-registry          # check Terraform Registry for latest versions (requires network)
+terraview modules --format json             # JSON output
+terraview modules --terragrunt              # Terragrunt support
+```
+
+Rules checked: `MOD_001` (no version constraint), `MOD_002` (branch instead of tag), `MOD_003` (no ref), `MOD_004` (excessive nesting), `MOD_005` (HTTP source), `MOD_006` (newer version available).
+
+Exit codes: `0` = no issues, `1` = HIGH findings, `2` = CRITICAL findings.
+
+### History
+
+View scan history stored locally in SQLite. Every scan automatically records results when history is enabled.
+
+```bash
+terraview history                           # last 20 scans, current project
+terraview history --all                     # all projects
+terraview history --limit 50               # limit results
+terraview history --since 7d               # scans from last 7 days
+terraview history --format json            # JSON output
+
+terraview history trend                     # sparkline score trends
+terraview history compare                   # latest vs previous scan
+terraview history compare --with 5          # latest vs scan #5
+
+terraview history clear                     # clear current project
+terraview history clear --before 30d       # clear older than 30 days
+
+terraview history export --format csv -o scans.csv
+```
+
+Enable in `.terraview.yaml`:
+
+```yaml
+history:
+  enabled: true
+  retention_days: 90
+  max_size_mb: 50
+```
+
+### MCP Server
+
+Model Context Protocol server for AI agent integration. Exposes terraview tools via JSON-RPC 2.0 over stdio.
+
+```bash
+terraview mcp serve
+```
+
+Register with Claude Code:
+
+```bash
+claude mcp add terraview -- terraview mcp serve
+```
+
+Register with Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "terraview": {
+      "command": "terraview",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Exposes 11 tools: `terraview_scan`, `terraview_explain`, `terraview_diagram`, `terraview_drift`, `terraview_history`, `terraview_history_trend`, `terraview_history_compare`, `terraview_impact`, `terraview_cache`, `terraview_scanners`, `terraview_version`.
+
 ### Provider Management
 
 ```bash
@@ -577,7 +659,7 @@ terraview scanners list                     # check status
 
 ## AI Providers
 
-Terraview supports **8 AI providers** organized in three categories:
+Terraview supports **multiple AI providers** organized in four categories. With OpenRouter and Custom, you can access virtually any AI model on the market:
 
 ### API providers (requires API key)
 
@@ -607,6 +689,22 @@ These providers use your **personal subscription** (Google/Anthropic) for billin
 ```bash
 terraview provider install ollama           # install Ollama + pull default model
 terraview provider install ollama --model codellama:13b  # custom model
+```
+
+### Custom provider (OpenAI-compatible)
+
+| Provider | Environment variable | URL required | Default model |
+|----------|---------------------|-------------|---------------|
+| **custom** | `CUSTOM_LLM_API_KEY` | Yes (`url` in config) | gpt-4o-mini |
+
+Works with any API following the `/v1/chat/completions` standard: **Grok (xAI)**, **Groq**, **Mistral**, **Together AI**, **Fireworks**, **Perplexity**, **LM Studio**, **vLLM**, etc.
+
+```yaml
+# .terraview.yaml
+llm:
+  provider: custom
+  model: grok-3-mini
+  url: https://api.x.ai
 ```
 
 ## Subscription-Based AI Integration
@@ -734,85 +832,98 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                              terraview CLI                                │
-│  scan | apply | diagram | explain | drift | provider | scanners | cache   │
-└────────────────────────────────┬──────────────────────────────────────────┘
-                                 │
-                        ┌────────┴────────┐
-                        ▼                 ▼
-               Terraform Executor    Plan JSON (--plan)
-                   init + plan            │
-                   show -json             │
-                        │                 │
-                        └───────┬─────────┘
-                                ▼
-                   ┌─────────────────────────┐
-                   │   Parser + Normalizer   │
-                   │   NormalizedResource[]  │
-                   └────────────┬────────────┘
-                                │
-                                ▼
-                   ┌─────────────────────────┐
-                   │     Topology Graph      │
-                   └────────────┬────────────┘
-                                │
-                     ┌──────────┴──────────┐
-                     │                     │
-                     ▼                     ▼
-          ┌─────────────────┐    ┌─────────────────┐
-          │ Plan (original) │    │    Sanitizer    │
-          │                 │    │  Plan (redacted)│
-          └────────┬────────┘    └────────┬────────┘
-                   │                      │
-                   │             ┌────────┴────────┐
-                   │             │    AI Cache     │
-                   │             │  SHA256 + TTL   │
-                   │             └───┬─────────┬───┘
-                   │                 │         │
-                   │              hit│     miss│
-                   │                 │         ▼
-          ┌────────┴───────┐         │   ┌─────────────────┐
-          │   Scanner      │         │   │  AI Context     │
-          │  ┌───────────┐ │         │   │  Analysis       │
-          │  │ Checkov   │ │         │   └────────┬────────┘
-          │  │ tfsec     │ │         │            │
-          │  │ Terrascan │ │         │            ▼
-          │  └───────────┘ │         │  ┌─────────────────┐
-          └────────┬───────┘         │  │    Validator    │
-                   │                 │  └────────┬────────┘
-                   │                 │           │
-                   └────────┬────────┴───────────┘
-                            ▼
-             ┌──────────────────────────┐
-             │  Normalizer + Resolver   │
-             │  Confidence Scorer       │
-             └────────────┬─────────────┘
-                          ▼
-             ┌──────────────────────────┐
-             │  Aggregator + Scorer     │
-             │  ┌────────────────────┐  │
-             │  │ Security      0-10 │  │
-             │  │ Compliance    0-10 │  │
-             │  │ Maintainab.   0-10 │  │
-             │  │ Overall       0-10 │  │
-             │  └────────────────────┘  │
-             │  ┌────────────────────┐  │
-             │  │ Risk Vectors       │  │
-             │  │  network           │  │
-             │  │  encryption        │  │
-             │  │  identity          │  │
-             │  │  governance        │  │
-             │  │  observability     │  │
-             │  └────────────────────┘  │
-             │  Meta-analysis           │
-             └────────────┬─────────────┘
-                          ▼
-             ┌──────────────────────────┐
-             │  Output                  │
-             │  pretty | compact | json │
-             │  sarif  | markdown       │
-             └──────────────────────────┘
+                          ┌─────────────────────────────┐
+                          │   MCP Server (stdio)        │
+                          │   JSON-RPC 2.0              │
+                          │   Claude Code / Cursor /    │
+                          │   Windsurf                  │
+                          └─────────────┬───────────────┘
+                                        │
+┌───────────────────────────────────────┼───────────────────────────────────────────┐
+│                                 terraview CLI                                      │
+│  scan | apply | diagram | explain | drift | modules | history | provider | ...     │
+└───────────────────────────────────────┬───────────────────────────────────────────┘
+                                        │
+               ┌────────────────────────┼────────────────────────┐
+               │                        │                        │
+               ▼                        ▼                        ▼
+   ┌────────────────────┐  ┌─────────────────────┐  ┌────────────────────┐
+   │ Terraform Executor │  │  Plan JSON (--plan)  │  │   History Store   │
+   │   init + plan      │  │                      │  │   SQLite (local)  │
+   │   show -json       │  │                      │  │   trends/compare  │
+   └─────────┬──────────┘  └──────────┬───────────┘  └────────────────────┘
+             │                        │
+             └───────────┬────────────┘
+                         ▼
+            ┌─────────────────────────┐
+            │   Parser + Normalizer   │
+            │   NormalizedResource[]  │
+            └────────────┬────────────┘
+                         │
+                         ▼
+            ┌─────────────────────────┐
+            │     Topology Graph      │
+            └────────────┬────────────┘
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+              ▼                     ▼
+   ┌─────────────────┐    ┌─────────────────┐
+   │ Plan (original) │    │    Sanitizer    │
+   │                 │    │  Plan (redacted)│
+   └────────┬────────┘    └────────┬────────┘
+            │                      │
+            │             ┌────────┴────────┐
+            │             │    AI Cache     │
+            │             │  SHA256 + TTL   │
+            │             └───┬─────────┬───┘
+            │                 │         │
+            │              hit│     miss│
+            │                 │         ▼
+   ┌────────┴───────┐         │   ┌─────────────────┐
+   │   Scanner      │         │   │  AI Context     │
+   │  ┌───────────┐ │         │   │  Analysis       │
+   │  │ Checkov   │ │         │   └────────┬────────┘
+   │  │ tfsec     │ │         │            │
+   │  │ Terrascan │ │         │            ▼
+   │  └───────────┘ │         │  ┌─────────────────┐
+   └────────┬───────┘         │  │    Validator    │
+            │                 │  └────────┬────────┘
+            │                 │           │
+            └────────┬────────┴───────────┘
+                     ▼
+      ┌──────────────────────────┐
+      │  Normalizer + Resolver   │
+      │  Confidence Scorer       │
+      └────────────┬─────────────┘
+                   ▼
+      ┌──────────────────────────┐
+      │  Aggregator + Scorer     │
+      │  ┌────────────────────┐  │
+      │  │ Security      0-10 │  │
+      │  │ Compliance    0-10 │  │
+      │  │ Maintainab.   0-10 │  │
+      │  │ Overall       0-10 │  │
+      │  └────────────────────┘  │
+      │  ┌────────────────────┐  │
+      │  │ Risk Vectors       │  │
+      │  │  network           │  │
+      │  │  encryption        │  │
+      │  │  identity          │  │
+      │  │  governance        │  │
+      │  │  observability     │  │
+      │  └────────────────────┘  │
+      │  Meta-analysis           │
+      └────────────┬─────────────┘
+                   │
+      ┌────────────┼─────────────┐
+      ▼            ▼             ▼
+ ┌──────────┐ ┌─────────┐ ┌───────────┐
+ │  Output  │ │ History │ │    MCP    │
+ │  pretty  │ │ Record  │ │ Response  │
+ │  json    │ │ (SQLite)│ │(JSON-RPC) │
+ │  sarif   │ │         │ │           │
+ └──────────┘ └─────────┘ └───────────┘
 ```
 
 ## Development
@@ -880,7 +991,7 @@ Distributed under the [MIT](LICENSE) License.
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
 
-Security analysis for Terraform plans combining static scanners (Checkov, tfsec, Terrascan) with AI contextual analysis running **in parallel**. Single binary, zero dependencies, 8 AI providers supported.
+Security analysis for Terraform plans combining static scanners (Checkov, tfsec, Terrascan) with AI contextual analysis running **in parallel**. Single binary, zero dependencies, multiple AI providers supported.
 
 ---
 
@@ -1097,6 +1208,37 @@ terraview drift --intelligence              # advanced: classifies intentional v
 terraview drift --format json               # JSON output
 ```
 
+### modules
+
+Analyzes Terraform module calls for version pinning, source hygiene, and nesting depth.
+
+```bash
+terraview modules                           # analyze current directory
+terraview modules --plan plan.json          # from existing plan
+terraview modules --check-registry          # check latest versions on Registry
+terraview modules --format json             # JSON output
+```
+
+### history
+
+View scan history stored locally in SQLite.
+
+```bash
+terraview history                           # last 20 scans
+terraview history trend                     # sparkline trends
+terraview history compare                   # latest vs previous
+terraview history export -f csv -o out.csv  # export
+terraview history clear                     # clear current project
+```
+
+### mcp
+
+Model Context Protocol server for AI agent integration.
+
+```bash
+terraview mcp serve                         # start MCP server over stdio
+```
+
 ### Provider management
 
 ```bash
@@ -1144,7 +1286,7 @@ terraview cache clear                       # clear AI response cache
 
 ## AI Providers
 
-Terraview supports **8 AI providers** in three categories.
+Terraview supports **multiple AI providers** in four categories. With OpenRouter and Custom, you can connect to virtually any AI model available:
 
 ### API providers (require API key)
 
@@ -1186,6 +1328,21 @@ terraview provider use claude-code
 ```bash
 terraview provider install ollama           # install Ollama + pull default model
 terraview provider install ollama --model codellama:13b
+```
+
+### Custom provider (OpenAI-compatible)
+
+| Provider | Environment variable | URL required | Default model |
+|----------|---------------------|-------------|---------------|
+| **custom** | `CUSTOM_LLM_API_KEY` | Yes (`url` in config) | gpt-4o-mini |
+
+Works with any `/v1/chat/completions` compatible API: Grok (xAI), Groq, Mistral, Together AI, Fireworks, Perplexity, LM Studio, vLLM, etc.
+
+```yaml
+llm:
+  provider: custom
+  model: grok-3-mini
+  url: https://api.x.ai
 ```
 
 ### API vs CLI — when to use each

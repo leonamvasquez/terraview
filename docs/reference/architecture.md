@@ -3,85 +3,96 @@
 ## Visão geral do pipeline
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                              terraview CLI                                │
-│  scan | apply | diagram | explain | drift | provider | scanners | cache   │
-└────────────────────────────────┬──────────────────────────────────────────┘
-                                 │
-                        ┌────────┴────────┐
-                        ▼                 ▼
-               Terraform Executor    Plan JSON (--plan)
-                   init + plan            │
-                   show -json             │
-                        │                 │
-                        └───────┬─────────┘
-                                ▼
-                   ┌─────────────────────────┐
-                   │   Parser + Normalizer   │
-                   │   NormalizedResource[]  │
-                   └────────────┬────────────┘
-                                │
-                                ▼
-                   ┌─────────────────────────┐
-                   │     Topology Graph      │
-                   └────────────┬────────────┘
-                                │
-                     ┌──────────┴──────────┐
-                     │                     │
-                     ▼                     ▼
-          ┌─────────────────┐    ┌─────────────────┐
-          │ Plan (original) │    │    Sanitizer    │
-          │                 │    │  Plan (redacted)│
-          └────────┬────────┘    └────────┬────────┘
-                   │                      │
-                   │             ┌────────┴────────┐
-                   │             │    AI Cache     │
-                   │             │  SHA256 + TTL   │
-                   │             └───┬─────────┬───┘
-                   │                 │         │
-                   │              hit│     miss│
-                   │                 │         ▼
-          ┌────────┴───────┐         │   ┌─────────────────┐
-          │   Scanner      │         │   │  AI Context     │
-          │  ┌───────────┐ │         │   │  Analysis       │
-          │  │ Checkov   │ │         │   └────────┬────────┘
-          │  │ tfsec     │ │         │            │
-          │  │ Terrascan │ │         │            ▼
-          │  └───────────┘ │         │  ┌─────────────────┐
-          └────────┬───────┘         │  │    Validator    │
-                   │                 │  └────────┬────────┘
-                   │                 │           │
-                   └────────┬────────┴───────────┘
+                          ┌─────────────────────────────┐
+                          │   MCP Server (stdio)        │
+                          │   JSON-RPC 2.0              │
+                          │   Claude Code / Cursor /    │
+                          │   Windsurf                  │
+                          └─────────────┬───────────────┘
+                                        │
+┌───────────────────────────────────────┼───────────────────────────────────────────┐
+│                                 terraview CLI                                     │
+│  scan | apply | diagram | explain | drift | modules | history | provider | ...    │
+└───────────────────────────────────────┬───────────────────────────────────────────┘
+                                        │
+               ┌────────────────────────┼────────────────────────┐
+               │                        │                        │
+               ▼                        ▼                        ▼
+   ┌────────────────────┐  ┌──────────────────────┐  ┌────────────────────┐
+   │ Terraform Executor │  │  Plan JSON (--plan)  │  │    History Store   │
+   │   init + plan      │  │                      │  │    SQLite (local)  │
+   │   show -json       │  │                      │  │    trends/compare  │
+   └─────────┬──────────┘  └──────────┬───────────┘  └────────────────────┘
+             │                        │
+             └───────────┬────────────┘
+                         ▼
+            ┌─────────────────────────┐
+            │   Parser + Normalizer   │
+            │   NormalizedResource[]  │
+            └────────────┬────────────┘
+                         │
+            ┌────────────┼────────────────────┐
+            │            ▼                    │
+            │  ┌─────────────────────┐        │
+            │  │   Topology Graph    │        │
+            │  └─────────┬───────────┘        │
+            │            │                    │
+            ▼            ▼                    ▼
+   ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
+   │   Modules    │  │   Feature    │  │    Sanitizer     │
+   │   Analyzer   │  │   Extractor  │  │  Plan (redacted) │
+   └──────────────┘  └──────────────┘  └────────┬─────────┘
+                                                │
+                                       ┌────────┴────────┐
+                                       │    AI Cache     │
+                                       │  SHA256 + TTL   │
+                                       └───┬─────────┬───┘
+                                           │         │
+                                        hit│     miss│
+                                           │         ▼
+          ┌────────────────┐               │   ┌─────────────────┐
+          │   Scanner      │               │   │  AI Context     │
+          │  ┌───────────┐ │               │   │  Analysis       │
+          │  │ Checkov   │ │               │   └────────┬────────┘
+          │  │ tfsec     │ │               │            │
+          │  │ Terrascan │ │               │            ▼
+          │  └───────────┘ │               │  ┌─────────────────┐
+          └────────┬───────┘               │  │    Validator    │
+                   │                       │  └────────┬────────┘
+                   │                       │           │
+                   └──────────┬────────────┴───────────┘
+                              ▼
+               ┌──────────────────────────┐
+               │  Normalizer + Resolver   │
+               │  Confidence Scorer       │
+               └────────────┬─────────────┘
                             ▼
-             ┌──────────────────────────┐
-             │  Normalizer + Resolver   │
-             │  Confidence Scorer       │
-             └────────────┬─────────────┘
-                          ▼
-             ┌──────────────────────────┐
-             │  Aggregator + Scorer     │
-             │  ┌────────────────────┐  │
-             │  │ Security      0-10 │  │
-             │  │ Compliance    0-10 │  │
-             │  │ Maintainab.   0-10 │  │
-             │  │ Overall       0-10 │  │
-             │  └────────────────────┘  │
-             │  ┌────────────────────┐  │
-             │  │ Risk Vectors       │  │
-             │  │  network           │  │
-             │  │  encryption        │  │
-             │  │  identity          │  │
-             │  │  governance        │  │
-             │  │  observability     │  │
-             │  └────────────────────┘  │
-             │  Meta-analysis           │
-             └────────────┬─────────────┘
-                          ▼
-             ┌──────────────────────────┐
-             │  Output                  │
-             │  pretty | compact | json │
-             │  sarif  | markdown       │
-             └──────────────────────────┘
+               ┌──────────────────────────┐
+               │  Aggregator + Scorer     │
+               │  ┌────────────────────┐  │
+               │  │ Security      0-10 │  │
+               │  │ Compliance    0-10 │  │
+               │  │ Maintainab.   0-10 │  │
+               │  │ Overall       0-10 │  │
+               │  └────────────────────┘  │
+               │  ┌────────────────────┐  │
+               │  │ Risk Vectors       │  │
+               │  │  network           │  │
+               │  │  encryption        │  │
+               │  │  identity          │  │
+               │  │  governance        │  │
+               │  │  observability     │  │
+               │  └────────────────────┘  │
+               │  Meta-analysis           │
+               └────────────┬─────────────┘
+                            │
+               ┌────────────┼─────────────┐
+               ▼            ▼             ▼
+  ┌──────────────────┐ ┌─────────┐ ┌───────────────┐
+  │  Output          │ │ History │ │ MCP Response  │
+  │  pretty|compact  │ │ Record  │ │ (JSON-RPC)    │
+  │  json|sarif|md   │ │ (SQLite)│ │               │
+  └──────────────────┘ └─────────┘ └───────────────┘
 ```
 
 ## Componentes principais
@@ -149,6 +160,27 @@
 - Detecção de gaps de cobertura (categorias sem findings, avisos de fonte única)
 - Score unificado com penalidades por severidade + bônus por correlação
 
+### Modules Analyzer
+
+- Analisa chamadas de módulos no plan para versionamento, higiene de source e nesting
+- 6 regras determinísticas (MOD_001 a MOD_006)
+- Verificação opcional de versões no Terraform Registry (`--check-registry`)
+- Não requer IA
+
+### History Store
+
+- Banco SQLite local (`~/.terraview/cache/history.db`) para tracking de resultados
+- Cada scan grava `ScanRecord` com timestamp, scores, findings e veredito
+- Subcomandos: `trend` (sparklines), `compare` (lado-a-lado), `export` (CSV/JSON), `clear`
+- Retenção automática configurável
+
+### MCP Server
+
+- Servidor Model Context Protocol sobre stdio (JSON-RPC 2.0)
+- Permite que agentes AI (Claude Code, Cursor, Windsurf) chamem tools do terraview
+- 11 tools expostas: scan, explain, diagram, drift, history, history_trend, history_compare, impact, cache, scanners, version
+- Métodos: `initialize`, `tools/list`, `tools/call`
+
 ## Desenvolvimento
 
 ```bash
@@ -184,11 +216,14 @@ internal/
   downloader/         # Download de releases GitHub
   drift/              # Detecção e classificação de drift
   explain/            # Explicação em linguagem natural
-  feature/            # Feature flags e detecção
+  feature/            # Extração semântica de features por recurso
+  history/            # Histórico de scans em SQLite (trends, compare, export)
   i18n/               # Internacionalização (en/pt-BR)
   importer/           # Importação de findings externos
   installer/          # Instalação de scanners
+  mcp/                # Servidor MCP (JSON-RPC 2.0 stdio) para agentes AI
   meta/               # Meta-análise cross-tool
+  modules/            # Análise de módulos Terraform (versão, source, nesting)
   normalizer/         # Deduplicação e normalização
   output/             # Formatadores de saída (pretty, json, sarif, md)
   parser/             # Parser de planos Terraform

@@ -96,5 +96,7 @@ terraview scan checkov -f sarif -o ./reports
 
 - [Comandos](../usage/commands.md) — referência completa
 - [Configuração](../usage/configuration.md) — arquivo `.terraview.yaml`
-- [AI Providers](../usage/ai-providers.md) — todos os 8 providers
+- [AI Providers](../usage/ai-providers.md) — todos os providers suportados
+- [Histórico](../usage/history.md) — tracking de scans ao longo do tempo
+- [MCP Server](../usage/mcp.md) — integração com agentes AI
 - [CI/CD](../integration/cicd.md) — integração com pipelines

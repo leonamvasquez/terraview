@@ -7,6 +7,42 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.5.0] — 2026-03-15
+
+### Added
+- **Module analysis subsystem** (`terraview modules`): análise de saúde, versões e profundidade de módulos Terraform com verificação opcional de registry (`--check-registry`)
+- **History tracking with SQLite** (`terraview history`): armazenamento persistente de resultados de scan com trends (sparkline), comparação lado-a-lado e política de retenção configurável
+- **MCP Server** (`terraview mcp`): servidor Model Context Protocol sobre stdio (JSON-RPC 2.0) para integração com agentes AI (Claude Code, Cursor, Windsurf) — 10 tools expostas
+- **Custom AI provider**: suporte a endpoints HTTP customizados compatíveis com a API OpenAI
+- **Volume penalty no scoring**: penalidade logarítmica por volume absoluto de findings para evitar diluição em infraestruturas grandes
+
+### Changed
+- Go atualizado para 1.26.1
+- Bumps de CI/CD: actions/setup-go v6.3.0, actions/setup-python v6.2.0, docker/setup-buildx-action v4.0.0, docker/login-action v4.0.0, docker/metadata-action v6.0.0, docker/scout-action v1.20.1, github/codeql-action v4.32.6, actions/upload-pages-artifact v4.0.0
+- Bump golang.org/x/sys v0.41.0 → v0.42.0
+- Docker base image golang atualizada
+- Diagram generator refatorado e expandido
+- README.en.md expandido com documentação completa em inglês e diagrama de arquitetura
+
+### Fixed
+- `gofmt` aplicado ao custom provider
+- Lint errors corrigidos em múltiplos pacotes
+- SARIF: `remediation` movida de `fixes` para `rule.Help` (corrige `artifactChanges` obrigatório)
+- Logo terraview atualizado (dark/light theme)
+- Testes unitários expandidos cobrindo 19 pacotes (69% → 79.5% cobertura)
+
+---
+
+## [0.4.1] — 2026-03-06
+
+### Added
+- Testes unitários cobrindo 19 pacotes adicionais (cobertura: 69% → 79.5%)
+
+### Fixed
+- Testes incompatíveis com ambiente CI corrigidos
+
+---
+
 ## [0.4.0] — 2026-03-03
 
 ### Added
@@ -119,6 +155,8 @@ with [SemVer](https://semver.org/) versioning.
 - Package manager updates (Homebrew, Scoop, APT, DNF)
 - `tv` alias
 
+[0.5.0]: https://github.com/leonamvasquez/terraview/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/leonamvasquez/terraview/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/leonamvasquez/terraview/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leonamvasquez/terraview/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/leonamvasquez/terraview/compare/v0.2.0...v0.2.5
