@@ -638,7 +638,7 @@ func calculateLayout(
 				placedNodeIDs[id] = true
 			}
 
-			layoutVPCWithSubnets(result, dagNodes, compounds, perVPCNodeIDs,
+			layoutVPCWithSubnets(result, dagNodes, perVPCNodeIDs,
 				vpcLayer.SubnetSummary, vpcLayer.NetworkGroups, boxSizes, &curY, canvasWidth,
 				vpcInnerWidth, vpcOffsetX, vpcLayer.VPCAddress, chains, nodeToChain)
 		}
@@ -782,7 +782,6 @@ func placeBoxRow(result *LayoutResult, nodeIDs []string, boxSizes map[string][2]
 func layoutVPCWithSubnets(
 	result *LayoutResult,
 	dagNodes map[string]*ServiceNode,
-	compounds map[string]*CompoundNode,
 	vpcNodeIDs map[string]bool,
 	subnetSummary *SubnetSummary,
 	networkGroups []*AggregatedGroup,

@@ -260,9 +260,9 @@ func TestResolveTopology_NoVPCServerless(t *testing.T) {
 
 func TestIsContainmentEdge(t *testing.T) {
 	tests := map[string]bool{
-		"vpc_id":          true,
-		"subnet_id":       true,
-		"subnet_ids":      true,
+		"vpc_id":           true,
+		"subnet_id":        true,
+		"subnet_ids":       true,
 		"role_arn":         false,
 		"target_group_arn": false,
 		"security_groups":  false,
@@ -394,7 +394,7 @@ func TestAggregateTopoResult_DeduplicateConnections(t *testing.T) {
 		Provider: "aws",
 		Layers: []*TopoLayer{
 			{
-				Name: "VPC",
+				Name:  "VPC",
 				IsVPC: true,
 				ComputeGroups: []*AggregatedGroup{
 					{Service: "EC2 Instance", Label: "EC2 Instance (2)",
@@ -826,21 +826,21 @@ func TestTopoGenerator_AllNoOp(t *testing.T) {
 
 func TestGetServiceGroup(t *testing.T) {
 	tests := map[string]string{
-		"aws_s3_bucket":                      "S3",
-		"aws_s3_bucket_versioning":           "S3",
-		"aws_s3_bucket_policy":               "S3",
-		"aws_iam_role":                       "IAM",
-		"aws_iam_role_policy_attachment":      "IAM",
-		"aws_eks_cluster":                    "EKS Cluster",
-		"aws_eks_node_group":                 "EKS Node Group",
-		"aws_lb":                             "Load Balancer",
-		"aws_lb_listener":                    "Load Balancer",
-		"aws_security_group":                 "Security Group",
-		"aws_cloudwatch_log_group":           "CloudWatch",
-		"aws_api_gateway_rest_api":           "API Gateway",
-		"aws_api_gateway_method":             "API Gateway",
-		"aws_networkfirewall_firewall":       "Network Firewall",
-		"aws_launch_template":                "Auto Scaling",
+		"aws_s3_bucket":                  "S3",
+		"aws_s3_bucket_versioning":       "S3",
+		"aws_s3_bucket_policy":           "S3",
+		"aws_iam_role":                   "IAM",
+		"aws_iam_role_policy_attachment": "IAM",
+		"aws_eks_cluster":                "EKS Cluster",
+		"aws_eks_node_group":             "EKS Node Group",
+		"aws_lb":                         "Load Balancer",
+		"aws_lb_listener":                "Load Balancer",
+		"aws_security_group":             "Security Group",
+		"aws_cloudwatch_log_group":       "CloudWatch",
+		"aws_api_gateway_rest_api":       "API Gateway",
+		"aws_api_gateway_method":         "API Gateway",
+		"aws_networkfirewall_firewall":   "Network Firewall",
+		"aws_launch_template":            "Auto Scaling",
 	}
 	for resType, want := range tests {
 		got := getServiceGroup(resType)
@@ -870,14 +870,14 @@ func TestIsPrimaryType(t *testing.T) {
 
 func TestGetTopoVPCLayer(t *testing.T) {
 	tests := map[string]string{
-		"aws_security_group": "Network",
-		"aws_subnet":         "Network",
-		"aws_eks_cluster":    "Compute",
-		"aws_lambda_function":"Compute",
-		"aws_rds_cluster":    "Data",
-		"aws_dynamodb_table": "Data",
-		"aws_s3_bucket":      "",  // not in VPC
-		"aws_iam_role":       "",  // not in VPC
+		"aws_security_group":  "Network",
+		"aws_subnet":          "Network",
+		"aws_eks_cluster":     "Compute",
+		"aws_lambda_function": "Compute",
+		"aws_rds_cluster":     "Data",
+		"aws_dynamodb_table":  "Data",
+		"aws_s3_bucket":       "", // not in VPC
+		"aws_iam_role":        "", // not in VPC
 	}
 	for resType, want := range tests {
 		got := getTopoVPCLayer(resType)
@@ -1502,8 +1502,8 @@ func TestCanvas_DrawCompoundBoxAction(t *testing.T) {
 		t.Errorf("outer TL: expected ╔, got %c", got)
 	}
 	// Inner child box should be dashed (update)
-	innerX := 4  // x+2
-	innerY := 4  // y+3
+	innerX := 4 // x+2
+	innerY := 4 // y+3
 	if got := c.Get(innerX+2, innerY); got != cDashH {
 		t.Errorf("inner child top fill: expected ╌, got %c", got)
 	}
@@ -1626,9 +1626,9 @@ func TestRenderTopoResult_CompoundAndDistBar(t *testing.T) {
 				},
 			},
 			{
-				Name:  "VPC",
-				Order: 2,
-				IsVPC: true,
+				Name:          "VPC",
+				Order:         2,
+				IsVPC:         true,
 				SubnetSummary: &SubnetSummary{Public: 2, PrivateApp: 3},
 				Groups: []*AggregatedGroup{
 					{Service: "VPC", Label: "VPC", PrimaryCount: 1, Action: "create"},
@@ -1687,8 +1687,8 @@ func TestGetServiceScope(t *testing.T) {
 	}{
 		{"Route 53", "edge"},
 		{"CloudFront", "edge"},
-		{"WAF", "global"},  // annotation service — not a DAG node
-		{"ACM", "global"},  // annotation service — not a DAG node
+		{"WAF", "global"}, // annotation service — not a DAG node
+		{"ACM", "global"}, // annotation service — not a DAG node
 		{"EKS Cluster", "vpc"},
 		{"Load Balancer", "vpc"},
 		{"Lambda", "vpc"},
@@ -1711,10 +1711,10 @@ func TestGetServiceScope(t *testing.T) {
 
 func TestSeparateByScope(t *testing.T) {
 	nodes := map[string]*ServiceNode{
-		"R53":  {ID: "R53", Service: "Route 53", Scope: "edge"},
-		"EKS":  {ID: "EKS", Service: "EKS Cluster", Scope: "vpc"},
-		"IAM":  {ID: "IAM", Service: "IAM", Scope: "global"},
-		"S3":   {ID: "S3", Service: "S3", Scope: "global"},
+		"R53": {ID: "R53", Service: "Route 53", Scope: "edge"},
+		"EKS": {ID: "EKS", Service: "EKS Cluster", Scope: "vpc"},
+		"IAM": {ID: "IAM", Service: "IAM", Scope: "global"},
+		"S3":  {ID: "S3", Service: "S3", Scope: "global"},
 	}
 
 	dagNodes, globalNodes := separateByScope(nodes)
@@ -1779,9 +1779,9 @@ func TestRenderTopoResult_ThreeZones(t *testing.T) {
 				},
 			},
 			{
-				Name:  "VPC",
-				Order: 2,
-				IsVPC: true,
+				Name:          "VPC",
+				Order:         2,
+				IsVPC:         true,
 				SubnetSummary: &SubnetSummary{Public: 2},
 				Groups: []*AggregatedGroup{
 					{Service: "VPC", Label: "VPC", PrimaryCount: 1, Action: "create"},
@@ -1854,9 +1854,9 @@ func TestRenderTopoResult_NoEdgeZone(t *testing.T) {
 		Title:    "AWS ECS",
 		Layers: []*TopoLayer{
 			{
-				Name:  "VPC",
-				Order: 2,
-				IsVPC: true,
+				Name:          "VPC",
+				Order:         2,
+				IsVPC:         true,
 				SubnetSummary: &SubnetSummary{Public: 2, Private: 2},
 				Groups: []*AggregatedGroup{
 					{Service: "VPC", Label: "VPC", PrimaryCount: 1, Action: "create"},
@@ -2088,8 +2088,8 @@ func TestWireSGRefEdges_Bidirectional(t *testing.T) {
 	}
 
 	cfgRefs := map[string][]string{
-		"aws_lb.main":          {"aws_security_group.alb.id", "aws_security_group.alb"},
-		"aws_ecs_service.api":  {"aws_security_group.ecs.id", "aws_security_group.ecs"},
+		"aws_lb.main":            {"aws_security_group.alb.id", "aws_security_group.alb"},
+		"aws_ecs_service.api":    {"aws_security_group.ecs.id", "aws_security_group.ecs"},
 		"aws_security_group.alb": {"aws_vpc.main.id"},
 		"aws_security_group.ecs": {"aws_vpc.main.id"},
 	}
@@ -2131,8 +2131,8 @@ func TestBuildSGRefArrows_SkipDuplicate(t *testing.T) {
 
 func TestBuildArrows_BidirectionalFromBiDeps(t *testing.T) {
 	nodes := map[string]*ServiceNode{
-		"ALB":  {ID: "ALB", Service: "ALB", DepsOut: []string{"EKS"}, BiDeps: map[string]bool{"EKS": true}},
-		"EKS":  {ID: "EKS", Service: "EKS Cluster", DepsOut: nil, BiDeps: map[string]bool{"ALB": true}},
+		"ALB": {ID: "ALB", Service: "ALB", DepsOut: []string{"EKS"}, BiDeps: map[string]bool{"EKS": true}},
+		"EKS": {ID: "EKS", Service: "EKS Cluster", DepsOut: nil, BiDeps: map[string]bool{"ALB": true}},
 	}
 	boxes := map[string]*BoxPos{
 		"ALB": {X: 10, Y: 2, W: 10, H: 3, CenterX: 15},
