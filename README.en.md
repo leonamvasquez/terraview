@@ -67,7 +67,7 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - **Conflict Resolution** — scanner × AI: scanner wins on disagreement (confidence 0.80); agreement boosts confidence to 1.00
 - **Unified Scorecard** with Security, Compliance, Maintainability and Overall scores (0–10)
 - **Risk vectors** — per-resource risk extraction across 5 axes: network exposure, encryption, identity, governance, observability
-- **ASCII Diagram** — infrastructure visualization right in the terminal via `--diagram`
+- **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal with VPC nesting, subnet tiers, connection arrows, and resource aggregation
 - **Impact Analysis** — dependency blast radius of changes via `--impact`
 - **AI Explanation** — natural language explanation of your infrastructure via `explain`
 - **Zero Configuration** — detects Terraform projects and runs `init + plan + show` automatically
@@ -383,11 +383,17 @@ terraview apply checkov --all               # everything enabled + apply
 
 ### Diagram
 
-Generates a deterministic ASCII infrastructure diagram. Does not require AI.
+Generates a deterministic ASCII infrastructure diagram from a Terraform plan. Does not require AI. Currently supports **AWS only**.
+
+Two rendering modes are available:
+
+- **topo** (default) — topological view with VPC nesting, subnet tiers, connection arrows, security group cross-references, bidirectional edges, NAT/TGW/VPN visual nodes, and resource aggregation
+- **flat** — simple layer-based view
 
 ```bash
-terraview diagram                           # diagram from current directory
+terraview diagram                           # diagram from current directory (topo mode)
 terraview diagram --plan plan.json          # diagram from existing plan
+terraview diagram --diagram-mode flat       # flat layer-based view
 terraview diagram --output ./reports        # write diagram.txt to directory
 ```
 
@@ -1034,7 +1040,7 @@ terraview scan checkov
 - **Parallel AI analysis** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code
 - **Unified Scorecard** — Security, Compliance, Maintainability and Overall scores (0–10)
 - **Risk vectors** — 5 axes per resource (network, encryption, identity, governance, observability)
-- **ASCII Diagram** — `--diagram` for terminal infrastructure visualization
+- **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal
 - **Impact Analysis** — `--impact` for dependency blast radius
 - **Drift Detection** — detection and classification with `--intelligence`
 - **Native CI/CD** — semantic exit codes + SARIF, JSON, Markdown output
@@ -1178,11 +1184,12 @@ terraview apply checkov --static            # scanner only + apply
 
 ### diagram
 
-Generates a deterministic ASCII diagram of the infrastructure. Does not require AI.
+Generates a deterministic ASCII infrastructure diagram from a Terraform plan. Does not require AI. Currently supports **AWS only**.
 
 ```bash
-terraview diagram                           # diagram of current directory
+terraview diagram                           # diagram from current directory (topo mode)
 terraview diagram --plan plan.json          # diagram from existing plan
+terraview diagram --diagram-mode flat       # flat layer-based view
 terraview diagram --output ./reports        # save diagram.txt to directory
 ```
 

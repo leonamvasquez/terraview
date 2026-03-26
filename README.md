@@ -36,7 +36,7 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **Scorecard unificado** — Segurança, Compliance, Manutenibilidade (0–10)
 - **Vetores de risco** — 5 eixos por recurso (rede, criptografia, identidade, governança, observabilidade)
-- **Diagrama ASCII** — `--diagram` para visualização no terminal
+- **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal.
 - **Análise de impacto** — `--impact` para blast radius
 - **Análise de módulos** — versionamento, source e nesting com `terraview modules`
 - **Drift detection** — detecção e classificação com `--intelligence`

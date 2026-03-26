@@ -12,6 +12,8 @@ import (
 	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
+var diagramMode string
+
 var diagramCmd = &cobra.Command{
 	Use:   "diagram",
 	Short: "Generate ASCII infrastructure diagram",
@@ -20,8 +22,14 @@ var diagramCmd = &cobra.Command{
 This command is deterministic and does not require AI.
 If --plan is not specified, terraview will auto-generate the plan.
 
+Diagram modes:
+  topo   Topological view with connections, VPC nesting, and resource aggregation (default)
+  flat   Original flat layer-based view
+
 Examples:
   terraview diagram
+  terraview diagram --diagram-mode topo
+  terraview diagram --diagram-mode flat
   terraview diagram --plan plan.json
   terraview diagram --output ./reports
 
@@ -29,6 +37,10 @@ Terragrunt:
   terraview diagram --terragrunt
   terraview diagram --terragrunt -d modules/vpc`,
 	RunE: runDiagram,
+}
+
+func init() {
+	diagramCmd.Flags().StringVar(&diagramMode, "diagram-mode", "topo", "Diagram mode: topo (topological) or flat (layer-based)")
 }
 
 func runDiagram(cmd *cobra.Command, args []string) error {
@@ -59,6 +71,11 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 
 	topoGraph := topology.BuildGraph(resources)
 	gen := diagram.NewGenerator()
+	if diagramMode == "topo" {
+		gen.Mode = "topo"
+		gen.ConfigRefs = diagram.ExtractConfigReferences(plan.Configuration)
+		gen.SGCrossRefs = diagram.ExtractSGCrossRefs(plan.Configuration)
+	}
 	result := gen.GenerateWithGraph(resources, topoGraph)
 
 	fmt.Println(result)

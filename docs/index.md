@@ -30,7 +30,7 @@ terraview scan checkov
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **Scorecard unificado** — scores de Segurança, Compliance, Manutenibilidade e Overall (0–10)
 - **Vetores de risco** — análise em 5 eixos por recurso: rede, criptografia, identidade, governança, observabilidade
-- **Diagrama ASCII** — visualização da infraestrutura direto no terminal
+- **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal com aninhamento VPC, tiers de subnet e setas de conexão
 - **Análise de impacto** — raio de dependências das mudanças
 - **Drift detection** — detecção e classificação de drift com scoring avançado
 - **Análise de módulos** — versionamento, higiene de source, profundidade de nesting

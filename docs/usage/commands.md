@@ -114,11 +114,17 @@ terraview apply checkov --all               # tudo habilitado + apply
 
 ## Diagram
 
-Gera um diagrama ASCII determinístico da infraestrutura. Não requer IA.
+Gera um diagrama ASCII determinístico da infraestrutura a partir de um plano Terraform. Não requer IA. Atualmente suporta apenas **AWS**.
+
+Dois modos de renderização estão disponíveis:
+
+- **topo** (padrão) — visão topológica com aninhamento VPC, tiers de subnet, setas de conexão, referências cruzadas de security groups, arestas bidirecionais, nós visuais NAT/TGW/VPN e agregação de recursos
+- **flat** — visão simples baseada em camadas
 
 ```bash
-terraview diagram                           # diagrama do diretório atual
+terraview diagram                           # diagrama do diretório atual (modo topo)
 terraview diagram --plan plan.json          # diagrama de plan existente
+terraview diagram --diagram-mode flat       # visão flat baseada em camadas
 terraview diagram --output ./reports        # salvar diagram.txt no diretório
 ```
 

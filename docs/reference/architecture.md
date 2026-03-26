@@ -212,7 +212,7 @@ internal/
   blast/              # Análise de impacto (blast radius)
   config/             # Configuração e persistência
   contextanalysis/    # Análise contextual de recursos
-  diagram/            # Diagrama ASCII da infraestrutura
+  diagram/            # Diagrama ASCII da infraestrutura (AWS)
   downloader/         # Download de releases GitHub
   drift/              # Detecção e classificação de drift
   explain/            # Explicação em linguagem natural

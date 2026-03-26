@@ -26,11 +26,26 @@ type ResourceEntry struct {
 }
 
 // Generator creates ASCII infrastructure diagrams from Terraform plan resources.
-type Generator struct{}
+type Generator struct {
+	// Mode controls the diagram style:
+	//   "topo" — topological diagram with connections, nesting, and aggregation
+	//   "flat" or "" — original flat layer-based diagram (default for backward compat)
+	Mode string
+	// ConfigRefs maps resource addresses to their configuration references.
+	// Used in multi-VPC scenarios to resolve VPC assignment from Terraform expressions.
+	ConfigRefs map[string][]string
+	// SGCrossRefs holds security group cross-references extracted from the configuration.
+	SGCrossRefs []SGCrossRef
+}
 
-// NewGenerator creates a new diagram Generator.
+// NewGenerator creates a new diagram Generator with the default (flat) mode.
 func NewGenerator() *Generator {
 	return &Generator{}
+}
+
+// NewTopoGenerator creates a Generator in topological mode.
+func NewTopoGenerator() *Generator {
+	return &Generator{Mode: "topo"}
 }
 
 // Generate produces an ASCII infrastructure diagram from normalized resources.
@@ -39,8 +54,10 @@ func (g *Generator) Generate(resources []parser.NormalizedResource) string {
 	return g.GenerateWithGraph(resources, nil)
 }
 
-// GenerateWithGraph produces an elaborate ASCII infrastructure diagram
+// GenerateWithGraph produces an ASCII infrastructure diagram
 // using the topology graph for dependency-aware layout.
+// In "topo" mode, renders a topological diagram with connections, nesting, and aggregation.
+// In "flat" mode (default), renders the original layer-based diagram.
 func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, graph *topology.Graph) string {
 	if len(resources) == 0 {
 		return "Infrastructure Diagram\n" +
@@ -61,13 +78,18 @@ func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, gra
 			"  (no resource changes)\n"
 	}
 
-	// Detect provider
-	provider := detectProvider(active)
+	// Topological mode: resolve hierarchy, aggregate, render
+	if g.Mode == "topo" {
+		result := ResolveTopology(active, graph, g.ConfigRefs)
+		result.SGCrossRefs = g.SGCrossRefs
+		AggregateTopoResult(result)
+		return RenderTopoResult(result)
+	}
 
-	// Build layered diagram
+	// Flat mode (default): original layer-based rendering
+	provider := detectProvider(active)
 	layers := g.buildLayers(active)
 
-	// Build edge map from topology graph
 	var edges map[string][]string
 	if graph != nil {
 		edges = buildEdgeMap(graph)
