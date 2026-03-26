@@ -12,8 +12,8 @@ const (
 // GlobalGridResult holds the computed layout for the global services grid.
 type GlobalGridResult struct {
 	X, Y, W, H int
-	Title       string
-	Rows        [][]gridBox
+	Title      string
+	Rows       [][]gridBox
 }
 
 type gridBox struct {
@@ -24,14 +24,14 @@ type gridBox struct {
 
 // globalServiceCategory maps service name to display category for grouping.
 var globalServiceCategory = map[string]string{
-	"CloudWatch":        "Observability",
-	"CloudTrail":        "Observability",
-	"AWS Config":        "Observability",
-	"Prometheus":        "Observability",
-	"Grafana":           "Observability",
-	"X-Ray Sampling":    "Observability",
-	"aws_xray_group":    "Observability",
-	"Synthetics":        "Observability",
+	"CloudWatch":     "Observability",
+	"CloudTrail":     "Observability",
+	"AWS Config":     "Observability",
+	"Prometheus":     "Observability",
+	"Grafana":        "Observability",
+	"X-Ray Sampling": "Observability",
+	"aws_xray_group": "Observability",
+	"Synthetics":     "Observability",
 
 	"SNS":         "Messaging",
 	"SQS":         "Messaging",
@@ -46,14 +46,14 @@ var globalServiceCategory = map[string]string{
 	"CodeCommit Repo": "CI/CD",
 	"ECR":             "CI/CD",
 
-	"IAM":                "Security",
-	"KMS":                "Security",
-	"Secrets Manager":    "Security",
+	"IAM":                 "Security",
+	"KMS":                 "Security",
+	"Secrets Manager":     "Security",
 	"SSM Parameter Store": "Security",
-	"SSM":                "Security",
-	"GuardDuty":          "Security",
-	"SecurityHub":        "Security",
-	"Macie":              "Security",
+	"SSM":                 "Security",
+	"GuardDuty":           "Security",
+	"SecurityHub":         "Security",
+	"Macie":               "Security",
 }
 
 // categoryOrder defines the display order for global service categories.
@@ -71,7 +71,7 @@ func buildGlobalGrid(globalNodes []*ServiceNode, canvasWidth int) *GlobalGridRes
 	sorted := categorizeGlobalServices(globalNodes)
 
 	// Build grid boxes
-	var boxes []gridBox
+	boxes := make([]gridBox, 0, len(sorted))
 	for _, n := range sorted {
 		label := n.Label
 		icon := groupActionIcon(n.Action)

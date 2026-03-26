@@ -4,19 +4,19 @@ import "strings"
 
 // ServiceNode represents a service group in the dependency DAG.
 type ServiceNode struct {
-	ID          string   // service group label (or VPC-qualified ID for multi-VPC)
-	Service     string   // clean service name (e.g., "EKS Cluster")
-	Label       string   // display label with counts
-	Action      string   // dominant action
-	Scope       string   // "edge", "vpc", or "global"
-	SubnetTier  string   // "public", "private_app", "private_data", "private", "vpc_level"
-	VPCAddr     string   // VPC address this node belongs to (multi-VPC support)
-	DepsOut     []string // IDs this node points TO (downstream)
-	DepsIn      []string // IDs that point TO this node (upstream)
-	SGRefDeps   []string // IDs connected via SG cross-reference (dotted edges)
+	ID          string          // service group label (or VPC-qualified ID for multi-VPC)
+	Service     string          // clean service name (e.g., "EKS Cluster")
+	Label       string          // display label with counts
+	Action      string          // dominant action
+	Scope       string          // "edge", "vpc", or "global"
+	SubnetTier  string          // "public", "private_app", "private_data", "private", "vpc_level"
+	VPCAddr     string          // VPC address this node belongs to (multi-VPC support)
+	DepsOut     []string        // IDs this node points TO (downstream)
+	DepsIn      []string        // IDs that point TO this node (upstream)
+	SGRefDeps   []string        // IDs connected via SG cross-reference (dotted edges)
 	BiDeps      map[string]bool // node IDs with bidirectional SG relationship
-	Addresses   []string // resource addresses in this group
-	Annotations []string // coupled services shown as tags: [WAF], [ACM]
+	Addresses   []string        // resource addresses in this group
+	Annotations []string        // coupled services shown as tags: [WAF], [ACM]
 }
 
 // serviceScope determines where a service renders in the diagram.
@@ -82,40 +82,40 @@ var serviceScope = map[string]string{
 	"NLB Internal":  "vpc",
 
 	// Edge — API management (AWS-managed, not VPC-bound)
-	"API Gateway":   "edge",
+	"API Gateway": "edge",
 
 	// Global/Regional (Zone 3)
-	"CloudWatch":        "global",
-	"CloudTrail":        "global",
-	"AWS Config":        "global",
-	"CodePipeline":      "global",
-	"CodeBuild":         "global",
-	"CodeCommit":        "global",
-	"CodeCommit Repo":   "global",
-	"ECR":               "global",
-	"SNS":               "global",
-	"SQS":               "global",
-	"S3":                "global",
-	"IAM":               "global",
-	"KMS":               "global",
-	"Secrets Manager":   "global",
+	"CloudWatch":          "global",
+	"CloudTrail":          "global",
+	"AWS Config":          "global",
+	"CodePipeline":        "global",
+	"CodeBuild":           "global",
+	"CodeCommit":          "global",
+	"CodeCommit Repo":     "global",
+	"ECR":                 "global",
+	"SNS":                 "global",
+	"SQS":                 "global",
+	"S3":                  "global",
+	"IAM":                 "global",
+	"KMS":                 "global",
+	"Secrets Manager":     "global",
 	"SSM Parameter Store": "global",
-	"SSM":               "global",
-	"GuardDuty":         "global",
-	"SecurityHub":       "global",
-	"Macie":             "global",
-	"Backup":            "global",
-	"Prometheus":        "global",
-	"Grafana":           "global",
-	"X-Ray Sampling":    "global",
-	"aws_xray_group":    "global",
-	"Synthetics":        "global",
-	"EventBridge":       "global",
-	"EC2 Key Pair":      "global",
-	"AMI":               "global",
-	"EBS Volume":        "vpc",
-	"Step Functions":    "global",
-	"CodeDeploy":        "global",
+	"SSM":                 "global",
+	"GuardDuty":           "global",
+	"SecurityHub":         "global",
+	"Macie":               "global",
+	"Backup":              "global",
+	"Prometheus":          "global",
+	"Grafana":             "global",
+	"X-Ray Sampling":      "global",
+	"aws_xray_group":      "global",
+	"Synthetics":          "global",
+	"EventBridge":         "global",
+	"EC2 Key Pair":        "global",
+	"AMI":                 "global",
+	"EBS Volume":          "vpc",
+	"Step Functions":      "global",
+	"CodeDeploy":          "global",
 }
 
 // getServiceScope returns the rendering zone for a service.
@@ -139,12 +139,12 @@ var skipFromDAGBoxes = map[string]bool{
 	"NAT Gateway":        true,
 	"ENI":                true,
 	"Elastic IP":         true,
-	"Transit Gateway":      true,
-	"VPC Peering":          true,
-	"PrivateLink":          true,
-	"VPN":                  true,
-	"RDS Subnet Group":     true,
-	"ElastiCache Subnet":   true,
+	"Transit Gateway":    true,
+	"VPC Peering":        true,
+	"PrivateLink":        true,
+	"VPN":                true,
+	"RDS Subnet Group":   true,
+	"ElastiCache Subnet": true,
 }
 
 // distributionBarServices are hub services rendered as wide thin bars when 2+ outbound.

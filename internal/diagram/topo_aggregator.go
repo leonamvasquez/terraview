@@ -60,8 +60,9 @@ func mergeServiceGroupsAcrossLayers(result *TopoResult) {
 
 // formatServiceLabels generates display labels with counts.
 // Consistent format:
-//   Sub-resources present (total > primary): "S3 (8, 35 total)" or "Lambda (1, 13 total)"
-//   No sub-resources (total == primary):     "IAM (24)" or "Kinesis (1)"
+//
+//	Sub-resources present (total > primary): "S3 (8, 35 total)" or "Lambda (1, 13 total)"
+//	No sub-resources (total == primary):     "IAM (24)" or "Kinesis (1)"
 func formatServiceLabels(groups []*AggregatedGroup) {
 	for _, g := range groups {
 		if g.TotalCount > g.PrimaryCount && g.PrimaryCount > 0 {
@@ -82,7 +83,7 @@ func deduplicateServiceConnections(conns []*Connection, result *TopoResult) []*C
 	}
 
 	seen := make(map[connKey]bool)
-	var deduped []*Connection
+	deduped := make([]*Connection, 0, len(conns))
 
 	for _, c := range conns {
 		fromSvc := addrToService[c.From]

@@ -8,13 +8,6 @@ import (
 const (
 	topoWidth = 120
 
-	dblCornerTL = "╔"
-	dblCornerTR = "╗"
-	dblCornerBL = "╚"
-	dblCornerBR = "╝"
-	dblHoriz    = "═"
-	dblVert     = "║"
-
 	sglCornerTL = "┌"
 	sglCornerTR = "┐"
 	sglCornerBL = "└"
@@ -255,7 +248,7 @@ func makeBox(contentLines []string, minWidth int) renderedBox {
 			w = needed
 		}
 	}
-	var lines []string
+	lines := make([]string, 0, len(contentLines)+2)
 	lines = append(lines, sglCornerTL+strings.Repeat(sglHoriz, w-2)+sglCornerTR)
 	for _, l := range contentLines {
 		rpad := w - 3 - runeLen(l)
@@ -270,7 +263,7 @@ func makeBox(contentLines []string, minWidth int) renderedBox {
 
 func packIntoRows(boxes []renderedBox, maxWidth, gap int) [][]renderedBox {
 	var rows [][]renderedBox
-	var current []renderedBox
+	current := make([]renderedBox, 0, len(boxes))
 	currentW := 0
 	for _, b := range boxes {
 		needed := b.width
@@ -350,14 +343,6 @@ func writeBoxRowCentered(sb *strings.Builder, row []renderedBox, totalWidth int)
 	}
 }
 
-func writeVPCLine(sb *strings.Builder, content string, vpcW int) {
-	rpad := vpcW - 2 - runeLen(content)
-	if rpad < 0 {
-		rpad = 0
-	}
-	sb.WriteString(fmt.Sprintf("  %s  %s%s%s\n", dblVert, content, strings.Repeat(" ", rpad), dblVert))
-}
-
 func writeCenterConnector(sb *strings.Builder, totalWidth int, prefix string) {
 	center := totalWidth / 2
 	sb.WriteString(prefix + strings.Repeat(" ", center) + topoConnector + "\n")
@@ -411,15 +396,6 @@ func buildCompactLines(groups []*AggregatedGroup, maxWidth int) []string {
 	return lines
 }
 
-func groupsToLines(groups []*AggregatedGroup) []string {
-	var lines []string
-	for _, g := range groups {
-		icon := groupActionIcon(g.Action)
-		lines = append(lines, fmt.Sprintf("%s %s", icon, g.Label))
-	}
-	return lines
-}
-
 func groupActionIcon(action string) string {
 	switch action {
 	case "create":
@@ -457,14 +433,6 @@ func wrapWithSeparator(parts []string, sep string, maxWidth int) []string {
 		lines = append(lines, current)
 	}
 	return lines
-}
-
-func truncateLabel(s string, maxLen int) string {
-	if runeLen(s) <= maxLen {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:maxLen-3]) + "..."
 }
 
 // serviceAbbrev maps service names to short abbreviations for inline labels.
@@ -534,8 +502,8 @@ func drawVPCCrossingLabels(canvas *Canvas, layout *LayoutResult, dagNodes map[st
 
 	// For each gap between consecutive VPCs, find passing arrows
 	for g := 0; g < len(sorted)-1; g++ {
-		gapTopY := sorted[g].Y + sorted[g].H   // bottom border of VPC above
-		gapBotY := sorted[g+1].Y               // top border of VPC below
+		gapTopY := sorted[g].Y + sorted[g].H // bottom border of VPC above
+		gapBotY := sorted[g+1].Y             // top border of VPC below
 		if gapBotY-gapTopY < 3 {
 			continue // gap too small for labels
 		}

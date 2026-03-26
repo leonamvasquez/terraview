@@ -10,8 +10,8 @@ type Canvas struct {
 	Width            int
 	Height           int
 	Cells            [][]rune
-	Protected        [][]bool  // cells owned by boxes — arrows cannot overwrite
-	ArrowAvoidRanges []YRange  // Y ranges occupied by boxes; set before arrow drawing
+	Protected        [][]bool // cells owned by boxes — arrows cannot overwrite
+	ArrowAvoidRanges []YRange // Y ranges occupied by boxes; set before arrow drawing
 }
 
 // Box-drawing runes for the canvas.

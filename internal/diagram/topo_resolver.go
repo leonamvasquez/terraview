@@ -28,9 +28,7 @@ func ResolveTopology(resources []parser.NormalizedResource, graph *topology.Grap
 	}
 
 	// Also index by ALB alias types
-	for _, addr := range typeIndex["aws_alb"] {
-		typeIndex["aws_lb"] = append(typeIndex["aws_lb"], addr)
-	}
+	typeIndex["aws_lb"] = append(typeIndex["aws_lb"], typeIndex["aws_alb"]...)
 
 	// --- Phase 1: Build containment map (child → parent address) ---
 	parentOf := make(map[string]string)
@@ -39,7 +37,7 @@ func ResolveTopology(resources []parser.NormalizedResource, graph *topology.Grap
 	resolveByTypeHierarchy(resources, typeIndex, parentOf)
 
 	// Strategy 2: Module path matching
-	resolveByModulePath(resources, typeIndex, parentOf)
+	resolveByModulePath(resources, parentOf)
 
 	// Strategy 3: Topology graph edges (containment fields only)
 	if graph != nil {
@@ -47,7 +45,7 @@ func ResolveTopology(resources []parser.NormalizedResource, graph *topology.Grap
 	}
 
 	// Strategy 4: Deep value walk for containment keys
-	resolveByDeepValues(resources, typeIndex, resByAddr, parentOf)
+	resolveByDeepValues(resources, resByAddr, parentOf)
 
 	// --- Phase 2: Build connections ---
 	var connections []*Connection
@@ -123,7 +121,7 @@ func resolveByTypeHierarchy(resources []parser.NormalizedResource, typeIndex map
 }
 
 // resolveByModulePath groups resources by Terraform module prefix.
-func resolveByModulePath(resources []parser.NormalizedResource, typeIndex map[string][]string, parentOf map[string]string) {
+func resolveByModulePath(resources []parser.NormalizedResource, parentOf map[string]string) {
 	moduleResources := make(map[string][]string)
 	for _, r := range resources {
 		mod := extractModulePath(r.Address)
@@ -179,7 +177,7 @@ func resolveByGraphEdges(graph *topology.Graph, resByAddr map[string]*parser.Nor
 }
 
 // resolveByDeepValues walks resource Values recursively looking for containment keys.
-func resolveByDeepValues(resources []parser.NormalizedResource, typeIndex map[string][]string, resByAddr map[string]*parser.NormalizedResource, parentOf map[string]string) {
+func resolveByDeepValues(resources []parser.NormalizedResource, resByAddr map[string]*parser.NormalizedResource, parentOf map[string]string) {
 	cloudIDIndex := buildCloudIDIndex(resources)
 
 	for _, r := range resources {
@@ -327,7 +325,7 @@ func toStringValue(v interface{}) string {
 
 // extractGraphConnections extracts non-containment connections from the topology graph.
 func extractGraphConnections(graph *topology.Graph) []*Connection {
-	var conns []*Connection
+	conns := make([]*Connection, 0, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		if isContainmentEdge(edge.Via) {
 			continue
@@ -344,7 +342,7 @@ func extractGraphConnections(graph *topology.Graph) []*Connection {
 
 // inferConnections generates connections from type coexistence rules.
 func inferConnections(typeIndex map[string][]string) []*Connection {
-	var conns []*Connection
+	conns := make([]*Connection, 0, len(inferredConnectionRules))
 
 	for _, rule := range inferredConnectionRules {
 		fromAddrs := typeIndex[rule.FromType]
@@ -413,7 +411,7 @@ func buildTopoLayersV2(
 			layer := getOrCreateTopoLayer(topLevelMap, layerName)
 			addToLayerGroupV2(layer, r)
 		}
-		var result []*TopoLayer
+		result := make([]*TopoLayer, 0, len(topLevelMap))
 		for _, l := range topLevelMap {
 			if len(l.Groups) > 0 {
 				result = append(result, l)
@@ -569,7 +567,7 @@ func buildTopoLayersV2(
 	}
 
 	// Collect and sort layers
-	var result []*TopoLayer
+	result := make([]*TopoLayer, 0, len(topLevelMap))
 	for _, l := range topLevelMap {
 		if !l.IsVPC && len(l.Groups) == 0 {
 			continue
@@ -972,30 +970,6 @@ func addToLayerGroupV2(layer *TopoLayer, r *parser.NormalizedResource) {
 
 // --- Helpers ---
 
-func isVPCType(resType string) bool {
-	switch resType {
-	case "aws_vpc", "azurerm_virtual_network", "google_compute_network":
-		return true
-	}
-	return false
-}
-
-func isSubnetType(resType string) bool {
-	switch resType {
-	case "aws_subnet", "azurerm_subnet", "google_compute_subnetwork":
-		return true
-	}
-	return false
-}
-
-func isClusterType(resType string) bool {
-	switch resType {
-	case "aws_eks_cluster", "aws_ecs_cluster":
-		return true
-	}
-	return false
-}
-
 // extractModulePath returns the module prefix from a Terraform address.
 func extractModulePath(address string) string {
 	idx := strings.Index(address, "module.")
@@ -1200,7 +1174,7 @@ func splitLBGroup(g *AggregatedGroup, resByAddr map[string]*parser.NormalizedRes
 		lbType   string // "application" or "network"
 	}
 
-	var lbs []lbInfo
+	lbs := make([]lbInfo, 0, len(g.Addresses))
 	for _, addr := range g.Addresses {
 		r := resByAddr[addr]
 		if r == nil {
@@ -1502,7 +1476,9 @@ func fixLBTargetConnections(conns []*Connection, layers []*TopoLayer, resByAddr 
 
 	for _, layer := range layers {
 		// Check both Groups and ComputeGroups (LBs may be in either)
-		allGroups := append(layer.Groups, layer.ComputeGroups...)
+		allGroups := make([]*AggregatedGroup, 0, len(layer.Groups)+len(layer.ComputeGroups))
+		allGroups = append(allGroups, layer.Groups...)
+		allGroups = append(allGroups, layer.ComputeGroups...)
 		for _, g := range allGroups {
 			if g.Type != "aws_lb" {
 				continue

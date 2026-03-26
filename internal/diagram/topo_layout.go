@@ -7,11 +7,11 @@ import (
 
 const (
 	canvasDefaultWidth = 120
-	boxPadding         = 2  // internal horizontal padding per side
-	boxGapH            = 3  // horizontal gap between boxes in same level
-	levelGapV          = 3  // vertical gap between levels (for arrows)
-	vpcPadX            = 3  // VPC border horizontal inset
-	vpcPadY            = 1  // VPC border vertical padding
+	boxPadding         = 2 // internal horizontal padding per side
+	boxGapH            = 3 // horizontal gap between boxes in same level
+	levelGapV          = 3 // vertical gap between levels (for arrows)
+	vpcPadX            = 3 // VPC border horizontal inset
+	vpcPadY            = 1 // VPC border vertical padding
 	minBoxWidth        = 16
 	internetLabel      = "Internet / Users"
 )
@@ -47,30 +47,30 @@ type ArrowDef struct {
 type SubnetContainer struct {
 	Tier        string
 	Title       string
-	X, Y, W, H int
+	X, Y, W, H  int
 	InfraLabels []string // IGW, NAT, EIP labels (public tier only)
 	NodeIDs     []string // service node IDs inside this container
 }
 
 // LayoutResult holds all computed positions and arrows.
 type LayoutResult struct {
-	Boxes             map[string]*BoxPos
-	Arrows            []ArrowDef
-	DashedArrows      []ArrowDef // upward dashed arrows (NAT GW outbound)
-	DottedArrows      []ArrowDef // dotted arrows (SG cross-references)
-	VPCRects          []*VPCRect // one per VPC (multi-VPC support)
-	NetworkSection    *NetworkSection // legacy, kept for fallback
-	SubnetContainers  []*SubnetContainer
-	GlobalGrid        *GlobalGridResult
-	TotalHeight       int
-	TotalWidth        int
-	Chains            []*FlowChain  // flow chains for column-based layout (nil when <=1)
-	NodeToChain       map[string]int // nodeID → chain index
+	Boxes            map[string]*BoxPos
+	Arrows           []ArrowDef
+	DashedArrows     []ArrowDef      // upward dashed arrows (NAT GW outbound)
+	DottedArrows     []ArrowDef      // dotted arrows (SG cross-references)
+	VPCRects         []*VPCRect      // one per VPC (multi-VPC support)
+	NetworkSection   *NetworkSection // legacy, kept for fallback
+	SubnetContainers []*SubnetContainer
+	GlobalGrid       *GlobalGridResult
+	TotalHeight      int
+	TotalWidth       int
+	Chains           []*FlowChain   // flow chains for column-based layout (nil when <=1)
+	NodeToChain      map[string]int // nodeID → chain index
 }
 
 // VPCRect defines the VPC container boundary.
 type VPCRect struct {
-	X, Y, W, H    int
+	X, Y, W, H     int
 	Title          string
 	NetworkSummary string
 	SubnetLine     string
@@ -80,7 +80,7 @@ type VPCRect struct {
 type SubnetBoxInfo struct {
 	Tier        string // "public", "private_app", "private_data", "private"
 	Count       int
-	X, Y, W, H int
+	X, Y, W, H  int
 	InnerLabels []string // inner components (e.g., "IGW", "NAT (2)")
 }
 
@@ -183,7 +183,7 @@ func computeGlobalGridMinWidth(globalNodes []*ServiceNode) int {
 	}
 
 	// Compute individual box widths from label text
-	var boxWidths []int
+	boxWidths := make([]int, 0, len(globalNodes))
 	for _, n := range globalNodes {
 		label := n.Label
 		icon := groupActionIcon(n.Action)
@@ -285,7 +285,7 @@ func identifyFlowChains(
 
 	// Phase 2: BFS from each root to build chains (first come, first served)
 	nodeToChain := make(map[string]int)
-	var chains []*FlowChain
+	chains := make([]*FlowChain, 0, len(flowRoots))
 
 	for i, rootID := range flowRoots {
 		chain := &FlowChain{
@@ -879,8 +879,7 @@ func layoutVPCWithSubnets(
 
 		title := subnetTierTitle(tier, subCount)
 		containerH := layoutTierContainer(
-			result, nodeIDs, infraLabels, title,
-			dagNodes, compounds, boxSizes,
+			result, nodeIDs, infraLabels, boxSizes,
 			vpcOffsetX, *curY, vpcInnerWidth,
 			vpcAddress, chains, nodeToChain,
 		)
@@ -1006,9 +1005,6 @@ func layoutTierContainer(
 	result *LayoutResult,
 	nodeIDs []string,
 	infraLabels []string,
-	title string,
-	dagNodes map[string]*ServiceNode,
-	compounds map[string]*CompoundNode,
 	boxSizes map[string][2]int,
 	containerX, containerY, containerW int,
 	vpcAddress string,
@@ -1025,9 +1021,8 @@ func layoutTierContainer(
 	if len(chains) > 1 && len(nodeToChain) > 0 {
 		return layoutTierContainerByChain(
 			result, nodeIDs, infraLabels, boxSizes,
-			containerX, containerY, containerW,
 			innerStartX, maxInnerW, contentStartY,
-			vpcAddress, chains, nodeToChain,
+			containerY, vpcAddress, nodeToChain,
 		)
 	}
 
@@ -1037,7 +1032,7 @@ func layoutTierContainer(
 		label string
 		w, h  int
 	}
-	var allBoxes []innerBox
+	allBoxes := make([]innerBox, 0, len(infraLabels)+len(nodeIDs))
 
 	for _, lbl := range infraLabels {
 		w := runeLen(lbl) + 4
@@ -1133,10 +1128,10 @@ func layoutTierContainerByChain(
 	nodeIDs []string,
 	infraLabels []string,
 	boxSizes map[string][2]int,
-	containerX, containerY, containerW int,
 	innerStartX, maxInnerW, contentStartY int,
+	containerY int,
 	vpcAddress string,
-	chains []*FlowChain, nodeToChain map[string]int,
+	nodeToChain map[string]int,
 ) int {
 	chainGap := 6 // extra gap between boxes from different chains
 
@@ -1147,7 +1142,7 @@ func layoutTierContainerByChain(
 		w, h    int
 		chainID int // -1 for infra/unchained
 	}
-	var allBoxes []innerBox
+	allBoxes := make([]innerBox, 0, len(infraLabels)+len(nodeIDs))
 
 	// Infra label boxes
 	for _, lbl := range infraLabels {
@@ -1163,7 +1158,7 @@ func layoutTierContainerByChain(
 		id      string
 		chainID int
 	}
-	var entries []sortEntry
+	entries := make([]sortEntry, 0, len(nodeIDs))
 	for _, id := range nodeIDs {
 		ci := -1
 		if c, ok := nodeToChain[id]; ok {
@@ -1482,33 +1477,6 @@ func buildSGRefArrows(nodes map[string]*ServiceNode, boxes map[string]*BoxPos, s
 		}
 	}
 	return arrows
-}
-
-// wrapText wraps a single string into lines that fit within maxWidth.
-func wrapText(text string, maxWidth int) []string {
-	if runeLen(text) <= maxWidth {
-		return []string{text}
-	}
-	words := strings.Fields(text)
-	var lines []string
-	var current string
-	for _, w := range words {
-		if current == "" {
-			current = w
-			continue
-		}
-		candidate := current + " " + w
-		if runeLen(candidate) <= maxWidth {
-			current = candidate
-		} else {
-			lines = append(lines, current)
-			current = w
-		}
-	}
-	if current != "" {
-		lines = append(lines, current)
-	}
-	return lines
 }
 
 // stretchDistributionBars widens hub services to span their children below.
