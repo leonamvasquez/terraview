@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"crypto/rand"
+	"encoding/binary"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"sort"
@@ -79,8 +80,15 @@ func backoffWithJitter(attempt int) time.Duration {
 	if base > 30*time.Second {
 		base = 30 * time.Second
 	}
-	// Add ±25% jitter
-	jitter := time.Duration(rand.Int63n(int64(base/2))) - base/4
+	// Add ±25% jitter using crypto/rand for secure randomness
+	var randBuf [8]byte
+	_, _ = rand.Read(randBuf[:])
+	randVal := int64(binary.BigEndian.Uint64(randBuf[:]) >> 1) // positive int63
+	var jitterRange int64
+	if r := int64(base / 2); r > 0 {
+		jitterRange = randVal % r
+	}
+	jitter := time.Duration(jitterRange) - base/4
 	result := base + jitter
 	if result < 100*time.Millisecond {
 		result = 100 * time.Millisecond

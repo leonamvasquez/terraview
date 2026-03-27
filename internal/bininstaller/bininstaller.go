@@ -190,9 +190,10 @@ func extractFromTarGz(archivePath, targetName, destPath string) error {
 			if err != nil {
 				return fmt.Errorf("create dest: %w", err)
 			}
-			_, copyErr := io.Copy(out, tr)
+			const maxBinarySize = 256 * 1024 * 1024 // 256 MB
+			_, copyErr := io.CopyN(out, tr, maxBinarySize)
 			out.Close()
-			if copyErr != nil {
+			if copyErr != nil && copyErr != io.EOF {
 				return fmt.Errorf("copy: %w", copyErr)
 			}
 			return nil

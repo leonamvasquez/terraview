@@ -154,7 +154,7 @@ func isSensitiveValue(value string) bool {
 // The function preserves the complete JSON structure — keys, resource types
 // and resource names remain intact. Only values are replaced.
 func Sanitize(plan []byte) ([]byte, *RedactionManifest, error) {
-	var data interface{}
+	var data map[string]interface{}
 	if err := json.Unmarshal(plan, &data); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode plan JSON: %w", err)
 	}
