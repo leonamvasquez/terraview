@@ -7,6 +7,22 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.6.0] — 2026-03-27
+
+### Added
+- **Topological diagram mode** (`terraview diagram --diagram-mode topo`): novo modo de diagrama ASCII que renderiza a infraestrutura Terraform com aninhamento real de VPCs, subnets e camadas de serviços AWS, agregação de recursos por grupo de serviço e layout topológico baseado em DAG
+
+### Fixed
+- **EventBridge invisível no diagrama**: recursos `aws_cloudwatch_event_*` remapeados para o grupo correto `EventBridge`; adicionado `aws_eventbridge_*` e `aws_scheduler_*` à categoria `Messaging`
+- **Providers auxiliares poluindo Global Services**: recursos `random_*`, `tls_*`, `null_*` e `time_*` removidos do diagrama por não representarem infraestrutura real
+- Lint: formatação `gofmt` em 8 arquivos; remoção de funções, constantes e parâmetros não utilizados (`dblCorner*`, `writeVPCLine`, `groupsToLines`, `truncateLabel`, `wrapText`, `isVPCType`, `isSubnetType`, `isClusterType`, parâmetro `compounds` em `layoutVPCWithSubnets`)
+
+### Changed
+- Bumps de CI/CD: `codecov/codecov-action` v5.5.3, `github/codeql-action` v4.34.1, `anchore/sbom-action` v0.24.0, `docker/scout-action` v1.20.3, `sigstore/cosign-installer` v4.1.0
+- Bump de dependência: `modernc.org/sqlite` v1.47.0, `golang.org/x/term` v0.41.0
+
+---
+
 ## [0.5.0] — 2026-03-15
 
 ### Added
@@ -155,6 +171,7 @@ with [SemVer](https://semver.org/) versioning.
 - Package manager updates (Homebrew, Scoop, APT, DNF)
 - `tv` alias
 
+[0.6.0]: https://github.com/leonamvasquez/terraview/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/leonamvasquez/terraview/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/leonamvasquez/terraview/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/leonamvasquez/terraview/compare/v0.3.0...v0.4.0

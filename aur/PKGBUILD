@@ -1,5 +1,5 @@
 pkgname=terraview-bin
-pkgver=0.1.0
+pkgver=0.6.0
 pkgrel=1
 pkgdesc="Semantic reviewer for Terraform plans — static scanners + AI contextual analysis"
 arch=('x86_64' 'aarch64')
