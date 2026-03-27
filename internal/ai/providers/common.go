@@ -2,10 +2,10 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
