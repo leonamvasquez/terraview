@@ -136,15 +136,15 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Run Semgrep
-        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
+      - uses: actions/setup-python@v5
         with:
-          config: >
-            p/golang
-            p/security-audit
-            p/secrets
+          python-version: '3.x'
+      - name: Run Semgrep
+        run: |
+          pip install semgrep --quiet
+          semgrep scan --config p/golang --config p/security-audit --config p/secrets \
+            --error --quiet .
         env:
-          # Token opcional — sem ele roda localmente sem upload ao dashboard
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────
