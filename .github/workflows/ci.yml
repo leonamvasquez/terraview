@@ -9,13 +9,6 @@ on:
 permissions: read-all
 
 jobs:
-  # ════════════════════════════════════════════════════════════════════
-  # PR + PUSH — jobs leves que rodam em todo evento (feedback rápido)
-  # ════════════════════════════════════════════════════════════════════
-
-  # ──────────────────────────────────────────────────────────────────
-  # LINT — estilo, erros estáticos, padrões de código
-  # ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -25,15 +18,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # Instalado via go install para compilar com o Go do runner (1.26)
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
       - name: Run golangci-lint
         run: golangci-lint run
 
-  # ──────────────────────────────────────────────────────────────────
-  # TEST — testes unitários com detector de race conditions + cobertura
-  # ──────────────────────────────────────────────────────────────────
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -55,10 +44,6 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # ──────────────────────────────────────────────────────────────────
-  # BUILD — compilação rápida (linux/amd64) para validar que compila
-  # Roda em PRs e push — feedback rápido sem desperdício de minutos
-  # ──────────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -76,10 +61,6 @@ jobs:
           VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           go build -ldflags "-s -w -X main.version=${VERSION}" -o /dev/null .
 
-  # ──────────────────────────────────────────────────────────────────
-  # BUILD MATRIX — compila para as 6 combinações de plataforma/arch
-  # Apenas em push para main/develop (não em PRs)
-  # ──────────────────────────────────────────────────────────────────
   build-matrix:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
@@ -104,15 +85,12 @@ jobs:
           VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           go build -ldflags "-s -w -X main.version=${VERSION}" -o /dev/null .
 
-  # ──────────────────────────────────────────────────────────────────
-  # SECRET SCAN — detecta chaves, tokens e credenciais
-  # ──────────────────────────────────────────────────────────────────
   secrets:
     name: Secret Scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write  # upload SARIF ao Security tab
+      security-events: write  # upload SARIF to Security tab
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -121,15 +99,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ════════════════════════════════════════════════════════════════════
-  # PUSH ONLY — jobs pesados que rodam apenas em push para main/develop
-  # Scans de segurança profundos já cobertos pelo weekly.yml em PRs
-  # ════════════════════════════════════════════════════════════════════
-
-  # ──────────────────────────────────────────────────────────────────
-  # SAST — análise estática de segurança do código-fonte (Semgrep)
-  # Detecta: SQLi, path traversal, command injection, crypto fraca, etc.
-  # ──────────────────────────────────────────────────────────────────
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
@@ -147,11 +116,6 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-  # ──────────────────────────────────────────────────────────────────
-  # DEPENDENCY CHECK — CVEs em dependências diretas e indiretas
-  # govulncheck: base de dados oficial Go (VulnDB)
-  # osv-scanner roda semanalmente via weekly.yml
-  # ──────────────────────────────────────────────────────────────────
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
@@ -167,9 +131,6 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
-  # ──────────────────────────────────────────────────────────────────
-  # LICENSE AUDIT — bloqueia dependências com licenças restritivas
-  # ──────────────────────────────────────────────────────────────────
   licenses:
     name: License Audit
     runs-on: ubuntu-latest
@@ -186,10 +147,6 @@ jobs:
           go install github.com/google/go-licenses@v1.6.0
           go-licenses check ./... --disallowed_types=restricted
 
-  # ──────────────────────────────────────────────────────────────────
-  # FUZZ SMOKE — testa o parser com inputs aleatórios por 30s
-  # Só roda em push para main (não em PRs) para economizar minutos
-  # ──────────────────────────────────────────────────────────────────
   fuzz:
     name: Fuzz Smoke
     runs-on: ubuntu-latest

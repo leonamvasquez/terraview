@@ -2,16 +2,12 @@ name: Weekly Security
 
 on:
   schedule:
-    - cron: "0 3 * * 0" # Domingo 03:00 UTC
-  workflow_dispatch: # disparo manual pela UI do GitHub
+    - cron: "0 3 * * 0" # Sunday 03:00 UTC
+  workflow_dispatch: # manual trigger from GitHub UI
 
 permissions: read-all
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────
-  # GOVULNCHECK — base de dados oficial Go (golang.org/x/vuln)
-  # Captura CVEs publicados após o último commit/release
-  # ──────────────────────────────────────────────────────────────────
   vuln-go:
     name: govulncheck
     runs-on: ubuntu-latest
@@ -26,14 +22,10 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
-  # ──────────────────────────────────────────────────────────────────
-  # OSV SCANNER — base de dados OSV (Google)
-  # Cobre Go + sistema operacional da imagem base
-  # ──────────────────────────────────────────────────────────────────
   vuln-osv:
     name: OSV Scanner
     permissions:
-      security-events: write  # upload SARIF ao Security tab
+      security-events: write  # upload SARIF to Security tab
       actions: read
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@c5996e0193a3df57d695c1b8a1dec2a4c62e8730 # v2.3.3
     with:
@@ -41,10 +33,6 @@ jobs:
         --lockfile=go.mod
         ./
 
-  # ──────────────────────────────────────────────────────────────────
-  # SAST — re-executa análise estática de segurança semanalmente
-  # Captura novas regras Semgrep publicadas após o último push
-  # ──────────────────────────────────────────────────────────────────
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
@@ -61,11 +49,6 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-  # ──────────────────────────────────────────────────────────────────
-  # FUZZ EXTENDED — 2 minutos por target para explorar mais inputs
-  # go test -fuzz retorna exit 1 ao atingir fuzztime (comportamento do Go);
-  # o wrapper bash distingue timeout esperado de crash real.
-  # ──────────────────────────────────────────────────────────────────
   fuzz:
     name: Fuzz Extended (2min)
     runs-on: ubuntu-latest
@@ -76,6 +59,8 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Fuzz Parse
+        # go test -fuzz returns exit 1 on fuzztime exceeded (expected Go behavior);
+        # the bash wrapper distinguishes expected timeout from real crash.
         run: |
           output=$(go test ./internal/parser/ -fuzz=FuzzParse -fuzztime=2m 2>&1) && echo "$output" || {
             echo "$output"
@@ -88,10 +73,6 @@ jobs:
             echo "$output" | grep -q "context deadline exceeded" && echo "Fuzz timeout OK" || exit 1
           }
 
-  # ──────────────────────────────────────────────────────────────────
-  # CONTAINER SCOUT — Docker Scout escaneia a imagem :latest em GHCR
-  # Falha hard se encontrar CRITICAL/HIGH (novos CVEs na imagem em prod)
-  # ──────────────────────────────────────────────────────────────────
   container-scout:
     name: Container Scan (Docker Scout)
     runs-on: ubuntu-latest
@@ -105,13 +86,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Docker Hub (para Docker Scout)
+      - name: Login to Docker Hub (required for Docker Scout)
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Docker Scout — CVE scan na imagem em prod
+      - name: Docker Scout — CVE scan
         uses: docker/scout-action@8910519cee8ac046f3ee99686b0dc6654d5ba1a7 # v1.20.3
         with:
           command: cves
