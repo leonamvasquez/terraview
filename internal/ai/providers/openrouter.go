@@ -91,7 +91,7 @@ func (o *openrouterProvider) Validate(ctx context.Context) error {
 }
 
 func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources, o.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(openrouterName, "build_prompt", err)
 	}
@@ -101,6 +101,61 @@ func (o *openrouterProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 	return retryAnalyze(ctx, o.cfg, openrouterName, func() ([]rules.Finding, string, error) {
 		return o.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (o *openrouterProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	reqBody := chatRequest{
+		Model: o.cfg.Model,
+		Messages: []chatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: user},
+		},
+		Temperature: o.cfg.Temperature,
+		MaxTokens:   1024,
+		Stream:      false,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.cfg.BaseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	o.setHeaders(httpReq)
+
+	resp, err := o.client.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%w: %v", ai.ErrProviderTimeout, ctx.Err())
+		}
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := readResponseBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp chatResponse
+		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != nil {
+			return "", fmt.Errorf("api error %d: %s", resp.StatusCode, errResp.Error.Message)
+		}
+		return "", fmt.Errorf("api error %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("%w: empty response", ai.ErrInvalidResponse)
+	}
+	return chatResp.Choices[0].Message.Content, nil
 }
 
 func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

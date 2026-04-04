@@ -89,7 +89,7 @@ func (o *openaiProvider) Validate(ctx context.Context) error {
 }
 
 func (o *openaiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources, o.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(openaiName, "build_prompt", err)
 	}
@@ -99,6 +99,10 @@ func (o *openaiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	return retryAnalyze(ctx, o.cfg, openaiName, func() ([]rules.Finding, string, error) {
 		return o.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (o *openaiProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	return openAIComplete(ctx, o.cfg, o.client, "Bearer "+o.cfg.APIKey, o.cfg.BaseURL, system, user)
 }
 
 func (o *openaiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

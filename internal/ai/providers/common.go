@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -16,6 +17,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/util"
 )
 
 const (
@@ -23,8 +25,8 @@ const (
 	// from AI provider APIs. Prevents OOM from malformed or malicious responses.
 	maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
 
-	// defaultMaxResources is the default number of resources included in the
-	// AI prompt. Plans with more resources are truncated to fit context limits.
+	// defaultMaxResources is the fallback resource limit when neither config nor
+	// model-specific defaults are available (e.g. unknown Ollama model).
 	defaultMaxResources = 30
 
 	// defaultMaxTokens is the default max output tokens for AI providers.
@@ -36,6 +38,59 @@ const (
 	// defaultTimeoutSecs is the default HTTP timeout for AI provider requests.
 	defaultTimeoutSecs = 120
 )
+
+// modelContextLimits maps known model identifiers to their recommended max
+// resources in the AI prompt. Values reflect each model's context window and
+// typical resource serialization size (~300–500 tokens per resource).
+// Ollama models are kept conservative to match smaller default context windows.
+var modelContextLimits = map[string]int{
+	// Anthropic (claude-code CLI or direct API)
+	"claude-haiku-4-5":  120,
+	"claude-haiku-3-5":  100,
+	"claude-sonnet-4-5": 150,
+	"claude-sonnet-4-6": 150,
+	"claude-opus-4-6":   200,
+	// Google
+	"gemini-2.0-flash": 120,
+	"gemini-1.5-flash": 100,
+	"gemini-1.5-pro":   200,
+	"gemini-2.5-pro":   200,
+	// OpenAI
+	"gpt-4o":      100,
+	"gpt-4o-mini":  60,
+	"o1":          150,
+	"o3-mini":     100,
+	// DeepSeek
+	"deepseek-chat":      100,
+	"deepseek-reasoner":  150,
+	// Ollama — conservative; users can override via llm.max_resources in config
+	"llama3.1:8b":  35,
+	"llama3.2:3b":  25,
+	"llama3.3:70b": 80,
+	"qwen2.5:7b":   40,
+	"qwen2.5:14b":  60,
+	"mistral:7b":   35,
+	"phi3:mini":    25,
+}
+
+// resolveMaxResources returns the effective resource limit for an AI prompt.
+// Priority order: explicit config value > model-based default > global default.
+// The result is always capped at totalResources to avoid over-allocating.
+func resolveMaxResources(cfgMax int, model string, totalResources int) int {
+	var limit int
+	switch {
+	case cfgMax > 0:
+		limit = cfgMax
+	case modelContextLimits[model] > 0:
+		limit = modelContextLimits[model]
+	default:
+		limit = defaultMaxResources
+	}
+	if totalResources > 0 && limit > totalResources {
+		return totalResources
+	}
+	return limit
+}
 
 // applyDefaults fills zero-valued fields in cfg with sensible defaults.
 // envKey is the environment variable name to check for the API key.
@@ -221,6 +276,12 @@ func buildSystemPrompt(prompts ai.Prompts) string {
   "summary": "brief overall assessment"
 }
 
+IMPORTANT — "resource" field rules:
+- Use EXACTLY ONE Terraform resource address (e.g. "aws_s3_bucket.my_bucket").
+- If a finding involves multiple resources, put the PRIMARY resource in "resource"
+  and name the others in "message" (e.g. "…together with aws_iam_role.exec…").
+- Never join addresses with commas, "and", or semicolons in the "resource" field.
+
 If there are no findings, return: {"findings": [], "summary": "No issues found."}
 Do NOT include any text outside the JSON object.
 Respond with minified JSON only — no indentation, no extra whitespace, no markdown fences.
@@ -237,11 +298,13 @@ Output: {"severity":"HIGH","category":"security","resource":"aws_security_group.
 }
 
 // buildUserPrompt creates the user prompt with plan context.
-// maxResources controls how many resources are included; 0 means use defaultMaxResources.
-func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]interface{}, maxResources int) (string, error) {
-	if maxResources <= 0 {
-		maxResources = defaultMaxResources
-	}
+// maxResources controls how many resources are included; 0 means auto-resolve by model.
+// model is used to look up the model-specific context limit via resolveMaxResources.
+// When summary contains "context_analysis", resource details are already embedded in the
+// summary by contextanalysis.Analyzer, so the Resource Changes section is skipped to avoid
+// double representation.
+func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]interface{}, maxResources int, model string) (string, error) {
+	maxResources = resolveMaxResources(maxResources, model, len(resources))
 	var sb strings.Builder
 
 	sb.WriteString("Review the following Terraform plan for security, architecture, and best practice issues.\n\n")
@@ -253,6 +316,17 @@ func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]i
 	}
 	sb.Write(summaryJSON)
 	sb.WriteString("\n\n")
+
+	// Skip Resource Changes when:
+	// - context_analysis: contextanalysis.Analyzer already embedded full resource detail
+	// - explain_mode: explain.Explainer only needs finding summaries, not raw attribute values
+	// Both cases avoid sending redundant token-heavy resource blocks.
+	if _, ok := summary["context_analysis"]; ok {
+		return sb.String(), nil
+	}
+	if _, ok := summary["explain_mode"]; ok {
+		return sb.String(), nil
+	}
 
 	sb.WriteString("## Resource Changes\n\n")
 
@@ -395,4 +469,62 @@ func safePrefix(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// openAIComplete performs a raw text completion using the OpenAI chat completions API format.
+// Used by providers that implement the OpenAI API shape (openai, deepseek, openrouter, custom).
+// authHeader is the full "Bearer <key>" or "Bearer <token>" value for the Authorization header.
+func openAIComplete(ctx context.Context, cfg ai.ProviderConfig, client *http.Client, authHeader, baseURL, system, user string) (string, error) {
+	reqBody := chatRequest{
+		Model: cfg.Model,
+		Messages: []chatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: user},
+		},
+		Temperature: cfg.Temperature,
+		MaxTokens:   1024,
+		Stream:      false,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", authHeader)
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%w: %v", ai.ErrProviderTimeout, ctx.Err())
+		}
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := readResponseBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	if chatResp.Error != nil {
+		return "", fmt.Errorf("API error: %s", chatResp.Error.Message)
+	}
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("%w: empty response", ai.ErrInvalidResponse)
+	}
+	return chatResp.Choices[0].Message.Content, nil
 }

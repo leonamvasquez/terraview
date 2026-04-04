@@ -107,7 +107,7 @@ func (c *customProvider) Validate(ctx context.Context) error {
 }
 
 func (c *customProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources, c.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(customName, "build_prompt", err)
 	}
@@ -117,6 +117,10 @@ func (c *customProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	return retryAnalyze(ctx, c.cfg, customName, func() ([]rules.Finding, string, error) {
 		return c.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (c *customProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	return openAIComplete(ctx, c.cfg, c.client, "Bearer "+c.cfg.APIKey, c.cfg.BaseURL, system, user)
 }
 
 func (c *customProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

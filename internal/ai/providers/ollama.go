@@ -95,7 +95,7 @@ func (o *ollamaProvider) Validate(ctx context.Context) error {
 }
 
 func (o *ollamaProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, o.cfg.MaxResources, o.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(ollamaName, "build_prompt", err)
 	}
@@ -105,6 +105,55 @@ func (o *ollamaProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	return retryAnalyze(ctx, o.cfg, ollamaName, func() ([]rules.Finding, string, error) {
 		return o.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (o *ollamaProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	reqBody := ollamaRequest{
+		Model:  o.cfg.Model,
+		System: system,
+		Prompt: user,
+		Stream: false,
+		Options: ollamaOptions{
+			Temperature: o.cfg.Temperature,
+			NumCtx:      o.cfg.NumCtx,
+			NumPredict:  1024,
+		},
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.cfg.BaseURL+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.client.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%w: %v", ai.ErrProviderTimeout, ctx.Err())
+		}
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := readResponseBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
+	}
+
+	var ollamaResp ollamaResponse
+	if err := json.Unmarshal(respBody, &ollamaResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	return ollamaResp.Response, nil
 }
 
 func (o *ollamaProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

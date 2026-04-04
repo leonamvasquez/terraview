@@ -131,7 +131,7 @@ func TestBuildUserPrompt_Normal(t *testing.T) {
 	}
 	summary := map[string]interface{}{"total": 1}
 
-	got, err := buildUserPrompt(resources, summary, 0)
+	got, err := buildUserPrompt(resources, summary, 0, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestBuildUserPrompt_Truncation(t *testing.T) {
 	}
 	summary := map[string]interface{}{"total": 35}
 
-	got, err := buildUserPrompt(resources, summary, 0)
+	got, err := buildUserPrompt(resources, summary, 0, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,12 +165,52 @@ func TestBuildUserPrompt_Truncation(t *testing.T) {
 }
 
 func TestBuildUserPrompt_Empty(t *testing.T) {
-	got, err := buildUserPrompt(nil, map[string]interface{}{}, 0)
+	got, err := buildUserPrompt(nil, map[string]interface{}{}, 0, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(got, "Resource Changes") {
 		t.Error("missing resource changes section")
+	}
+}
+
+func TestBuildUserPrompt_ExplainModeSkip(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance", Provider: "aws"},
+	}
+	summary := map[string]interface{}{
+		"explain_mode":    true,
+		"total_resources": 1,
+	}
+	got, err := buildUserPrompt(resources, summary, 0, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(got, "Resource Changes") {
+		t.Error("Resource Changes section must be skipped in explain mode")
+	}
+	if !strings.Contains(got, "Plan Summary") {
+		t.Error("Plan Summary must still be present")
+	}
+}
+
+func TestBuildUserPrompt_ContextAnalysisSkip(t *testing.T) {
+	resources := []parser.NormalizedResource{
+		{Address: "aws_instance.web", Action: "create", Type: "aws_instance", Provider: "aws"},
+	}
+	summary := map[string]interface{}{
+		"context_analysis": true,
+		"total_resources":  1,
+	}
+	got, err := buildUserPrompt(resources, summary, 0, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(got, "Resource Changes") {
+		t.Error("Resource Changes section must be skipped when context_analysis is set")
+	}
+	if !strings.Contains(got, "Plan Summary") {
+		t.Error("Plan Summary must still be present")
 	}
 }
 

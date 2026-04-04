@@ -116,7 +116,7 @@ func (d *deepseekProvider) Validate(ctx context.Context) error {
 }
 
 func (d *deepseekProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, d.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, d.cfg.MaxResources, d.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(deepseekName, "build_prompt", err)
 	}
@@ -126,6 +126,10 @@ func (d *deepseekProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comple
 	return retryAnalyze(ctx, d.cfg, deepseekName, func() ([]rules.Finding, string, error) {
 		return d.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (d *deepseekProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	return openAIComplete(ctx, d.cfg, d.client, "Bearer "+d.cfg.APIKey, d.cfg.BaseURL, system, user)
 }
 
 func (d *deepseekProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

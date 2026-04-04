@@ -108,7 +108,7 @@ func (g *geminiProvider) Validate(ctx context.Context) error {
 }
 
 func (g *geminiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, g.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, g.cfg.MaxResources, g.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(geminiName, "build_prompt", err)
 	}
@@ -118,6 +118,68 @@ func (g *geminiProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	return retryAnalyze(ctx, g.cfg, geminiName, func() ([]rules.Finding, string, error) {
 		return g.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (g *geminiProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	reqBody := geminiRequest{
+		SystemInstruct: &geminiContent{
+			Parts: []geminiPart{{Text: system}},
+		},
+		Contents: []geminiContent{
+			{
+				Role:  "user",
+				Parts: []geminiPart{{Text: user}},
+			},
+		},
+		GenerationConfig: geminiGenerationConfig{
+			Temperature:     g.cfg.Temperature,
+			MaxOutputTokens: 1024,
+		},
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s",
+		g.cfg.BaseURL, g.cfg.Model, g.cfg.APIKey)
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%w: %v", ai.ErrProviderTimeout, ctx.Err())
+		}
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := readResponseBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("gemini returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
+	}
+
+	var geminiResp geminiResponse
+	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	if geminiResp.Error != nil {
+		return "", fmt.Errorf("gemini error: %s", geminiResp.Error.Message)
+	}
+	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("%w: empty response from gemini", ai.ErrInvalidResponse)
+	}
+	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
 func (g *geminiProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

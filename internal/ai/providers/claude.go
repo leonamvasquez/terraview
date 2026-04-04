@@ -102,7 +102,7 @@ func (c *claudeProvider) Validate(ctx context.Context) error {
 }
 
 func (c *claudeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources, c.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(claudeName, "build_prompt", err)
 	}
@@ -112,6 +112,58 @@ func (c *claudeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completi
 	return retryAnalyze(ctx, c.cfg, claudeName, func() ([]rules.Finding, string, error) {
 		return c.doRequest(ctx, systemPrompt, userPrompt)
 	})
+}
+
+func (c *claudeProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	reqBody := claudeRequest{
+		Model:     c.cfg.Model,
+		MaxTokens: 1024,
+		System:    system,
+		Messages:  []claudeMessage{{Role: "user", Content: user}},
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.cfg.BaseURL+"/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-api-key", c.cfg.APIKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%w: %v", ai.ErrProviderTimeout, ctx.Err())
+		}
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := readResponseBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("claude returned status %d: %s", resp.StatusCode, util.Truncate(string(respBody), 200))
+	}
+
+	var claudeResp claudeResponse
+	if err := json.Unmarshal(respBody, &claudeResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	if claudeResp.Error != nil {
+		return "", fmt.Errorf("claude error: %s", claudeResp.Error.Message)
+	}
+	if len(claudeResp.Content) == 0 {
+		return "", fmt.Errorf("%w: empty response from claude", ai.ErrInvalidResponse)
+	}
+	return claudeResp.Content[0].Text, nil
 }
 
 func (c *claudeProvider) doRequest(ctx context.Context, systemPrompt, userPrompt string) ([]rules.Finding, string, error) {

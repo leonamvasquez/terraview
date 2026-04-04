@@ -18,6 +18,7 @@ func (m *mockProvider) Validate(ctx context.Context) error { return nil }
 func (m *mockProvider) Analyze(ctx context.Context, req Request) (Completion, error) {
 	return Completion{Provider: m.name, Summary: "mock"}, nil
 }
+func (m *mockProvider) Complete(_ context.Context, _, _ string) (string, error) { return "mock", nil }
 
 func TestRegistry_RegisterAndCreate(t *testing.T) {
 	r := NewRegistry()

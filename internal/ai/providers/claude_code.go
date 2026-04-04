@@ -66,7 +66,7 @@ func (c *claudeCodeProvider) Validate(_ context.Context) error {
 
 // Analyze sends the terraform plan context to Claude Code CLI and parses the response.
 func (c *claudeCodeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Completion, error) {
-	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources)
+	userPrompt, err := buildUserPrompt(r.Resources, r.Summary, c.cfg.MaxResources, c.cfg.Model)
 	if err != nil {
 		return ai.Completion{}, ai.NewProviderError(claudeCodeName, "build_prompt", err)
 	}
@@ -105,6 +105,40 @@ func (c *claudeCodeProvider) Analyze(ctx context.Context, r ai.Request) (ai.Comp
 
 	return ai.Completion{}, ai.NewProviderError(claudeCodeName, "analyze",
 		fmt.Errorf("failed after %d attempts: %w", c.cfg.MaxRetries+1, lastErr))
+}
+
+func (c *claudeCodeProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	fullPrompt := system + "\n\n" + user
+
+	execCtx, cancel := context.WithTimeout(ctx, time.Duration(c.cfg.TimeoutSecs)*time.Second)
+	defer cancel()
+
+	args := []string{
+		"--print",
+		"--output-format", "json",
+		"--model", c.cfg.Model,
+	}
+
+	cmd := exec.CommandContext(execCtx, "claude", args...)
+	cmd.Stdin = strings.NewReader(fullPrompt)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if execCtx.Err() != nil {
+			return "", fmt.Errorf("%w: claude CLI timed out", ai.ErrProviderTimeout)
+		}
+		return "", fmt.Errorf("claude CLI failed: %w — stderr: %s", err, util.Truncate(strings.TrimSpace(stderr.String()), 300))
+	}
+
+	output := stdout.String()
+	if output == "" {
+		return "", fmt.Errorf("%w: claude CLI returned empty output", ai.ErrInvalidResponse)
+	}
+
+	return extractClaudeCodeJSON(output), nil
 }
 
 func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules.Finding, string, error) {

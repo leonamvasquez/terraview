@@ -12,6 +12,11 @@ type Provider interface {
 
 	// Analyze sends the terraform plan context to the AI and returns structured findings.
 	Analyze(ctx context.Context, req Request) (Completion, error)
+
+	// Complete performs a single-turn text completion with the given system and user prompts.
+	// Unlike Analyze, it returns raw text without parsing findings — used for fix suggestions
+	// and other single-purpose AI interactions.
+	Complete(ctx context.Context, system, user string) (string, error)
 }
 
 // ProviderFactory is a constructor function that creates a Provider from config.
