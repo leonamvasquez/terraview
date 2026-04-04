@@ -732,22 +732,17 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		valid, discarded, report := validator.ValidateAIFindings(sr.contextFindings, topoGraph)
 		validatedAIFindings = valid
 
+		// Always build report for quality metrics (not only when discards > 0)
+		aiReport := &aggregator.AIValidationReport{
+			TotalReceived: report.TotalReceived,
+			TotalValid:    report.TotalValid,
+			TotalDiscard:  report.TotalDiscard,
+		}
 		if report.TotalDiscard > 0 {
 			fmt.Fprintf(os.Stderr, "%s ⚠ Discarded %d AI findings (hallucinated/invalid)\n",
 				output.Prefix(), report.TotalDiscard)
-
-			// In verbose mode, log each discarded finding with reason
 			for _, d := range discarded {
 				logVerbose("  ✗ [%s] %s: %s — %s", d.Reason, d.Finding.Resource, d.Finding.Message, d.Detail)
-			}
-
-			// Build report for JSON output
-			aiReport := &aggregator.AIValidationReport{
-				TotalReceived: report.TotalReceived,
-				TotalValid:    report.TotalValid,
-				TotalDiscard:  report.TotalDiscard,
-			}
-			for _, d := range discarded {
 				aiReport.Discarded = append(aiReport.Discarded, aggregator.AIDiscardedFinding{
 					Resource: d.Finding.Resource,
 					Message:  d.Finding.Message,
@@ -755,8 +750,8 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 					Detail:   d.Detail,
 				})
 			}
-			aiValidationReport = aiReport
 		}
+		aiValidationReport = aiReport
 
 		logVerbose("AI validation: %d received, %d valid, %d discarded",
 			report.TotalReceived, report.TotalValid, report.TotalDiscard)
@@ -767,6 +762,12 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		dr := normalizer.Deduplicate(hardFindings, validatedAIFindings)
 		hardFindings = dr.Findings
 		logVerbose("Dedup: %s", dr.Summary)
+
+		// Attach incremental-value metrics to AI report
+		if aiValidationReport != nil {
+			aiValidationReport.AIUniqueKept = dr.AIUniqueKept
+			aiValidationReport.AIEnriched = dr.AIEnriched
+		}
 	}
 
 	// Aggregate (with configurable scoring weights)

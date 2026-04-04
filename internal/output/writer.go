@@ -192,6 +192,18 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 	fmt.Printf("  %s: %d\n", m.LblResources, result.TotalResources)
 	fmt.Printf("  %s: %d (%d per resource avg)\n",
 		m.LblTotalFindings, len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
+
+	// AI quality metrics (only when AI was used and returned findings)
+	if av := result.AIValidation; av != nil && av.TotalReceived > 0 {
+		hallucinationPct := av.TotalDiscard * 100 / av.TotalReceived
+		if br {
+			fmt.Printf("  %s: %d únicos · %d/%d descartados (%d%% alucinação) · %d enriquecidos\n",
+				m.LblAIQuality, av.AIUniqueKept, av.TotalDiscard, av.TotalReceived, hallucinationPct, av.AIEnriched)
+		} else {
+			fmt.Printf("  %s: %d unique · %d/%d discarded (%d%% hallucination rate) · %d enriched\n",
+				m.LblAIQuality, av.AIUniqueKept, av.TotalDiscard, av.TotalReceived, hallucinationPct, av.AIEnriched)
+		}
+	}
 	fmt.Println()
 
 	// Findings section — Orca-style table grouped by source
