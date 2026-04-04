@@ -34,11 +34,12 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 
 - **Scanners de segurança** — Checkov, tfsec, Terrascan integrados automaticamente
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
+- **Supressão de findings** — arquivo `.terraview-ignore` para suprimir falsos positivos e riscos aceitos, com escopo por regra, recurso ou fonte (`--ignore-file`)
+- **Correção automática (AI Fix)** — `--fix` gera sugestões de HCL corrigido para findings CRITICAL/HIGH com validação e diff
 - **Scorecard unificado** — Segurança, Compliance, Manutenibilidade (0–10)
 - **Vetores de risco** — 5 eixos por recurso (rede, criptografia, identidade, governança, observabilidade)
 - **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal.
 - **Análise de impacto** — `--impact` para blast radius
-- **Análise de módulos** — versionamento, source e nesting com `terraview modules`
 - **Drift detection** — detecção e classificação com `--intelligence`
 - **Histórico de scans** — tracking em SQLite com trends, comparação e exportação
 - **MCP Server** — integração com agentes AI (Claude Code, Cursor, Windsurf)
@@ -57,7 +58,6 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
   │  Security:       7.2 / 10                            │
   │  Compliance:     8.5 / 10                            │
   │  Maintainability: 9.0 / 10                           │
-  │  Overall:        8.2 / 10                            │
   └──────────────────────────────────────────────────────┘
 
   Findings: 3 CRITICAL, 5 HIGH, 12 MEDIUM, 4 LOW

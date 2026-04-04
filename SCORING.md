@@ -83,7 +83,7 @@ density_penalty = (weighted_sum / max(total_recursos, 1)) × 2.0
 
 # Penalidade por volume (logarítmica, absoluta)
 high_equiv_count = weighted_sum / peso_HIGH
-volume_penalty   = log₂(1 + high_equiv_count) × 0.5
+volume_penalty   = log₂(1 + high_equiv_count) × 1.5
 
 # Toma a pior das duas
 penalty = max(density_penalty, volume_penalty)
@@ -95,15 +95,15 @@ Onde:
 - `total_recursos` é o número total de recursos no plano Terraform
 - `peso_HIGH` é o peso de HIGH (padrão: 3.0), usado para normalizar findings em "equivalentes HIGH"
 - `2.0` é o **fator de escala** da penalidade por densidade (hardcoded)
-- `0.5` é o **fator de escala** da penalidade por volume (hardcoded)
+- `1.5` é o **fator de escala** da penalidade por volume (hardcoded)
 - O resultado é arredondado para 1 casa decimal e limitado a `[0.0, 10.0]`
 
 ### Por que duas penalidades?
 
 | Penalidade | Domina quando... | Exemplo |
 |------------|-------------------|--------|
-| **Densidade** | Infraestrutura pequena com muitos problemas | 5 HIGH em 5 recursos → density=6.0 vs volume=0.9 |
-| **Volume** | Infraestrutura grande com muitos problemas absolutos | 174 HIGH em 380 recursos → density=2.7 vs volume=3.7 |
+| **Densidade** | Infraestrutura pequena com muitos problemas | 5 HIGH em 5 recursos → density=6.0 vs volume=3.9 |
+| **Volume** | Infraestrutura grande com muitos problemas absolutos | 174 HIGH em 380 recursos → density=2.7 vs volume=11.2 (capped → floor 2.0) |
 
 Isso evita que infraestruturas grandes "diluam" centenas de findings HIGH em scores próximos de 10.
 
@@ -314,7 +314,7 @@ findings security: [CRITICAL(5.0), HIGH(3.0)]
 weighted_sum = 5.0 + 3.0 = 8.0
 density_penalty = (8.0 / 3) × 2.0 = 5.333
 high_equiv = 8.0 / 3.0 = 2.667
-volume_penalty = log₂(1 + 2.667) × 0.5 = 1.874 × 0.5 = 0.937
+volume_penalty = log₂(1 + 2.667) × 1.5 = 1.874 × 1.5 = 2.811
 penalty = max(5.333, 0.937) = 5.333  (density domina — plano pequeno)
 score = 10.0 − 5.333 = 4.667
 floor: tem CRITICAL → sem piso → score = 4.7
@@ -326,7 +326,7 @@ findings compliance: [MEDIUM(1.0)]
 weighted_sum = 1.0
 density_penalty = (1.0 / 3) × 2.0 = 0.667
 high_equiv = 1.0 / 3.0 = 0.333
-volume_penalty = log₂(1 + 0.333) × 0.5 = 0.415 × 0.5 = 0.208
+volume_penalty = log₂(1 + 0.333) × 1.5 = 0.415 × 1.5 = 0.623
 penalty = max(0.667, 0.208) = 0.667
 score = 10.0 − 0.667 = 9.333
 floor: apenas MEDIUM → piso 5.0 (não se aplica, score > 5.0) → score = 9.3
@@ -338,7 +338,7 @@ findings maintainability: [LOW(0.5)]
 weighted_sum = 0.5
 density_penalty = (0.5 / 3) × 2.0 = 0.333
 high_equiv = 0.5 / 3.0 = 0.167
-volume_penalty = log₂(1 + 0.167) × 0.5 = 0.223 × 0.5 = 0.112
+volume_penalty = log₂(1 + 0.167) × 1.5 = 0.223 × 1.5 = 0.334
 penalty = max(0.333, 0.112) = 0.333
 score = 10.0 − 0.333 = 9.667 → 9.7
 floor: apenas LOW → piso 5.0 (não se aplica) → score = 9.7
@@ -397,7 +397,7 @@ findings security: [HIGH(3.0), MEDIUM(1.0)]
 weighted_sum = 3.0 + 1.0 = 4.0
 density_penalty = (4.0 / 2) × 2.0 = 4.0
 high_equiv = 4.0 / 3.0 = 1.333
-volume_penalty = log₂(1 + 1.333) × 0.5 = 1.222 × 0.5 = 0.611
+volume_penalty = log₂(1 + 1.333) × 1.5 = 1.222 × 1.5 = 1.833
 penalty = max(4.0, 0.611) = 4.0  (density domina)
 score = 10.0 − 4.0 = 6.0
 floor: tem HIGH sem CRITICAL → piso 2.0 (não se aplica, score > 2.0) → score = 6.0
@@ -409,7 +409,7 @@ findings compliance: [MEDIUM(1.0)]
 weighted_sum = 1.0
 density_penalty = (1.0 / 2) × 2.0 = 1.0
 high_equiv = 1.0 / 3.0 = 0.333
-volume_penalty = log₂(1 + 0.333) × 0.5 = 0.208
+volume_penalty = log₂(1 + 0.333) × 1.5 = 0.623
 penalty = max(1.0, 0.208) = 1.0
 score = 10.0 − 1.0 = 9.0
 ```
@@ -425,7 +425,7 @@ findings reliability: [MEDIUM(1.0)]
 weighted_sum = 1.0
 density_penalty = (1.0 / 2) × 2.0 = 1.0
 high_equiv = 1.0 / 3.0 = 0.333
-volume_penalty = log₂(1 + 0.333) × 0.5 = 0.208
+volume_penalty = log₂(1 + 0.333) × 1.5 = 0.623
 penalty = max(1.0, 0.208) = 1.0
 score = 10.0 − 1.0 = 9.0
 ```
@@ -450,7 +450,7 @@ overall = (7.0 × 3.0 + 9.0 × 2.0 + 10.0 × 1.5 + 9.0 × 1.0) / 7.5
 
 ## Notas e TODOs
 
-1. **TODO:** Os fatores de escala (densidade: `2.0`, volume: `0.5`) são hardcoded e não configuráveis via `.terraview.yaml`. Considerar expor como `scoring.density_scale_factor` e `scoring.volume_scale_factor`.
+1. **TODO:** Os fatores de escala (densidade: `2.0`, volume: `1.5`) são hardcoded e não configuráveis via `.terraview.yaml`. Considerar expor como `scoring.density_scale_factor` e `scoring.volume_scale_factor`.
 
 2. **TODO:** O struct `Finding` (`internal/rules/types.go`) não possui campo `confidence` por finding. A confiança é apenas do veredito global e das correlações meta-análise. Para auditoria completa, seria necessário rastrear a confiança individual.
 

@@ -63,9 +63,11 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
   - **API**: Ollama (local), Google Gemini, Anthropic Claude, OpenAI, DeepSeek and OpenRouter
   - **CLI (subscription)**: Gemini CLI and Claude Code — use your personal subscription, no API key required
   - **Custom**: any OpenAI-compatible API (Grok/xAI, Groq, Mistral, Together AI, Fireworks, etc.)
+- **Finding Suppression** — `.terraview-ignore` file to permanently suppress accepted risks and false positives, with AND-logic scoping by rule, resource, or source (`--ignore-file`)
+- **AI Fix suggestions** — `--fix` generates corrected HCL for CRITICAL/HIGH findings with validation and diff preview
 - **Automatic integration test** — when selecting a provider via `provider list`, terraview tests connectivity and returns type-specific feedback (CLI installed, API key valid, service reachable)
 - **Conflict Resolution** — scanner × AI: scanner wins on disagreement (confidence 0.80); agreement boosts confidence to 1.00
-- **Unified Scorecard** with Security, Compliance, Maintainability and Overall scores (0–10)
+- **Unified Scorecard** with Security, Compliance, Maintainability scores (0–10)
 - **Risk vectors** — per-resource risk extraction across 5 axes: network exposure, encryption, identity, governance, observability
 - **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal with VPC nesting, subnet tiers, connection arrows, and resource aggregation
 - **Impact Analysis** — dependency blast radius of changes via `--impact`
@@ -96,7 +98,7 @@ Scan output in the CLI
   │  Security:       7.2 / 10                            │
   │  Compliance:     8.5 / 10                            │
   │  Maintainability: 9.0 / 10                           │
-  │  Overall:        8.2 / 10                            │
+
   └──────────────────────────────────────────────────────┘
 
   Findings: 3 CRITICAL, 5 HIGH, 12 MEDIUM, 4 LOW
@@ -909,7 +911,6 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
       │  │ Security      0-10 │  │
       │  │ Compliance    0-10 │  │
       │  │ Maintainab.   0-10 │  │
-      │  │ Overall       0-10 │  │
       │  └────────────────────┘  │
       │  ┌────────────────────┐  │
       │  │ Risk Vectors       │  │
@@ -1038,7 +1039,7 @@ terraview scan checkov
 
 - **Security Scanners** — Checkov, tfsec, Terrascan automatically integrated
 - **Parallel AI analysis** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code
-- **Unified Scorecard** — Security, Compliance, Maintainability and Overall scores (0–10)
+- **Unified Scorecard** — Security, Compliance, Maintainability scores (0–10)
 - **Risk vectors** — 5 axes per resource (network, encryption, identity, governance, observability)
 - **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal
 - **Impact Analysis** — `--impact` for dependency blast radius
@@ -1059,7 +1060,7 @@ terraview scan checkov
   │  Security:       7.2 / 10                            │
   │  Compliance:     8.5 / 10                            │
   │  Maintainability: 9.0 / 10                           │
-  │  Overall:        8.2 / 10                            │
+
   └──────────────────────────────────────────────────────┘
 
   Findings: 3 CRITICAL, 5 HIGH, 12 MEDIUM, 4 LOW
