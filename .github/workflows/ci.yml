@@ -147,6 +147,21 @@ jobs:
           go install github.com/google/go-licenses@v1.6.0
           go-licenses check ./... --disallowed_types=restricted
 
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install checkov
+        run: pip install checkov --quiet
+      - name: Run E2E tests
+        run: go test ./e2e/ -tags e2e -v -timeout 5m
+
   fuzz:
     name: Fuzz Smoke
     runs-on: ubuntu-latest
