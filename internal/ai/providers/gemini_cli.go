@@ -205,4 +205,3 @@ func (g *geminiCLIProvider) runCLI(ctx context.Context, prompt, model string) (s
 	}
 	return out, nil
 }
-

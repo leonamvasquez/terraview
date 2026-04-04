@@ -127,6 +127,8 @@ func renderHTML(result aggregator.ReviewResult) (string, error) {
 }
 
 func buildHTMLData(r aggregator.ReviewResult) htmlReport {
+	//nolint:gosec // data URI built from embedded binary asset — no user input
+	logoURI := template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(assets.LogoPNG)) //nolint:gosec // nosemgrep: go.lang.security.audit.net.unescaped-data-in-url.unescaped-data-in-url
 	data := htmlReport{
 		PlanFile:       r.PlanFile,
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
@@ -139,7 +141,7 @@ func buildHTMLData(r aggregator.ReviewResult) htmlReport {
 		Diagram:        r.Diagram,
 		TotalFindings:  len(r.Findings),
 		ExitCode:       r.ExitCode,
-		LogoDataURI: template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(assets.LogoPNG)), //nolint:gosec // data URI with embedded binary asset, not user input
+		LogoDataURI:    logoURI,
 	}
 
 	if r.PipelineStatus != nil && r.PipelineStatus.Scanner != nil {
