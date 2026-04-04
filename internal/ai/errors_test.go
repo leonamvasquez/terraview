@@ -164,3 +164,52 @@ func TestIsTransient_UnknownErrorDefaultsTransient(t *testing.T) {
 		t.Error("unknown errors should default to transient (conservative)")
 	}
 }
+
+func TestIsModelNotFound(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     string
+		wantHit bool
+	}{
+		// Patterns from real gemini-cli stderr
+		{"ModelNotFoundError exact", "ModelNotFoundError: Requested entity was not found.", true},
+		{"requested entity was not found", "gemini CLI failed: exit status 1 — stderr: ModelNotFoundError: Requested entity was not found.", true},
+		{"model not found lowercase", "error: model not found", true},
+		{"model_not_found underscore", "code: model_not_found", true},
+		{"no such model", "no such model: gemini-3-flash-preview", true},
+		{"unknown model", "unknown model identifier", true},
+		// Should NOT match
+		{"timeout error", "request timed out", false},
+		{"rate limit", "rate limit exceeded", false},
+		{"nil error", "", false},
+		{"unrelated", "connection refused", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			if tt.msg != "" {
+				err = errors.New(tt.msg)
+			}
+			got := IsModelNotFound(err)
+			if got != tt.wantHit {
+				t.Errorf("IsModelNotFound(%q) = %v, want %v", tt.msg, got, tt.wantHit)
+			}
+		})
+	}
+}
+
+func TestIsTransient_ModelNotFoundIsNotTransient(t *testing.T) {
+	// ModelNotFoundError must NOT be transient — retrying same model won't help.
+	cases := []string{
+		"ModelNotFoundError: Requested entity was not found.",
+		"gemini CLI failed: exit status 1 — stderr: ModelNotFoundError: Requested entity was not found.",
+		"model not found: gemini-3-flash-preview",
+	}
+	for _, msg := range cases {
+		err := errors.New(msg)
+		if IsTransient(err) {
+			t.Errorf("IsTransient(%q) = true, want false (model-not-found is permanent)", msg)
+		}
+	}
+}
