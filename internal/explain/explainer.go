@@ -4,12 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
+
+// maxFindingsInPrompt is the cap on compressed findings lines sent to the
+// explain prompt. Groups identical messages, so 40 lines can represent far
+// more raw findings.
+const maxFindingsInPrompt = 40
 
 // Explanation is the structured AI-generated narrative of a Terraform plan.
 type Explanation struct {
@@ -67,6 +73,9 @@ func buildSummaryMap(resources []parser.NormalizedResource) map[string]interface
 		typeCounts[r.Type]++
 	}
 	return map[string]interface{}{
+		// explain_mode signals buildUserPrompt to skip the full Resource Changes
+		// section — the findings and summary counts already provide enough context.
+		"explain_mode":    true,
 		"total_resources": len(resources),
 		"actions":         actionCounts,
 		"resource_types":  typeCounts,
@@ -99,14 +108,88 @@ func buildExplainPrompt(_ []parser.NormalizedResource, findings []rules.Finding)
 	sb.WriteString("- What a human reviewer should pay attention to\n\n")
 
 	if len(findings) > 0 {
+		compressed := compressFindings(findings, maxFindingsInPrompt)
 		sb.WriteString("The following scanner findings were already detected:\n")
-		for _, f := range findings {
-			sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", f.Severity, f.Resource, f.Message))
+		for _, line := range compressed {
+			sb.WriteString("- ")
+			sb.WriteString(line)
+			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
 	}
 
 	return sb.String()
+}
+
+// severityRank maps severity strings to sort priority (lower = higher priority).
+var severityRank = map[string]int{
+	"CRITICAL": 0,
+	"HIGH":     1,
+	"MEDIUM":   2,
+	"LOW":      3,
+	"INFO":     4,
+}
+
+// compressFindings groups findings that share the same (severity, message prefix),
+// sorts them CRITICAL→INFO, and returns at most maxN formatted lines.
+// Duplicate messages are collapsed into a single line showing the count and
+// up to 3 resource names.
+func compressFindings(findings []rules.Finding, maxN int) []string {
+	type groupKey struct{ severity, msgPrefix string }
+	type group struct {
+		key       groupKey
+		resources []string
+	}
+
+	seen := map[groupKey]*group{}
+	order := []groupKey{}
+
+	for _, f := range findings {
+		msg := f.Message
+		if len(msg) > 60 {
+			msg = msg[:60]
+		}
+		k := groupKey{severity: f.Severity, msgPrefix: msg}
+		if _, exists := seen[k]; !exists {
+			order = append(order, k)
+			seen[k] = &group{key: k}
+		}
+		seen[k].resources = append(seen[k].resources, f.Resource)
+	}
+
+	sort.SliceStable(order, func(i, j int) bool {
+		ri := severityRank[order[i].severity]
+		rj := severityRank[order[j].severity]
+		if ri != rj {
+			return ri < rj
+		}
+		return order[i].msgPrefix < order[j].msgPrefix
+	})
+
+	lines := make([]string, 0, len(order))
+	for _, k := range order {
+		g := seen[k]
+		if len(g.resources) == 1 {
+			lines = append(lines, fmt.Sprintf("[%s] %s: %s", k.severity, g.resources[0], k.msgPrefix))
+		} else {
+			names := g.resources
+			if len(names) > 3 {
+				lines = append(lines, fmt.Sprintf("[%s] ×%d resources (%s, ...): %s",
+					k.severity, len(names), strings.Join(names[:3], ", "), k.msgPrefix))
+			} else {
+				lines = append(lines, fmt.Sprintf("[%s] ×%d resources (%s): %s",
+					k.severity, len(names), strings.Join(names, ", "), k.msgPrefix))
+			}
+		}
+	}
+
+	if len(lines) <= maxN {
+		return lines
+	}
+	result := make([]string, maxN+1)
+	copy(result, lines[:maxN])
+	result[maxN] = fmt.Sprintf("... and %d more findings (truncated)", len(lines)-maxN)
+	return result
 }
 
 // ParseExplanation parses a raw AI response into an Explanation struct.

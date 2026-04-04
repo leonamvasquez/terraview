@@ -2,6 +2,7 @@ package explain
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -248,6 +249,88 @@ func TestBuildSummaryMap_Empty(t *testing.T) {
 	summary := buildSummaryMap(nil)
 	if summary["total_resources"] != 0 {
 		t.Errorf("expected 0 total, got %v", summary["total_resources"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// compressFindings
+// ---------------------------------------------------------------------------
+
+func TestCompressFindings_GroupsDuplicates(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "HIGH", Resource: "aws_security_group.a", Message: "port 22 open to 0.0.0.0/0"},
+		{Severity: "HIGH", Resource: "aws_security_group.b", Message: "port 22 open to 0.0.0.0/0"},
+		{Severity: "HIGH", Resource: "aws_security_group.c", Message: "port 22 open to 0.0.0.0/0"},
+	}
+	lines := compressFindings(findings, 40)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 grouped line, got %d: %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], "×3") {
+		t.Errorf("expected ×3 count in line, got %q", lines[0])
+	}
+}
+
+func TestCompressFindings_SortsBySeverity(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "LOW", Resource: "r1", Message: "low issue"},
+		{Severity: "CRITICAL", Resource: "r2", Message: "critical issue"},
+		{Severity: "HIGH", Resource: "r3", Message: "high issue"},
+	}
+	lines := compressFindings(findings, 40)
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d", len(lines))
+	}
+	if !strings.HasPrefix(lines[0], "[CRITICAL]") {
+		t.Errorf("expected CRITICAL first, got %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "[HIGH]") {
+		t.Errorf("expected HIGH second, got %q", lines[1])
+	}
+}
+
+func TestCompressFindings_TruncatesAtMax(t *testing.T) {
+	findings := make([]rules.Finding, 10)
+	for i := range findings {
+		findings[i] = rules.Finding{
+			Severity: "HIGH",
+			Resource: fmt.Sprintf("resource_%d", i),
+			Message:  fmt.Sprintf("unique message %d", i),
+		}
+	}
+	lines := compressFindings(findings, 5)
+	if len(lines) != 6 { // 5 + truncation line
+		t.Fatalf("expected 6 lines (5 + truncation), got %d", len(lines))
+	}
+	if !strings.Contains(lines[5], "5 more findings") {
+		t.Errorf("expected truncation message, got %q", lines[5])
+	}
+}
+
+func TestCompressFindings_ShowsFirst3Resources(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "MEDIUM", Resource: "r1", Message: "same msg"},
+		{Severity: "MEDIUM", Resource: "r2", Message: "same msg"},
+		{Severity: "MEDIUM", Resource: "r3", Message: "same msg"},
+		{Severity: "MEDIUM", Resource: "r4", Message: "same msg"},
+		{Severity: "MEDIUM", Resource: "r5", Message: "same msg"},
+	}
+	lines := compressFindings(findings, 40)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 grouped line, got %d", len(lines))
+	}
+	if !strings.Contains(lines[0], "...") {
+		t.Errorf("expected ellipsis for >3 resources, got %q", lines[0])
+	}
+	if !strings.Contains(lines[0], "×5") {
+		t.Errorf("expected ×5 count, got %q", lines[0])
+	}
+}
+
+func TestCompressFindings_Empty(t *testing.T) {
+	lines := compressFindings(nil, 40)
+	if len(lines) != 0 {
+		t.Errorf("expected empty result for nil findings, got %v", lines)
 	}
 }
 
