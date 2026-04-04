@@ -190,7 +190,11 @@ func TestE2E_SuppressionReducesFindings(t *testing.T) {
 	}
 	var baseResult map[string]interface{}
 	_ = json.Unmarshal(baseData, &baseResult)
-	baseCount := len(baseResult["findings"].([]interface{}))
+	baseFindings, _ := baseResult["findings"].([]interface{})
+	baseCount := len(baseFindings)
+	if baseCount == 0 {
+		t.Fatalf("baseline has 0 findings — suppression test requires at least one finding\noutput:\n%s", out1)
+	}
 
 	// Write a suppression file that suppresses all checkov findings.
 	ignoreFile := filepath.Join(t.TempDir(), ".terraview-ignore")
@@ -209,7 +213,8 @@ func TestE2E_SuppressionReducesFindings(t *testing.T) {
 	}
 	var supResult map[string]interface{}
 	_ = json.Unmarshal(supData, &supResult)
-	supCount := len(supResult["findings"].([]interface{}))
+	supFindings, _ := supResult["findings"].([]interface{})
+	supCount := len(supFindings)
 
 	if supCount >= baseCount {
 		t.Errorf("suppression had no effect: baseline %d findings, suppressed %d findings\nsuppressed output:\n%s",

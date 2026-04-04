@@ -66,19 +66,13 @@ func (s *CheckovScanner) scanPlan(planPath string) ([]rules.Finding, error) {
 		return nil, fmt.Errorf("checkov: invalid plan path: %w", err)
 	}
 
-	// Create temp file for output
-	tmpFile, err := os.CreateTemp("", "checkov-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("checkov: failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
-
+	// Use stdout only: --output-file-path names the file unpredictably across
+	// checkov versions (results_json.json vs results_json_results.json), making
+	// the file-read path unreliable. Stdout JSON output is stable in all versions.
 	cmd := exec.Command("checkov",
 		"--file", absPath,
 		"--framework", "terraform_plan",
 		"--output", "json",
-		"--output-file-path", filepath.Dir(tmpFile.Name()),
 		"--compact",
 		"--quiet",
 	)
@@ -87,14 +81,7 @@ func (s *CheckovScanner) scanPlan(planPath string) ([]rules.Finding, error) {
 	// Checkov exits non-zero when findings exist — that's expected
 	output, _ := cmd.CombinedOutput()
 
-	// Try reading the output file first
-	data, err := os.ReadFile(tmpFile.Name())
-	if err != nil || len(data) == 0 {
-		// Fall back to stdout
-		data = output
-	}
-
-	return parseCheckovOutput(data)
+	return parseCheckovOutput(output)
 }
 
 func (s *CheckovScanner) scanSource(sourceDir string) ([]rules.Finding, error) {
