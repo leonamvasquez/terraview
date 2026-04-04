@@ -307,7 +307,10 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		return
 	}
 
-	const perFindingTimeout = 45 // seconds per individual fix call
+	// perCallTimeout: max seconds for a single LLM completion call.
+	// perFindingBudget: max seconds for one finding including one internal retry.
+	const perCallTimeout = 30
+	const perFindingBudget = perCallTimeout*2 + 5 // two calls + overhead
 
 	providerCfg := ai.ProviderConfig{
 		Model:       rc.aiModel,
@@ -316,14 +319,14 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		Temperature: 0.1,
 		MaxTokens:   1024,
 		MaxRetries:  1,
-		TimeoutSecs: perFindingTimeout,
+		TimeoutSecs: perCallTimeout,
 	}
 	if rc.aiURL != "" && providerName != "ollama" {
 		providerCfg.BaseURL = ""
 	}
 
 	// Global context covers all findings; each finding also has its own timeout.
-	globalCtx, cancel := context.WithTimeout(context.Background(), time.Duration(perFindingTimeout*len(targets)+30)*time.Second)
+	globalCtx, cancel := context.WithTimeout(context.Background(), time.Duration(perFindingBudget*len(targets)+30)*time.Second)
 	defer cancel()
 
 	provider, err := ai.NewProvider(globalCtx, providerName, providerCfg)
@@ -349,7 +352,7 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		}
 
 		// Per-finding timeout — prevents one slow finding from starving others.
-		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingTimeout)*time.Second)
+		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingBudget)*time.Second)
 
 		req := fix.FixRequest{
 			Finding: fix.FixFinding{
@@ -367,7 +370,14 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		suggestion, err := suggester.Suggest(findingCtx, req)
 		findingCancel()
 		if err != nil {
-			fmt.Printf("  %s %s — could not generate fix: %v\n", f.RuleID, f.Resource, err)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "timed out") ||
+				strings.Contains(errMsg, "deadline") {
+				fmt.Printf("  ⏩ %s on %s — skipped (timed out after %ds; try a faster model)\n",
+					f.RuleID, f.Resource, perCallTimeout)
+			} else {
+				fmt.Printf("  ✗ %s on %s — could not generate fix: %v\n", f.RuleID, f.Resource, err)
+			}
 			continue
 		}
 
