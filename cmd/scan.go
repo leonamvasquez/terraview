@@ -16,12 +16,12 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
-	"github.com/leonamvasquez/terraview/internal/fix"
 	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/contextanalysis"
 	"github.com/leonamvasquez/terraview/internal/diagram"
+	"github.com/leonamvasquez/terraview/internal/fix"
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
@@ -50,8 +50,8 @@ var (
 	explainScoresFlag bool // --explain-scores: show scoring decomposition
 	findingsFile      string
 	allFlag           bool
-	noRedactFlag      bool // --no-redact: disable sensitive data redaction
-	maxResourcesFlag  int  // --max-resources: override AI prompt resource limit (0=auto)
+	noRedactFlag      bool   // --no-redact: disable sensitive data redaction
+	maxResourcesFlag  int    // --max-resources: override AI prompt resource limit (0=auto)
 	fixFlag           bool   // --fix: generate AI-powered HCL fix suggestions for CRITICAL/HIGH findings
 	ignoreFile        string // --ignore-file: path to .terraview-ignore suppression file
 )
@@ -264,7 +264,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 // Capped at 5 fixes per run. Fails gracefully — never blocks the scan exit code.
 func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan) {
 	// Filter to CRITICAL and HIGH only, deduplicate by rule+resource, deterministic order.
-	var targets []rules.Finding
+	targets := make([]rules.Finding, 0, len(findings))
 	seen := map[string]bool{}
 	for _, f := range findings {
 		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {

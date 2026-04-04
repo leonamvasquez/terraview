@@ -428,7 +428,7 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 // generatePlan creates the appropriate executor (terraform or terragrunt) and generates
 // the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
 // If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
-func generatePlan() (string, terraformexec.PlanExecutor, error) {
+func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unparam // PlanExecutor intentionally kept for future use by callers that may need it
 	var executor terraformexec.PlanExecutor
 	var err error
 

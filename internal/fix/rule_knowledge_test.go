@@ -74,9 +74,9 @@ func TestCanonicalResourceName(t *testing.T) {
 
 func TestRelevantAttributes(t *testing.T) {
 	cases := []struct {
-		ruleID        string
-		wantNonNil    bool
-		wantContains  string
+		ruleID       string
+		wantNonNil   bool
+		wantContains string
 	}{
 		{"CKV_AWS_158", true, "kms_key_id"},
 		{"CKV2_AWS_53", true, "rest_api_id"},
@@ -115,11 +115,11 @@ func TestRelevantAttributes(t *testing.T) {
 func TestTruncateConfig_KnownRuleKeepsRelevantAttrs(t *testing.T) {
 	// CKV_AWS_158 relevant attrs: kms_key_id, name, retention_in_days
 	config := map[string]interface{}{
-		"kms_key_id":      "aws_kms_key.main.arn",
-		"name":            "/ecs/service",
+		"kms_key_id":        "aws_kms_key.main.arn",
+		"name":              "/ecs/service",
 		"retention_in_days": 30,
-		"tags":            map[string]interface{}{"env": "prod"},
-		"irrelevant_attr": "should_be_removed",
+		"tags":              map[string]interface{}{"env": "prod"},
+		"irrelevant_attr":   "should_be_removed",
 	}
 
 	got := TruncateConfig(config, "CKV_AWS_158")
@@ -158,7 +158,7 @@ func TestTruncateConfig_UnknownRuleCapAt20(t *testing.T) {
 func TestTruncateConfig_NilConfigNoPanic(t *testing.T) {
 	// Must not panic.
 	got := TruncateConfig(nil, "CKV_AWS_158")
-	if got != nil && len(got) != 0 {
+	if len(got) != 0 {
 		// Returning nil or empty map are both acceptable.
 		t.Errorf("TruncateConfig(nil, ...) = %v, want nil or empty", got)
 	}

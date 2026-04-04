@@ -27,11 +27,11 @@ const defaultContextBatchSize = 80
 
 // Result holds the output of a code context analysis run.
 type Result struct {
-	Findings        []rules.Finding `json:"findings"`
-	Summary         string          `json:"summary"`
-	Model           string          `json:"model"`
-	Provider        string          `json:"provider"`
-	ExcludedNoOp    int             `json:"excluded_no_op,omitempty"` // resources skipped because action is no-op or read
+	Findings     []rules.Finding `json:"findings"`
+	Summary      string          `json:"summary"`
+	Model        string          `json:"model"`
+	Provider     string          `json:"provider"`
+	ExcludedNoOp int             `json:"excluded_no_op,omitempty"` // resources skipped because action is no-op or read
 }
 
 // Analyzer performs code-level contextual analysis using AI.
@@ -162,7 +162,7 @@ func (a *Analyzer) runSingle(ctx context.Context, resources []parser.NormalizedR
 // runBatched splits resources into priority-ordered batches, calls runSingle for
 // each, and merges the results. The topology graph is passed to every batch so
 // the AI retains cross-resource relationship context even when attributes are split.
-func (a *Analyzer) runBatched(ctx context.Context, resources []parser.NormalizedResource, graph *topology.Graph, batchSize int) (*Result, error) {
+func (a *Analyzer) runBatched(ctx context.Context, resources []parser.NormalizedResource, graph *topology.Graph, batchSize int) (*Result, error) { //nolint:unparam // error kept for interface consistency; future batches may return errors
 	// Sort by priority tier so the most security-critical resources go first
 	sorted := make([]parser.NormalizedResource, len(resources))
 	copy(sorted, resources)

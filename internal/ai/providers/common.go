@@ -57,12 +57,12 @@ var modelContextLimits = map[string]int{
 	"gemini-2.5-pro":   200,
 	// OpenAI
 	"gpt-4o":      100,
-	"gpt-4o-mini":  60,
+	"gpt-4o-mini": 60,
 	"o1":          150,
 	"o3-mini":     100,
 	// DeepSeek
-	"deepseek-chat":      100,
-	"deepseek-reasoner":  150,
+	"deepseek-chat":     100,
+	"deepseek-reasoner": 150,
 	// Ollama — conservative; users can override via llm.max_resources in config
 	"llama3.1:8b":  35,
 	"llama3.2:3b":  25,

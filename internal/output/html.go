@@ -37,7 +37,7 @@ func linkifyText(s string) template.HTML {
 		last = loc[1]
 	}
 	buf.WriteString(template.HTMLEscapeString(s[last:]))
-	return template.HTML(buf.String())
+	return template.HTML(buf.String()) //nolint:gosec // content is safe: built entirely from HTMLEscapeString calls
 }
 
 // WriteHTML writes the review result as a self-contained HTML report.
@@ -55,14 +55,14 @@ func (w *Writer) WriteHTML(result aggregator.ReviewResult, path string) error {
 // ---- template data types ----
 
 type htmlReport struct {
-	PlanFile       string
-	GeneratedAt    string
-	TotalResources int
-	Scanner        string
-	Safe           bool
-	VerdictLabel   string
-	Reasons        []string
-	Confidence     string
+	PlanFile        string
+	GeneratedAt     string
+	TotalResources  int
+	Scanner         string
+	Safe            bool
+	VerdictLabel    string
+	Reasons         []string
+	Confidence      string
 	Summary         string
 	SeverityRows    []htmlSevRow
 	Scores          []htmlScoreRow
@@ -70,9 +70,9 @@ type htmlReport struct {
 	ScannerFindings []htmlFinding
 	AIFindings      []htmlFinding
 	TotalFindings   int
-	PipelineCards  []htmlPipelineCard
-	ExitCode       int
-	LogoDataURI    template.URL // base64 data URI for terraview-logo.png (URL type skips html/template URL-escaping)
+	PipelineCards   []htmlPipelineCard
+	ExitCode        int
+	LogoDataURI     template.URL // base64 data URI for terraview-logo.png (URL type skips html/template URL-escaping)
 }
 
 type htmlSevRow struct {
@@ -139,7 +139,7 @@ func buildHTMLData(r aggregator.ReviewResult) htmlReport {
 		Diagram:        r.Diagram,
 		TotalFindings:  len(r.Findings),
 		ExitCode:       r.ExitCode,
-		LogoDataURI:    template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(assets.LogoPNG)),
+		LogoDataURI: template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(assets.LogoPNG)), //nolint:gosec // data URI with embedded binary asset, not user input
 	}
 
 	if r.PipelineStatus != nil && r.PipelineStatus.Scanner != nil {
@@ -257,7 +257,6 @@ func scoreRatingAndClass(v float64) (string, string) {
 		return "Critical", "sc-crit"
 	}
 }
-
 
 func pipelineClass(status string) string {
 	switch status {

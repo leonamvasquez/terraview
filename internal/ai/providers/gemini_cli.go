@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
-	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/util"
 )
 
@@ -207,12 +206,3 @@ func (g *geminiCLIProvider) runCLI(ctx context.Context, prompt, model string) (s
 	return out, nil
 }
 
-// doExec is kept for backward compatibility with any internal callers.
-// Prefer execWithFallback for new code.
-func (g *geminiCLIProvider) doExec(ctx context.Context, prompt string) ([]rules.Finding, string, error) {
-	out, _, err := g.execWithFallback(ctx, prompt)
-	if err != nil {
-		return nil, "", err
-	}
-	return parseResponse(out, geminiCLIName)
-}
