@@ -72,8 +72,17 @@ func runScan(t *testing.T, fixture string, extraArgs ...string) (string, int) {
 	args = append(args, extraArgs...)
 
 	cmd := exec.Command(binaryPath, args...)
-	// Avoid picking up any local .terraview.yaml or AI provider configuration.
-	cmd.Env = []string{"HOME=" + t.TempDir(), "PATH=" + os.Getenv("PATH")}
+	// Inherit the full environment so that tool subprocesses (e.g. checkov via
+	// Python) can find their packages in $HOME/.local/lib/python3.x/site-packages.
+	// Override HOME to a temp dir so no local .terraview.yaml is picked up.
+	homeDir := t.TempDir()
+	cmd.Env = make([]string, 0, len(os.Environ()))
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "HOME=") {
+			cmd.Env = append(cmd.Env, e)
+		}
+	}
+	cmd.Env = append(cmd.Env, "HOME="+homeDir)
 	out, err := cmd.CombinedOutput()
 	code := 0
 	if exitErr, ok := err.(*exec.ExitError); ok {
