@@ -19,6 +19,7 @@ const (
 	FormatPretty  = "pretty"
 	FormatCompact = "compact"
 	FormatJSON    = "json"
+	FormatHTML    = "html"
 )
 
 // WriterConfig configures output behavior.
@@ -108,8 +109,8 @@ func (w *Writer) printCompact(result aggregator.ReviewResult) {
 		label = VerdictUnsafe(label)
 	}
 
-	fmt.Printf("terraview: %s | %s | score=%s | exit=%d",
-		label, ratio, ScoreColor(result.Score.OverallScore), result.ExitCode)
+	fmt.Printf("terraview: %s | %s | sec=%s | exit=%d",
+		label, ratio, ScoreColor(result.Score.SecurityScore), result.ExitCode)
 
 	if len(result.SeverityCounts) > 0 {
 		parts := []string{}
@@ -193,17 +194,15 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		m.LblTotalFindings, len(result.Findings), findingsPerResource(len(result.Findings), result.TotalResources))
 	fmt.Println()
 
-	if len(result.SeverityCounts) > 0 {
-		for _, sev := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"} {
-			if count, ok := result.SeverityCounts[sev]; ok && count > 0 {
-				fmt.Println(SevCountLine(sev, i18n.SevLabel(sev), count))
-			}
-		}
-		fmt.Println()
-	}
-
-	// Full findings list grouped by source
+	// Findings section — Orca-style table grouped by source
 	if len(result.Findings) > 0 {
+		findingsTitle := "FINDINGS"
+		if br {
+			findingsTitle = "ACHADOS"
+		}
+		fmt.Printf("  %s\n", SectionTitle(findingsTitle))
+		fmt.Printf("  %s\n\n", FindingsSummaryLine(result.SeverityCounts, len(result.Findings)))
+
 		sourceGroups := groupBySource(result.Findings)
 		sourceOrder := []string{}
 		// Stable ordering: scanner sources first, then AI, then others
@@ -219,11 +218,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		for _, src := range sourceOrder {
 			findings := sourceGroups[src]
 			fmt.Printf("  %s\n", SourceHeader(fmt.Sprintf("── %s (%d %s) ──", src, len(findings), m.LblFindings)))
-			for _, f := range findings {
-				fmt.Printf("    [%s] %s\n", SevColor(i18n.SevLabel(f.Severity)), util.Truncate(f.Message, 80))
-				fmt.Printf("           %s\n", Resource(f.Resource))
-			}
-			fmt.Println()
+			PrintFindingsTable(findings, br)
 		}
 	}
 
@@ -231,12 +226,10 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		fmt.Printf("  Score Segurança:       %s\n", ScoreColor(result.Score.SecurityScore))
 		fmt.Printf("  Score Conformidade:    %s\n", ScoreColor(result.Score.ComplianceScore))
 		fmt.Printf("  Score Manutenibilidade:%s\n", ScoreColor(result.Score.MaintainabilityScore))
-		fmt.Printf("  %s           %s\n", Header("Score Geral:"), ScoreColor(result.Score.OverallScore))
 	} else {
 		fmt.Printf("  Security Score:        %s\n", ScoreColor(result.Score.SecurityScore))
 		fmt.Printf("  Compliance Score:      %s\n", ScoreColor(result.Score.ComplianceScore))
 		fmt.Printf("  Maintainability Score: %s\n", ScoreColor(result.Score.MaintainabilityScore))
-		fmt.Printf("  %s         %s\n", Header("Overall Score:"), ScoreColor(result.Score.OverallScore))
 	}
 	fmt.Println()
 
@@ -245,6 +238,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 		w.printScoreDecomposition(result.ScoreDecomposition, br)
 	}
 
+	fmt.Println(ScanStatusLine(result.ExitCode, br))
 	fmt.Printf("  %s: %d\n", m.LblExitCode, result.ExitCode)
 	fmt.Println(Bar())
 }
@@ -498,16 +492,14 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 		sb.WriteString("|---------|-------|\n")
 		sb.WriteString(fmt.Sprintf("| Segurança | %s %.1f/10 |\n", scoreEmoji(result.Score.SecurityScore), result.Score.SecurityScore))
 		sb.WriteString(fmt.Sprintf("| Conformidade | %s %.1f/10 |\n", scoreEmoji(result.Score.ComplianceScore), result.Score.ComplianceScore))
-		sb.WriteString(fmt.Sprintf("| Manutenibilidade | %s %.1f/10 |\n", scoreEmoji(result.Score.MaintainabilityScore), result.Score.MaintainabilityScore))
-		sb.WriteString(fmt.Sprintf("| **Geral** | **%s %.1f/10** |\n\n", scoreEmoji(result.Score.OverallScore), result.Score.OverallScore))
+		sb.WriteString(fmt.Sprintf("| Manutenibilidade | %s %.1f/10 |\n\n", scoreEmoji(result.Score.MaintainabilityScore), result.Score.MaintainabilityScore))
 	} else {
 		sb.WriteString("## Quality Score\n\n")
 		sb.WriteString("| Metric | Score |\n")
 		sb.WriteString("|--------|-------|\n")
 		sb.WriteString(fmt.Sprintf("| Security | %s %.1f/10 |\n", scoreEmoji(result.Score.SecurityScore), result.Score.SecurityScore))
 		sb.WriteString(fmt.Sprintf("| Compliance | %s %.1f/10 |\n", scoreEmoji(result.Score.ComplianceScore), result.Score.ComplianceScore))
-		sb.WriteString(fmt.Sprintf("| Maintainability | %s %.1f/10 |\n", scoreEmoji(result.Score.MaintainabilityScore), result.Score.MaintainabilityScore))
-		sb.WriteString(fmt.Sprintf("| **Overall** | **%s %.1f/10** |\n\n", scoreEmoji(result.Score.OverallScore), result.Score.OverallScore))
+		sb.WriteString(fmt.Sprintf("| Maintainability | %s %.1f/10 |\n\n", scoreEmoji(result.Score.MaintainabilityScore), result.Score.MaintainabilityScore))
 	}
 
 	// Score Decomposition in Markdown (--explain-scores)

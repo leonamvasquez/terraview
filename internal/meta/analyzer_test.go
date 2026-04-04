@@ -143,3 +143,101 @@ func TestComputeUnifiedScore_PerfectScore(t *testing.T) {
 		t.Errorf("expected 10.0, got %.1f", score)
 	}
 }
+
+func TestComputeUnifiedScore_Gradacao(t *testing.T) {
+	// Validates that the score is non-zero and produces meaningful gradation
+	// across realistic finding volumes. Values mirror the godoc reference points.
+	makeFinding := func(sev string) rules.Finding {
+		return rules.Finding{Severity: sev, Category: "security", Resource: "aws_instance.web"}
+	}
+	repeat := func(sev string, n int) []rules.Finding {
+		out := make([]rules.Finding, n)
+		for i := range out {
+			out[i] = makeFinding(sev)
+		}
+		return out
+	}
+
+	tests := []struct {
+		name     string
+		findings []rules.Finding
+		wantMin  float64
+		wantMax  float64
+	}{
+		{"single CRITICAL", repeat("CRITICAL", 1), 7.0, 9.5},
+		{"3 CRITICAL + 5 HIGH", append(repeat("CRITICAL", 3), repeat("HIGH", 5)...), 4.0, 8.0},
+		{"25 HIGH", repeat("HIGH", 25), 1.5, 4.0},
+		// Large volumes should floor at 0, not produce negative or NaN
+		{"173 HIGH (EKS-like)", repeat("HIGH", 173), 0.0, 1.0},
+		{"5 CRITICAL + 167 HIGH (multi-VPC-like)", append(repeat("CRITICAL", 5), repeat("HIGH", 167)...), 0.0, 1.0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			score := computeUnifiedScore(tc.findings, nil)
+			if score < tc.wantMin || score > tc.wantMax {
+				t.Errorf("computeUnifiedScore(%s) = %.1f, want [%.1f, %.1f]",
+					tc.name, score, tc.wantMin, tc.wantMax)
+			}
+			if score < 0 {
+				t.Errorf("score must not be negative, got %.2f", score)
+			}
+		})
+	}
+}
+
+func TestComputeUnifiedScore_MonotonicDecay(t *testing.T) {
+	// More findings of the same severity must always yield a lower or equal score.
+	makeFinding := func() rules.Finding {
+		return rules.Finding{Severity: "HIGH", Category: "security", Resource: "aws_instance.web"}
+	}
+
+	prev := 10.0
+	for n := 1; n <= 50; n++ {
+		findings := make([]rules.Finding, n)
+		for i := range findings {
+			findings[i] = makeFinding()
+		}
+		score := computeUnifiedScore(findings, nil)
+		if score > prev {
+			t.Errorf("score increased from %.2f to %.2f when going from %d to %d HIGH findings",
+				prev, score, n-1, n)
+		}
+		prev = score
+	}
+}
+
+func TestComputeUnifiedScore_NaoZeraComPoucosFindings(t *testing.T) {
+	// A handful of findings must not produce 0.0 — that would make the score
+	// indistinguishable from catastrophic infrastructure.
+	findings := []rules.Finding{
+		{Severity: "HIGH", Category: "security", Resource: "aws_s3_bucket.data"},
+		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web"},
+		{Severity: "MEDIUM", Category: "compliance", Resource: "aws_vpc.main"},
+	}
+	score := computeUnifiedScore(findings, nil)
+	if score == 0.0 {
+		t.Errorf("expected non-zero score for 2 HIGH + 1 MEDIUM, got 0.0")
+	}
+	if score < 5.0 {
+		t.Errorf("expected score >= 5.0 for a small finding set, got %.1f", score)
+	}
+}
+
+func TestComputeUnifiedScore_CorrelacaoAumentaPenalidade(t *testing.T) {
+	findings := []rules.Finding{
+		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},
+		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "tfsec"},
+	}
+	correlations := []Correlation{
+		{Resource: "aws_instance.web", Sources: []string{"checkov", "tfsec"}, MaxSeverity: "HIGH"},
+	}
+
+	scoreWithout := computeUnifiedScore(findings, nil)
+	scoreWith := computeUnifiedScore(findings, correlations)
+
+	if scoreWith >= scoreWithout {
+		t.Errorf("correlated findings should produce lower score: with=%.2f, without=%.2f",
+			scoreWith, scoreWithout)
+	}
+}

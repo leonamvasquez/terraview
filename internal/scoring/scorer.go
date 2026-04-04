@@ -73,8 +73,6 @@ func (s *Scorer) Calculate(findings []rules.Finding, totalResources int) Score {
 	}
 
 	// Overall = weighted average of category scores.
-	// Security has the highest weight. Category scores already penalise
-	// CRITICAL/HIGH findings individually, so no further override is needed.
 	overall := (secScore*3 + compScore*2 + maintScore*1.5 + relScore*1) / 7.5
 
 	return Score{
@@ -115,12 +113,14 @@ func (s *Scorer) computeCategoryScore(findings []rules.Finding, totalResources i
 	// Volume penalty: logarithmic penalty based on absolute count of findings.
 	// Prevents large infrastructures from diluting many HIGH/CRITICAL findings.
 	// Uses high-equivalent count: normalises all findings relative to the HIGH weight.
+	// Multiplier 1.5 ensures many HIGH findings drive the score down aggressively
+	// (e.g. 174 HIGH → penalty ≈ 11 → floor at 2.0 for HIGH-only).
 	highWeight := s.severityWeights[rules.SeverityHigh]
 	if highWeight == 0 {
 		highWeight = 1.0
 	}
 	highEquivCount := weightedSum / highWeight
-	volumePenalty := math.Log2(1+highEquivCount) * 0.5
+	volumePenalty := math.Log2(1+highEquivCount) * 1.5
 
 	// Take the harsher of the two penalties
 	penalty := math.Max(densityPenalty, volumePenalty)

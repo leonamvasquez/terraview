@@ -815,8 +815,8 @@ func TestPrintCompact_Safe_EN(t *testing.T) {
 	if !strings.Contains(out, "1 findings / 10 resources") {
 		t.Error("expected finding/resource ratio")
 	}
-	if !strings.Contains(out, "score=") {
-		t.Error("expected score=")
+	if !strings.Contains(out, "sec=") {
+		t.Error("expected sec= (security score) in compact output")
 	}
 	if !strings.Contains(out, "LOW:1") {
 		t.Error("expected severity counts in brackets")
@@ -896,8 +896,8 @@ func TestPrintFull_Safe_EN(t *testing.T) {
 	if !strings.Contains(out, "Security Score:") {
 		t.Error("expected Security Score label")
 	}
-	if !strings.Contains(out, "Overall Score:") {
-		t.Error("expected Overall Score label")
+	if strings.Contains(out, "Overall Score:") {
+		t.Error("Overall Score should not appear in terminal output")
 	}
 	if !strings.Contains(out, "Exit code: 0") {
 		t.Error("expected exit code")
@@ -937,8 +937,8 @@ func TestPrintFull_Unsafe_BR(t *testing.T) {
 	if !strings.Contains(out, "Score Segurança:") {
 		t.Error("expected BR security score label")
 	}
-	if !strings.Contains(out, "Score Geral:") {
-		t.Error("expected BR overall score label")
+	if strings.Contains(out, "Score Geral:") {
+		t.Error("Score Geral should not appear in terminal output")
 	}
 	if !strings.Contains(out, "Código de saída: 2") {
 		t.Error("expected BR exit code label")

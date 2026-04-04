@@ -99,8 +99,8 @@ func TestScorer_ManyCriticalsClampsToZero(t *testing.T) {
 	if score.SecurityScore != 0.0 {
 		t.Errorf("many CRITICALs should clamp to 0.0, got %.1f", score.SecurityScore)
 	}
-	// Overall is a weighted average: only security is affected, other categories remain at 10.0
-	// overall = (sec*3 + comp*2 + maint*1.5 + rel*1) / 7.5 = (0*3 + 10*2 + 10*1.5 + 10*1) / 7.5 = 6.0
+	// Overall = weighted average: only security is affected, other categories remain at 10.0
+	// overall = (0*3 + 10*2 + 10*1.5 + 10*1) / 7.5 = 6.0
 	if score.OverallScore > 7.0 {
 		t.Errorf("many CRITICALs should reduce overall significantly, got %.1f", score.OverallScore)
 	}
@@ -272,6 +272,7 @@ func TestScorer_ReliabilityBlending(t *testing.T) {
 // TestScorer_LargeInfraVolumePenalty ensures that many HIGH findings on a
 // large plan are not diluted to near-perfect scores. This was the original
 // bug: 174 HIGH on 380 resources scored 8.2/10 with pure density formula.
+// With multiplier 1.5: log2(175)*1.5 ≈ 11.2 → penalty > 10 → floor at 2.0.
 func TestScorer_LargeInfraVolumePenalty(t *testing.T) {
 	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := make([]rules.Finding, 0, 174)
@@ -284,12 +285,11 @@ func TestScorer_LargeInfraVolumePenalty(t *testing.T) {
 
 	score := scorer.Calculate(findings, 380)
 
-	// With volume penalty: log2(1+174)*0.5 ≈ 3.73 → score ≈ 6.3
-	// Must be significantly below 8.0 (old formula gave 8.2)
+	// Volume penalty log2(175)*1.5 ≈ 11.2 → capped → HIGH floor 2.0
 	if score.SecurityScore >= 7.5 {
 		t.Errorf("174 HIGH on 380 resources should score below 7.5, got %.1f (volume penalty not effective)", score.SecurityScore)
 	}
-	// But should not be below 2.0 (HIGH floor)
+	// HIGH floor: should not be below 2.0
 	if score.SecurityScore < 2.0 {
 		t.Errorf("HIGH-only floor violated: got %.1f", score.SecurityScore)
 	}
@@ -307,8 +307,7 @@ func TestScorer_SmallPlanDensityStillWorks(t *testing.T) {
 	score := scorer.Calculate(findings, 2)
 
 	// density = (2*3/2)*2 = 6.0 → score = 4.0
-	// volume = log2(1+2)*0.5 = 0.79 → score = 9.2
-	// max(density, volume) = density → score = 4.0
+	// volume = log2(1+2)*1.5 ≈ 2.38 → density wins → score = 4.0
 	if score.SecurityScore > 5.0 {
 		t.Errorf("2 HIGH on 2 resources should be significantly penalized, got %.1f", score.SecurityScore)
 	}

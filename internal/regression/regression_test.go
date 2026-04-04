@@ -415,7 +415,7 @@ func TestScoring_LargeInfraNotDiluted(t *testing.T) {
 	}
 	sc := s.Calculate(findings, 380)
 	// Old formula: 10-(174*3/380*2)=7.26 → too high
-	// New formula: volume penalty log2(175)*0.5 ≈ 3.73 → ~6.3
+	// New formula: volume penalty log2(175)*1.5 ≈ 11.2 → floor at 2.0
 	if sc.SecurityScore >= 7.5 {
 		t.Errorf("174 HIGH on 380 resources should be < 7.5, got %.1f", sc.SecurityScore)
 	}

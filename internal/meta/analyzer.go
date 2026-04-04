@@ -2,6 +2,7 @@ package meta
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -179,12 +180,30 @@ func detectCoverageGaps(sourceMap map[string][]rules.Finding) []string {
 	return gaps
 }
 
+// computeUnifiedScore calculates a 0–10 score from cross-tool findings using
+// the same logarithmic volume-penalty approach as the scoring package. This
+// avoids the unbounded linear formula (10 - Σpenalty) that collapses to 0.0
+// for any plan with more than ~5 HIGH findings regardless of its size.
+//
+// Algorithm (mirrors scorer.go volumePenalty):
+//  1. Compute a weighted sum with CRITICAL=3, HIGH=2, MEDIUM=0.8, LOW=0.3.
+//  2. Apply a 0.5× correlation boost for each additional confirming source.
+//  3. Normalise to "HIGH-equivalent count" (weightedSum / 2.0).
+//  4. penalty = log2(1 + highEquivCount) × 1.5
+//  5. score   = 10 − min(penalty, 10)   → clamped to [0, 10], rounded to 1dp.
+//
+// Reference points:
+//
+//	0 findings              → 10.0
+//	1 CRITICAL              →  8.0
+//	3 CRITICAL + 5 HIGH     →  6.1
+//	25 HIGH                 →  2.9
+//	100 HIGH                →  0.0
 func computeUnifiedScore(findings []rules.Finding, correlations []Correlation) float64 {
 	if len(findings) == 0 {
 		return 10.0
 	}
 
-	totalPenalty := 0.0
 	weights := map[string]float64{
 		rules.SeverityCritical: 3.0,
 		rules.SeverityHigh:     2.0,
@@ -193,24 +212,31 @@ func computeUnifiedScore(findings []rules.Finding, correlations []Correlation) f
 		rules.SeverityInfo:     0.0,
 	}
 
+	weightedSum := 0.0
 	for _, f := range findings {
 		if w, ok := weights[f.Severity]; ok {
-			totalPenalty += w
+			weightedSum += w
 		}
 	}
 
+	// Correlation boost: extra confidence penalty for multi-source findings.
 	for _, c := range correlations {
 		boost := float64(len(c.Sources)-1) * 0.5
 		if w, ok := weights[c.MaxSeverity]; ok {
-			totalPenalty += w * boost
+			weightedSum += w * boost
 		}
 	}
 
-	score := 10.0 - totalPenalty
+	// Logarithmic penalty normalised to HIGH-equivalent count.
+	// Mirrors scorer.go: highEquivCount = weightedSum / highWeight (2.0).
+	highEquivCount := weightedSum / 2.0
+	penalty := math.Log2(1+highEquivCount) * 1.5
+
+	score := 10.0 - math.Min(penalty, 10.0)
 	if score < 0 {
 		score = 0
 	}
-	return score
+	return math.Round(score*10) / 10
 }
 
 func (a *Analyzer) buildSummary(result *MetaResult, totalFindings int) string {

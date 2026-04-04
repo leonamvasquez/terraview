@@ -332,6 +332,120 @@ func TestValidateAIFindings_RecursoModulo(t *testing.T) {
 	}
 }
 
+func TestValidateAIFindings_RecursoCompostoAmbosExistem(t *testing.T) {
+	graph := mockGraph()
+
+	// AI joined two real addresses with " and " — both exist in the graph.
+	// The validator should accept the finding and normalize resource to the first valid address.
+	findings := []rules.Finding{
+		validFinding("aws_s3_bucket.data and aws_instance.web", "HIGH", "security", "cross-resource risk"),
+	}
+
+	valid, discarded, _ := ValidateAIFindings(findings, graph)
+
+	if len(valid) != 1 {
+		t.Fatalf("expected 1 valid finding, got %d", len(valid))
+	}
+	if len(discarded) != 0 {
+		t.Errorf("expected 0 discarded, got %d", len(discarded))
+	}
+	// Resource must be normalized to the first valid address
+	if valid[0].Resource != "aws_s3_bucket.data" {
+		t.Errorf("expected normalized resource 'aws_s3_bucket.data', got '%s'", valid[0].Resource)
+	}
+}
+
+func TestValidateAIFindings_RecursoCompostoUmExiste(t *testing.T) {
+	graph := mockGraph()
+
+	// First address doesn't exist, second does — finding should be accepted,
+	// resource normalized to the first valid candidate.
+	findings := []rules.Finding{
+		validFinding("aws_rds_instance.ghost, aws_vpc.main", "CRITICAL", "architecture", "missing isolation"),
+	}
+
+	valid, discarded, _ := ValidateAIFindings(findings, graph)
+
+	if len(valid) != 1 {
+		t.Fatalf("expected 1 valid finding, got %d", len(valid))
+	}
+	if len(discarded) != 0 {
+		t.Errorf("expected 0 discarded, got %d", len(discarded))
+	}
+	if valid[0].Resource != "aws_vpc.main" {
+		t.Errorf("expected normalized resource 'aws_vpc.main', got '%s'", valid[0].Resource)
+	}
+}
+
+func TestValidateAIFindings_RecursoCompostoNenhumExiste(t *testing.T) {
+	graph := mockGraph()
+
+	findings := []rules.Finding{
+		validFinding("aws_rds_instance.ghost and aws_lambda_function.missing", "HIGH", "security", "cross-resource risk"),
+	}
+
+	valid, discarded, _ := ValidateAIFindings(findings, graph)
+
+	if len(valid) != 0 {
+		t.Errorf("expected 0 valid findings, got %d", len(valid))
+	}
+	if len(discarded) != 1 {
+		t.Fatalf("expected 1 discarded, got %d", len(discarded))
+	}
+	if discarded[0].Reason != ReasonResourceNotFound {
+		t.Errorf("expected reason '%s', got '%s'", ReasonResourceNotFound, discarded[0].Reason)
+	}
+}
+
+func TestValidateAIFindings_RecursoCompostoSemicolon(t *testing.T) {
+	graph := mockGraph()
+
+	findings := []rules.Finding{
+		validFinding("aws_security_group.web_sg; aws_vpc.main", "MEDIUM", "security", "SG spans VPCs"),
+	}
+
+	valid, _, _ := ValidateAIFindings(findings, graph)
+
+	if len(valid) != 1 {
+		t.Fatalf("expected 1 valid finding, got %d", len(valid))
+	}
+	if valid[0].Resource != "aws_security_group.web_sg" {
+		t.Errorf("expected normalized resource 'aws_security_group.web_sg', got '%s'", valid[0].Resource)
+	}
+}
+
+func TestSplitCompoundResource(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{"aws_s3_bucket.data", []string{"aws_s3_bucket.data"}},
+		{"aws_s3_bucket.data and aws_instance.web", []string{"aws_s3_bucket.data", "aws_instance.web"}},
+		{"aws_vpc.main, aws_subnet.private", []string{"aws_vpc.main", "aws_subnet.private"}},
+		{"aws_vpc.main; aws_subnet.private", []string{"aws_vpc.main", "aws_subnet.private"}},
+		{"aws_vpc.main,aws_subnet.private", []string{"aws_vpc.main", "aws_subnet.private"}},
+		{"  aws_vpc.main  and  aws_subnet.private  ", []string{"aws_vpc.main", "aws_subnet.private"}},
+		{"a and b and c", []string{"a", "b", "c"}},
+		{"", []string{""}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := splitCompoundResource(tt.input)
+			if len(got) != len(tt.expected) {
+				t.Fatalf("splitCompoundResource(%q) = %v (len %d), expected %v (len %d)",
+					tt.input, got, len(got), tt.expected, len(tt.expected))
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("splitCompoundResource(%q)[%d] = %q, expected %q",
+						tt.input, i, got[i], tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
 func TestExtractResourceType(t *testing.T) {
 	tests := []struct {
 		address  string

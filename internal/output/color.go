@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	reset = "\033[0m"
-	bold  = "\033[1m"
-	dim   = "\033[2m"
+	reset     = "\033[0m"
+	bold      = "\033[1m"
+	dim       = "\033[2m"
+	underline = "\033[4m"
 
 	// Foreground colors
 	red    = "\033[31m"
@@ -141,6 +142,11 @@ func SevCountLine(severity string, label string, count int) string {
 // Bar returns the styled separator bar.
 func Bar() string {
 	return colorize(dim, "═══════════════════════════════════════════════")
+}
+
+// SectionTitle returns a bold+underline cyan section title (Orca-style).
+func SectionTitle(text string) string {
+	return colorize(bold+underline+brightCyan, text)
 }
 
 // Terraform purple (close to Terraform's brand purple #7B42BC)

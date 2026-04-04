@@ -97,15 +97,20 @@ func ValidateAIFindings(findings []rules.Finding, graph *topology.Graph) (valid 
 			continue
 		}
 
-		// Rule 1 + 2: resource existence and type
-		if reason, detail := checkResource(f, nodeIndex); reason != "" {
+		// Rule 1 + 2: resource existence and type.
+		// checkResource also resolves compound addresses ("A and B") to the
+		// first valid primary address, which we write back into f.Resource so
+		// that dedup and downstream stages receive a single, resolvable address.
+		resReason, resDetail, primaryAddr := checkResource(f, nodeIndex)
+		if resReason != "" {
 			discarded = append(discarded, DiscardedFinding{
 				Finding: f,
-				Reason:  reason,
-				Detail:  detail,
+				Reason:  resReason,
+				Detail:  resDetail,
 			})
 			continue
 		}
+		f.Resource = primaryAddr
 
 		// Rule 4: duplicate detection
 		if reason, detail := checkDuplicate(f, seen); reason != "" {
@@ -159,24 +164,59 @@ func checkSeverity(f rules.Finding) (DiscardReason, string) {
 	return "", ""
 }
 
-func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (DiscardReason, string) {
+// splitCompoundResource splits a resource field that may contain multiple
+// Terraform addresses joined by separators the AI uses for multi-resource
+// findings (e.g. "aws_s3_bucket.a and aws_s3_bucket.b" or "res.a, res.b").
+// Returns the trimmed individual candidates. Single-address fields are
+// returned as a one-element slice with no allocation overhead.
+func splitCompoundResource(resource string) []string {
+	for _, sep := range []string{", ", " and ", "; ", ","} {
+		if strings.Contains(resource, sep) {
+			raw := strings.Split(resource, sep)
+			out := make([]string, 0, len(raw))
+			for _, p := range raw {
+				if p = strings.TrimSpace(p); p != "" {
+					out = append(out, p)
+				}
+			}
+			if len(out) > 1 {
+				return out
+			}
+		}
+	}
+	return []string{strings.TrimSpace(resource)}
+}
+
+// checkResource validates that at least one candidate address in the finding's
+// resource field exists in the topology graph and has a matching type.
+// For compound resource fields ("A and B"), each candidate is tried in order;
+// the first valid match is returned as the normalised primary address so that
+// downstream stages receive a single, resolvable resource address.
+func checkResource(f rules.Finding, nodeIndex map[string]topology.Node) (reason DiscardReason, detail string, primaryAddr string) {
 	resource := strings.TrimSpace(f.Resource)
+	candidates := splitCompoundResource(resource)
 
-	node, exists := nodeIndex[resource]
-	if !exists {
-		return ReasonResourceNotFound, fmt.Sprintf("resource '%s' does not exist in the Terraform plan", resource)
+	var lastMismatchDetail string
+	for _, candidate := range candidates {
+		node, exists := nodeIndex[candidate]
+		if !exists {
+			continue
+		}
+		findingType := extractResourceType(candidate)
+		if findingType != "" && node.Type != "" && findingType != node.Type {
+			lastMismatchDetail = fmt.Sprintf(
+				"finding type '%s' diverges from graph type '%s' for resource '%s'",
+				findingType, node.Type, candidate,
+			)
+			continue
+		}
+		return "", "", candidate
 	}
 
-	// Extract type from finding address (e.g., "aws_s3_bucket" from "aws_s3_bucket.my_bucket")
-	findingType := extractResourceType(resource)
-	if findingType != "" && node.Type != "" && findingType != node.Type {
-		return ReasonResourceTypeMismatch, fmt.Sprintf(
-			"finding type '%s' diverges from graph type '%s' for resource '%s'",
-			findingType, node.Type, resource,
-		)
+	if lastMismatchDetail != "" {
+		return ReasonResourceTypeMismatch, lastMismatchDetail, ""
 	}
-
-	return "", ""
+	return ReasonResourceNotFound, fmt.Sprintf("resource '%s' does not exist in the Terraform plan", resource), ""
 }
 
 func checkDuplicate(f rules.Finding, seen map[string]bool) (DiscardReason, string) {

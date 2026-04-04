@@ -85,7 +85,7 @@ func (s *Scorer) Decompose(findings []rules.Finding, totalResources int) ScoreDe
 		compDecomp.BlendingNote = "Blended with reliability: (comp×2 + rel) / 3"
 	}
 
-	// Calculate Overall
+	// Overall: weighted average of category scores.
 	secScore := secDecomp.FinalScore
 	compScore := compDecomp.FinalScore
 	maintScore := maintDecomp.FinalScore
@@ -159,7 +159,7 @@ func (s *Scorer) decomposeCategory(findings []rules.Finding, totalResources int)
 		highWeight = 1.0
 	}
 	highEquivCount := weightedSum / highWeight
-	volumePenalty := math.Log2(1+highEquivCount) * 0.5
+	volumePenalty := math.Log2(1+highEquivCount) * 1.5
 
 	penalty := math.Max(densityPenalty, volumePenalty)
 	rawScore := 10.0 - math.Min(penalty, 10.0)
