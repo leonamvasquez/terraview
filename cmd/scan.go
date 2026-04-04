@@ -53,6 +53,7 @@ var (
 	noRedactFlag      bool   // --no-redact: disable sensitive data redaction
 	maxResourcesFlag  int    // --max-resources: override AI prompt resource limit (0=auto)
 	fixFlag           bool   // --fix: generate AI-powered HCL fix suggestions for CRITICAL/HIGH findings
+	maxFixFlag        int    // --max-fix: max number of findings to generate fixes for (default 5)
 	ignoreFile        string // --ignore-file: path to .terraview-ignore suppression file
 )
 
@@ -88,6 +89,8 @@ Examples:
   terraview scan checkov --format sarif        # SARIF for CI
   terraview scan checkov --strict              # HIGH returns exit code 2
   terraview scan checkov --findings ext.json   # import external findings
+  terraview scan checkov --fix                 # AI fix suggestions (top 5 findings)
+  terraview scan checkov --fix --max-fix 10   # AI fix suggestions (up to 10 findings)
 
 Terragrunt:
   terraview scan checkov --terragrunt           # use terragrunt for plan
@@ -108,6 +111,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
 	scanCmd.Flags().IntVar(&maxResourcesFlag, "max-resources", 0, "Max resources included in AI prompt context (0=auto by model)")
 	scanCmd.Flags().BoolVar(&fixFlag, "fix", false, "Generate AI-powered HCL fix suggestions for CRITICAL and HIGH findings")
+	scanCmd.Flags().IntVar(&maxFixFlag, "max-fix", 5, "Maximum number of findings to generate AI fixes for (used with --fix)")
 	scanCmd.Flags().StringVar(&ignoreFile, "ignore-file", "", "Path to suppression file (default: .terraview-ignore in project dir)")
 }
 
@@ -256,7 +260,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 	}
 
 	if fixFlag && len(result.Findings) > 0 {
-		generateFixes(rc, result.Findings, resources, rawPlan)
+		generateFixes(rc, result.Findings, resources, rawPlan, maxFixFlag)
 	}
 
 	return rc.resolvedPlan, exitCode, nil
@@ -264,7 +268,10 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 
 // generateFixes produces AI-powered HCL fix suggestions for CRITICAL and HIGH findings.
 // Capped at 5 fixes per run. Fails gracefully — never blocks the scan exit code.
-func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan) {
+func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan, maxFix int) {
+	if maxFix <= 0 {
+		maxFix = 5
+	}
 	// Filter to CRITICAL and HIGH only, deduplicate by rule+resource, deterministic order.
 	targets := make([]rules.Finding, 0, len(findings))
 	seen := map[string]bool{}
@@ -278,7 +285,7 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		}
 		seen[key] = true
 		targets = append(targets, f)
-		if len(targets) == 5 {
+		if len(targets) == maxFix {
 			break
 		}
 	}

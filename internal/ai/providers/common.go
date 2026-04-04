@@ -194,11 +194,12 @@ func retryAnalyze(
 }
 
 type llmFinding struct {
-	Severity    string `json:"severity"`
-	Category    string `json:"category"`
-	Resource    string `json:"resource"`
-	Message     string `json:"message"`
-	Remediation string `json:"remediation"`
+	Severity    string   `json:"severity"`
+	Category    string   `json:"category"`
+	Resource    string   `json:"resource"`
+	Message     string   `json:"message"`
+	Remediation string   `json:"remediation"`
+	References  []string `json:"references,omitempty"`
 }
 
 // llmResponse is the expected structured output from any LLM provider.
@@ -270,7 +271,8 @@ func buildSystemPrompt(prompts ai.Prompts) string {
       "category": "security|compliance|best-practice|cost|architecture|maintainability|reliability",
       "resource": "resource_address",
       "message": "description of the issue",
-      "remediation": "how to fix it"
+      "remediation": "how to fix it",
+      "references": ["CIS AWS X.Y.Z", "NIST SP 800-53 AC-2", "CVE-YYYY-NNNNN"]
     }
   ],
   "summary": "brief overall assessment"
@@ -281,6 +283,12 @@ IMPORTANT — "resource" field rules:
 - If a finding involves multiple resources, put the PRIMARY resource in "resource"
   and name the others in "message" (e.g. "…together with aws_iam_role.exec…").
 - Never join addresses with commas, "and", or semicolons in the "resource" field.
+
+IMPORTANT — "references" field rules:
+- Include only well-known, verifiable identifiers: CIS Benchmark controls (e.g. "CIS AWS 2.1.1"),
+  NIST SP 800-53 controls (e.g. "NIST AC-2"), or CVE IDs (e.g. "CVE-2021-44228").
+- Omit "references" entirely if you are not confident in the exact identifier.
+- Do NOT invent or guess identifiers.
 
 If there are no findings, return: {"findings": [], "summary": "No issues found."}
 Do NOT include any text outside the JSON object.
@@ -397,6 +405,7 @@ func parseResponse(response, providerName string) ([]rules.Finding, string, erro
 			Resource:    f.Resource,
 			Message:     f.Message,
 			Remediation: f.Remediation,
+			References:  f.References,
 			Source:      "ai/" + providerName,
 		})
 	}

@@ -563,6 +563,13 @@ func (w *Writer) renderMarkdown(result aggregator.ReviewResult) string {
 						sb.WriteString(fmt.Sprintf("   - *Remediation:* %s\n", f.Remediation))
 					}
 				}
+				if len(f.References) > 0 {
+					if br {
+						sb.WriteString(fmt.Sprintf("   - *Referências:* %s\n", strings.Join(f.References, ", ")))
+					} else {
+						sb.WriteString(fmt.Sprintf("   - *References:* %s\n", strings.Join(f.References, ", ")))
+					}
+				}
 				if br {
 					sb.WriteString(fmt.Sprintf("   - Regra: `%s` | Categoria: %s | Origem: %s\n\n", f.RuleID, f.Category, f.Source))
 				} else {
