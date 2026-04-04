@@ -43,11 +43,9 @@ Scanner and AI run in parallel by default.
 
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
-  apply       Scan and conditionally apply the plan
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
   drift       Detect and classify infrastructure drift
-  modules     Analyze module usage and health
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
@@ -70,7 +68,6 @@ Get started:
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation
   terraview drift                           # detect drift
-  terraview modules                         # module health check
   terraview provider list                   # manage AI providers`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -83,7 +80,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().StringVarP(&planFile, "plan", "p", "", "Path to terraform plan JSON (auto-generates if omitted)")
 	rootCmd.PersistentFlags().StringVarP(&outputDir, "output", "o", "", "Output directory for generated files")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif (default pretty)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif, html (default pretty)")
 	rootCmd.PersistentFlags().StringVar(&activeProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
 	rootCmd.PersistentFlags().StringVar(&activeModel, "model", "", "AI model to use")
 	rootCmd.PersistentFlags().BoolVar(&terragruntFlag, "terragrunt", false, "Use Terragrunt instead of Terraform for plan generation")
@@ -91,11 +88,9 @@ func init() {
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
-	rootCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
 	rootCmd.AddCommand(driftCmd)
-	rootCmd.AddCommand(modulesCmd)
 
 	// Provider management (includes install/uninstall as subcommands)
 	rootCmd.AddCommand(providerCmd)
@@ -189,23 +184,6 @@ Exemplos:
   terraview scan checkov --strict              # HIGH retorna código de saída 2
   terraview scan checkov --findings ext.json   # importar achados externos`
 
-	// apply
-	applyCmd.Short = "Escanear e aplicar condicionalmente o plano Terraform"
-	applyCmd.Long = `Executa um escaneamento completo do plano Terraform e aplica condicionalmente.
-
-O scanner é especificado como argumento posicional (mesmo padrão do scan).
-
-Comportamento:
-  - Bloqueia se achados CRÍTICOS forem detectados
-  - Exibe resumo do escaneamento e pede confirmação (modo interativo)
-  - Use --non-interactive para pipelines CI (bloqueia em CRÍTICO, aprova automaticamente caso contrário)
-
-Exemplos:
-  terraview apply checkov                     # escanear + aplicar interativo
-  terraview apply checkov --provider gemini   # escanear + IA + aplicar
-  terraview apply checkov --non-interactive   # modo CI
-  terraview apply checkov --all               # tudo habilitado + aplicar`
-
 	// diagram
 	diagramCmd.Short = "Gerar diagrama ASCII de infraestrutura"
 	diagramCmd.Long = `Gera um diagrama ASCII de infraestrutura a partir de um plano Terraform.
@@ -236,31 +214,6 @@ Exemplos:
   terraview drift --intelligence          # classificar + score de risco
   terraview drift --format compact
   terraview drift --format json`
-
-	// modules
-	modulesCmd.Short = "Analisar uso e saúde dos módulos Terraform"
-	modulesCmd.Long = `Analisa as chamadas de módulo no plano Terraform verificando versionamento,
-higiene de source e profundidade de aninhamento.
-
-Este comando é determinístico e não requer IA.
-Se --plan não for especificado, o terraview gera o plano automaticamente.
-
-Regras verificadas:
-  MOD_001  Módulo do registry sem constraint de versão
-  MOD_002  Source git usando branch em vez de tag
-  MOD_003  Source git sem nenhum ref
-  MOD_004  Aninhamento de módulo excede profundidade recomendada
-  MOD_005  Source do módulo usa HTTP em vez de HTTPS
-  MOD_006  Módulo do registry tem versão mais recente disponível (--check-registry)
-
-Exemplos:
-  terraview modules
-  terraview modules --plan plan.json
-  terraview modules --check-registry
-  terraview modules --format json`
-	translateFlags(modulesCmd, map[string]string{
-		"check-registry": "Verificar versões mais recentes no Terraform Registry (requer rede)",
-	})
 
 	// explain
 	explainCmd.Short = "Explicação em linguagem natural da infraestrutura com IA"
@@ -356,15 +309,6 @@ Exemplos:
 		"impact":   "Analisar impacto de dependências das mudanças",
 		"findings": "Importar achados externos de Checkov/tfsec/Trivy JSON",
 		"all":      "Habilitar tudo: explain + diagram + impact",
-	})
-	translateFlags(applyCmd, map[string]string{
-		"non-interactive": "Pular prompt de confirmação (para CI)",
-		"strict":          "Modo estrito: achados HIGH também retornam código de saída 2",
-		"explain":         "Gerar explicação em linguagem natural com IA",
-		"diagram":         "Exibir diagrama ASCII de infraestrutura",
-		"impact":          "Analisar impacto de dependências das mudanças",
-		"findings":        "Importar achados externos de Checkov/tfsec/Trivy JSON",
-		"all":             "Habilitar tudo: explain + diagram + impact",
 	})
 	translateFlags(driftCmd, map[string]string{
 		"intelligence": "Classificação avançada de drift e scoring de risco",
@@ -484,7 +428,7 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 // generatePlan creates the appropriate executor (terraform or terragrunt) and generates
 // the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
 // If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
-func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unparam // executor used by apply command
+func generatePlan() (string, terraformexec.PlanExecutor, error) {
 	var executor terraformexec.PlanExecutor
 	var err error
 

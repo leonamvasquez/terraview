@@ -1561,7 +1561,7 @@ func TestParsePlan_WithFixture(t *testing.T) {
 		t.Skip("fixture plan.json not available")
 	}
 
-	resources, graph, err := parsePlan(fixturePath)
+	_, resources, graph, err := parsePlan(fixturePath)
 	if err != nil {
 		t.Fatalf("parsePlan error: %v", err)
 	}
@@ -1574,7 +1574,7 @@ func TestParsePlan_WithFixture(t *testing.T) {
 }
 
 func TestParsePlan_InvalidPath(t *testing.T) {
-	_, _, err := parsePlan("/nonexistent/path/plan.json")
+	_, _, _, err := parsePlan("/nonexistent/path/plan.json")
 	if err == nil {
 		t.Error("expected error for invalid path")
 	}
@@ -1584,7 +1584,7 @@ func TestParsePlan_InvalidJSON(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "bad.json")
 	os.WriteFile(tmpFile, []byte("not json"), 0644)
 
-	_, _, err := parsePlan(tmpFile)
+	_, _, _, err := parsePlan(tmpFile)
 	if err == nil {
 		t.Error("expected error for invalid JSON")
 	}
@@ -1594,7 +1594,7 @@ func TestParsePlan_EmptyPlan(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "empty.json")
 	os.WriteFile(tmpFile, []byte(`{"format_version":"1.0","resource_changes":[]}`), 0644)
 
-	_, _, err := parsePlan(tmpFile)
+	_, _, _, err := parsePlan(tmpFile)
 	// Parser may reject empty plans — both outcomes are valid
 	if err != nil {
 		if !strings.Contains(err.Error(), "no resource") {
@@ -2552,126 +2552,6 @@ func TestRunSetup_Basic(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// confirmApply
-// ---------------------------------------------------------------------------
-
-func TestConfirmApply_Yes(t *testing.T) {
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	r, w, _ := os.Pipe()
-	w.WriteString("yes\n")
-	w.Close()
-	os.Stdin = r
-
-	// Capture stdout (confirmApply prints a prompt)
-	oldStdout := os.Stdout
-	rOut, wOut, _ := os.Pipe()
-	os.Stdout = wOut
-
-	result := confirmApply()
-
-	wOut.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(rOut)
-
-	if !result {
-		t.Error("expected confirmApply to return true for 'yes'")
-	}
-}
-
-func TestConfirmApply_No(t *testing.T) {
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	r, w, _ := os.Pipe()
-	w.WriteString("no\n")
-	w.Close()
-	os.Stdin = r
-
-	oldStdout := os.Stdout
-	rOut, wOut, _ := os.Pipe()
-	os.Stdout = wOut
-
-	result := confirmApply()
-
-	wOut.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(rOut)
-
-	if result {
-		t.Error("expected confirmApply to return false for 'no'")
-	}
-}
-
-func TestConfirmApply_ShortY(t *testing.T) {
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	r, w, _ := os.Pipe()
-	w.WriteString("y\n")
-	w.Close()
-	os.Stdin = r
-
-	oldStdout := os.Stdout
-	rOut, wOut, _ := os.Pipe()
-	os.Stdout = wOut
-
-	result := confirmApply()
-
-	wOut.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(rOut)
-
-	if !result {
-		t.Error("expected confirmApply to return true for 'y'")
-	}
-}
-
-func TestConfirmApply_EOF(t *testing.T) {
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	r, w, _ := os.Pipe()
-	w.Close() // immediate EOF
-	os.Stdin = r
-
-	oldStdout := os.Stdout
-	rOut, wOut, _ := os.Pipe()
-	os.Stdout = wOut
-
-	result := confirmApply()
-
-	wOut.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(rOut)
-
-	if result {
-		t.Error("expected confirmApply to return false on EOF")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// runApply — error paths
-// ---------------------------------------------------------------------------
-
-func TestRunApply_StaticNoScanner(t *testing.T) {
-	oldStatic, oldWorkDir := staticOnly, workDir
-	defer func() { staticOnly, workDir = oldStatic, oldWorkDir }()
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(dir, "main.tf"), []byte(""), 0644)
-	workDir = dir
-	staticOnly = true
-
-	err := runApply(nil, nil)
-	if err == nil {
-		t.Fatal("expected error when --static and no scanner")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // runExplainCmd — error paths
 // ---------------------------------------------------------------------------
 
@@ -3372,48 +3252,6 @@ func TestRunScan_NoScannerNoProvider(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runApply — allFlag sets features
-// ---------------------------------------------------------------------------
-
-func TestRunApply_AllFlagSetsFeatures(t *testing.T) {
-	origAll := allFlag
-	origExplain := explainFlag
-	origDiagram := diagramFlag
-	origImpact := impactFlag
-	origStatic := staticOnly
-	origWork := workDir
-	origHome := os.Getenv("HOME")
-
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer func() {
-		allFlag = origAll
-		explainFlag = origExplain
-		diagramFlag = origDiagram
-		impactFlag = origImpact
-		staticOnly = origStatic
-		workDir = origWork
-		os.Setenv("HOME", origHome)
-	}()
-
-	workDir = tmpDir
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
-
-	allFlag = true
-	staticOnly = true
-
-	// Should error because no scanner + static
-	err := runApply(nil, nil)
-	if err == nil {
-		t.Fatal("expected error for static + no scanner")
-	}
-	if !explainFlag || !diagramFlag || !impactFlag {
-		t.Error("expected allFlag to enable explain, diagram, impact")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // generatePlan — terragrunt detection
 // ---------------------------------------------------------------------------
 
@@ -3723,71 +3561,6 @@ func TestRunScan_FindingsFileFlag(t *testing.T) {
 	// With findingsFile set, --static + no scanner should NOT error
 	err := runScan(nil, nil)
 	_ = err
-}
-
-// ---------------------------------------------------------------------------
-// runApply — positional scanner arg + static
-// ---------------------------------------------------------------------------
-
-func TestRunApply_ScannerFromArgs(t *testing.T) {
-	origAll := allFlag
-	origStatic := staticOnly
-	origWork := workDir
-	origHome := os.Getenv("HOME")
-
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer func() {
-		allFlag = origAll
-		staticOnly = origStatic
-		workDir = origWork
-		os.Setenv("HOME", origHome)
-	}()
-
-	workDir = tmpDir
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
-
-	allFlag = false
-	staticOnly = true
-
-	// Pass scanner as positional arg — covers args[0] branch
-	err := runApply(nil, []string{"tfsec"})
-	if err == nil {
-		t.Log("runApply succeeded unexpectedly")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// runApply — no scanner + no static (AI mode check)
-// ---------------------------------------------------------------------------
-
-func TestRunApply_NoScannerNoStatic(t *testing.T) {
-	origAll := allFlag
-	origStatic := staticOnly
-	origWork := workDir
-	origHome := os.Getenv("HOME")
-
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer func() {
-		allFlag = origAll
-		staticOnly = origStatic
-		workDir = origWork
-		os.Setenv("HOME", origHome)
-	}()
-
-	workDir = tmpDir
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
-
-	allFlag = false
-	staticOnly = false
-
-	err := runApply(nil, nil)
-	if err == nil {
-		t.Log("runApply succeeded unexpectedly")
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -4947,74 +4720,6 @@ func TestRunModelSelector_WithCurrentProvider(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runApply — allFlag sets features
-// ---------------------------------------------------------------------------
-
-func TestRunApply_AllFlagSetsAllFeatures(t *testing.T) {
-	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-
-	oldAll := allFlag
-	oldWorkDir := workDir
-	oldExplain := explainFlag
-	oldDiagram := diagramFlag
-	oldImpact := impactFlag
-	defer func() {
-		allFlag = oldAll
-		workDir = oldWorkDir
-		explainFlag = oldExplain
-		diagramFlag = oldDiagram
-		impactFlag = oldImpact
-	}()
-
-	allFlag = true
-	explainFlag = false
-	diagramFlag = false
-	impactFlag = false
-	workDir = tmpDir
-
-	_ = runApply(nil, nil)
-
-	if !explainFlag {
-		t.Error("expected explainFlag to be set by --all")
-	}
-	if !diagramFlag {
-		t.Error("expected diagramFlag to be set by --all")
-	}
-	if !impactFlag {
-		t.Error("expected impactFlag to be set by --all")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// runApply — scanner auto-select (no default)
-// ---------------------------------------------------------------------------
-
-func TestRunApply_ScannerAutoSelect(t *testing.T) {
-	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
-
-	oldWorkDir := workDir
-	oldStatic := staticOnly
-	oldAll := allFlag
-	defer func() {
-		workDir = oldWorkDir
-		staticOnly = oldStatic
-		allFlag = oldAll
-	}()
-
-	workDir = tmpDir
-	staticOnly = false
-	allFlag = false
-
-	err := runApply(nil, nil)
-	if err == nil {
-		t.Error("expected error (no terraform), got nil")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // runExplainCmd — config error on invalid dir
 // ---------------------------------------------------------------------------
 
@@ -5478,30 +5183,6 @@ func TestRunScan_ConfigLoadError(t *testing.T) {
 	staticOnly = false
 
 	err := runScan(nil, nil)
-	if err == nil {
-		t.Error("expected config error for nonexistent dir")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// runApply — config load error path
-// ---------------------------------------------------------------------------
-
-func TestRunApply_ConfigLoadError(t *testing.T) {
-	oldWorkDir := workDir
-	oldStatic := staticOnly
-	oldAll := allFlag
-	defer func() {
-		workDir = oldWorkDir
-		staticOnly = oldStatic
-		allFlag = oldAll
-	}()
-
-	workDir = "/nonexistent/dir/no/config"
-	staticOnly = false
-	allFlag = false
-
-	err := runApply(nil, nil)
 	if err == nil {
 		t.Error("expected config error for nonexistent dir")
 	}

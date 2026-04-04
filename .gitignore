@@ -2,6 +2,7 @@
 build/
 dist/
 site/
+main
 *.exe
 *.exe~
 *.dll
@@ -37,6 +38,7 @@ tfplan
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~

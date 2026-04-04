@@ -16,6 +16,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aggregator"
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
+	"github.com/leonamvasquez/terraview/internal/fix"
 	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
@@ -33,6 +34,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/sanitizer"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/scoring"
+	"github.com/leonamvasquez/terraview/internal/suppression"
 	"github.com/leonamvasquez/terraview/internal/topology"
 	"github.com/leonamvasquez/terraview/internal/util"
 	"github.com/leonamvasquez/terraview/internal/validator"
@@ -49,6 +51,9 @@ var (
 	findingsFile      string
 	allFlag           bool
 	noRedactFlag      bool // --no-redact: disable sensitive data redaction
+	maxResourcesFlag  int  // --max-resources: override AI prompt resource limit (0=auto)
+	fixFlag           bool   // --fix: generate AI-powered HCL fix suggestions for CRITICAL/HIGH findings
+	ignoreFile        string // --ignore-file: path to .terraview-ignore suppression file
 )
 
 var scanCmd = &cobra.Command{
@@ -101,6 +106,9 @@ func init() {
 	scanCmd.Flags().BoolVar(&explainScoresFlag, "explain-scores", false, "Show detailed score decomposition for audit")
 	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
 	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
+	scanCmd.Flags().IntVar(&maxResourcesFlag, "max-resources", 0, "Max resources included in AI prompt context (0=auto by model)")
+	scanCmd.Flags().BoolVar(&fixFlag, "fix", false, "Generate AI-powered HCL fix suggestions for CRITICAL and HIGH findings")
+	scanCmd.Flags().StringVar(&ignoreFile, "ignore-file", "", "Path to suppression file (default: .terraview-ignore in project dir)")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -188,6 +196,9 @@ type reviewConfig struct {
 	effectiveAI     bool
 	effectiveFormat string
 
+	// Suppression
+	ignoreFile string
+
 	// AI settings
 	aiProvider     string
 	aiModel        string
@@ -222,7 +233,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 		return "", 0, err
 	}
 
-	resources, topoGraph, err := parsePlan(rc.resolvedPlan)
+	rawPlan, resources, topoGraph, err := parsePlan(rc.resolvedPlan)
 	if err != nil {
 		return rc.resolvedPlan, 0, err
 	}
@@ -242,7 +253,149 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 		return rc.resolvedPlan, 0, err
 	}
 
+	if fixFlag && len(result.Findings) > 0 {
+		generateFixes(rc, result.Findings, resources, rawPlan)
+	}
+
 	return rc.resolvedPlan, exitCode, nil
+}
+
+// generateFixes produces AI-powered HCL fix suggestions for CRITICAL and HIGH findings.
+// Capped at 5 fixes per run. Fails gracefully — never blocks the scan exit code.
+func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan) {
+	// Filter to CRITICAL and HIGH only, deduplicate by rule+resource, deterministic order.
+	var targets []rules.Finding
+	seen := map[string]bool{}
+	for _, f := range findings {
+		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {
+			continue
+		}
+		key := f.RuleID + "|" + f.Resource
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, f)
+		if len(targets) == 5 {
+			break
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	// Build resource lookup map and plan index for fix context.
+	resourceMap := make(map[string]parser.NormalizedResource, len(resources))
+	for _, r := range resources {
+		resourceMap[r.Address] = r
+	}
+	planIndex := fix.BuildIndex(rawPlan, resources)
+
+	// Require an AI provider.
+	providerName := rc.aiProvider
+	if providerName == "" {
+		fmt.Printf("\n%s --fix requires an AI provider. Configure one with: terraview provider list\n", output.Prefix())
+		return
+	}
+
+	const perFindingTimeout = 45 // seconds per individual fix call
+
+	providerCfg := ai.ProviderConfig{
+		Model:       rc.aiModel,
+		APIKey:      rc.aiAPIKey,
+		BaseURL:     rc.aiURL,
+		Temperature: 0.1,
+		MaxTokens:   1024,
+		MaxRetries:  1,
+		TimeoutSecs: perFindingTimeout,
+	}
+	if rc.aiURL != "" && providerName != "ollama" {
+		providerCfg.BaseURL = ""
+	}
+
+	// Global context covers all findings; each finding also has its own timeout.
+	globalCtx, cancel := context.WithTimeout(context.Background(), time.Duration(perFindingTimeout*len(targets)+30)*time.Second)
+	defer cancel()
+
+	provider, err := ai.NewProvider(globalCtx, providerName, providerCfg)
+	if err != nil {
+		fmt.Printf("\n%s fix: AI provider unavailable: %v\n", output.Prefix(), err)
+		return
+	}
+
+	suggester := fix.NewSuggester(provider)
+
+	fmt.Printf("\n%s Generating fix suggestions for %d finding(s)...\n", output.Prefix(), len(targets))
+
+	for _, f := range targets {
+		res, ok := resourceMap[f.Resource]
+		resourceType := f.Resource
+		if idx := strings.Index(f.Resource, "."); idx >= 0 {
+			resourceType = f.Resource[:idx]
+		}
+		var resourceConfig map[string]interface{}
+		if ok {
+			resourceType = res.Type
+			resourceConfig = res.Values
+		}
+
+		// Per-finding timeout — prevents one slow finding from starving others.
+		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingTimeout)*time.Second)
+
+		req := fix.FixRequest{
+			Finding: fix.FixFinding{
+				RuleID:   f.RuleID,
+				Severity: f.Severity,
+				Message:  f.Message,
+				Category: f.Category,
+			},
+			ResourceAddr:   f.Resource,
+			ResourceType:   resourceType,
+			ResourceConfig: resourceConfig,
+			PlanIndex:      planIndex,
+		}
+
+		suggestion, err := suggester.Suggest(findingCtx, req)
+		findingCancel()
+		if err != nil {
+			fmt.Printf("  %s %s — could not generate fix: %v\n", f.RuleID, f.Resource, err)
+			continue
+		}
+
+		warnings := fix.ValidateFix(suggestion)
+		printFixSuggestion(suggestion, f.Severity, warnings)
+	}
+}
+
+// printFixSuggestion renders a single fix suggestion to stdout, including any
+// validation warnings that indicate the fix may need manual review.
+func printFixSuggestion(s *fix.FixSuggestion, severity string, warnings []fix.ValidationWarning) {
+	fmt.Printf("\n  ▸ %s on %s [%s]\n", s.RuleID, s.Resource, severity)
+	if s.Explanation != "" {
+		fmt.Printf("    %s\n", s.Explanation)
+	}
+	fmt.Printf("    Effort: %s\n", s.Effort)
+
+	if len(warnings) > 0 {
+		fmt.Println()
+		for _, w := range warnings {
+			fmt.Printf("    ⚠  %s\n", w.Message)
+		}
+	}
+
+	if s.HCL != "" {
+		fmt.Println()
+		for _, line := range strings.Split(s.HCL, "\n") {
+			fmt.Printf("    %s\n", line)
+		}
+	}
+	if len(s.Prerequisites) > 0 {
+		fmt.Println()
+		fmt.Println("    Prerequisites:")
+		for _, p := range s.Prerequisites {
+			fmt.Printf("      • %s\n", p)
+		}
+	}
 }
 
 // resolveReviewConfig loads config, resolves the plan file, and determines effective settings.
@@ -300,7 +453,17 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 
 	resolvedOutput := outputDir
 	if resolvedOutput == "" {
-		resolvedOutput = workDir
+		if effectiveFormat == output.FormatHTML {
+			resolvedOutput = "report"
+		} else {
+			resolvedOutput = workDir
+		}
+	}
+
+	// Resolve suppress file: flag > default in workDir
+	resolvedIgnoreFile := ignoreFile
+	if resolvedIgnoreFile == "" {
+		resolvedIgnoreFile = filepath.Join(workDir, suppression.DefaultIgnoreFile)
 	}
 
 	return reviewConfig{
@@ -310,31 +473,41 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 		resolvedOutput:  resolvedOutput,
 		effectiveAI:     effectiveAI,
 		effectiveFormat: effectiveFormat,
+		ignoreFile:      resolvedIgnoreFile,
 		aiProvider:      effectiveProvider,
 		aiModel:         effectiveModel,
 		aiURL:           effectiveURL,
 		aiTimeout:       cfg.LLM.TimeoutSeconds,
 		aiTemperature:   cfg.LLM.Temperature,
 		aiAPIKey:        cfg.LLM.APIKey,
-		aiMaxResources:  cfg.LLM.MaxResources,
+		aiMaxResources:  resolveMaxResources(maxResourcesFlag, cfg.LLM.MaxResources),
 		aiNumCtx:        cfg.LLM.Ollama.NumCtx,
 	}, nil
 }
 
-// parsePlan reads and normalizes the Terraform plan, returning resources and the topology graph.
-func parsePlan(planPath string) ([]parser.NormalizedResource, *topology.Graph, error) {
+// resolveMaxResources returns the effective max-resources value: flag takes priority over config.
+func resolveMaxResources(flagVal, cfgVal int) int {
+	if flagVal > 0 {
+		return flagVal
+	}
+	return cfgVal
+}
+
+// parsePlan reads and normalizes the Terraform plan, returning the raw plan,
+// normalized resources, and the topology graph.
+func parsePlan(planPath string) (*parser.TerraformPlan, []parser.NormalizedResource, *topology.Graph, error) {
 	logVerbose("Parsing plan: %s", planPath)
 	p := parser.NewParser()
 	plan, err := p.ParseFile(planPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse error: %w", err)
+		return nil, nil, nil, fmt.Errorf("parse error: %w", err)
 	}
 
 	resources := p.NormalizeResources(plan)
 	logVerbose("Found %d resource changes", len(resources))
 
 	topoGraph := topology.BuildGraph(resources)
-	return resources, topoGraph, nil
+	return plan, resources, topoGraph, nil
 }
 
 // runScanners executes the security scanner and AI context analysis in parallel.
@@ -602,6 +775,25 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		logVerbose("Filtered %d disabled rules from findings", len(rc.cfg.Rules.DisabledRules))
 	}
 
+	// Apply .terraview-ignore suppressions
+	if ignoreData, err := suppression.Load(rc.ignoreFile); err != nil {
+		fmt.Fprintf(os.Stderr, "%s ⚠ Could not load ignore file: %v\n", output.Prefix(), err)
+	} else if len(ignoreData.Suppressions) > 0 {
+		filtered, suppressedFindings := suppression.Apply(result.Findings, ignoreData)
+		result.Findings = filtered
+		if len(suppressedFindings) > 0 {
+			fmt.Fprintf(os.Stderr, "%s ⊘ Suppressed %d finding(s) via %s\n",
+				output.Prefix(), len(suppressedFindings), rc.ignoreFile)
+			for _, s := range suppressedFindings {
+				reason := s.Reason
+				if reason == "" {
+					reason = "no reason provided"
+				}
+				logVerbose("  ⊘ [%s] %s: %s", s.Finding.RuleID, s.Finding.Resource, reason)
+			}
+		}
+	}
+
 	// Meta-analysis: unified cross-tool scoring
 	if len(result.Findings) > 0 {
 		metaAnalyzer := meta.NewAnalyzer()
@@ -641,21 +833,42 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		ExplainScores: explainScoresFlag,
 	})
 
-	jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
-	if err := writer.WriteJSON(result, jsonPath); err != nil {
-		return 0, fmt.Errorf("failed to write JSON: %w", err)
-	}
-	logVerbose("Written: %s", jsonPath)
+	switch rc.effectiveFormat {
+	case output.FormatHTML:
+		if err := os.MkdirAll(rc.resolvedOutput, 0755); err != nil {
+			return 0, fmt.Errorf("failed to create output directory: %w", err)
+		}
+		htmlPath := filepath.Join(rc.resolvedOutput, "review.html")
+		if err := writer.WriteHTML(result, htmlPath); err != nil {
+			return 0, fmt.Errorf("failed to write HTML: %w", err)
+		}
+		fmt.Printf("%s HTML report written: %s\n", output.Prefix(), htmlPath)
 
-	if rc.effectiveFormat == output.FormatSARIF {
+	case output.FormatJSON:
+		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
+		if err := writer.WriteJSON(result, jsonPath); err != nil {
+			return 0, fmt.Errorf("failed to write JSON: %w", err)
+		}
+		logVerbose("Written: %s", jsonPath)
+
+	case output.FormatSARIF:
+		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
+		if err := writer.WriteJSON(result, jsonPath); err != nil {
+			return 0, fmt.Errorf("failed to write JSON: %w", err)
+		}
+		logVerbose("Written: %s", jsonPath)
 		sarifPath := filepath.Join(rc.resolvedOutput, "review.sarif.json")
 		if err := writer.WriteSARIF(result, sarifPath); err != nil {
 			return 0, fmt.Errorf("failed to write SARIF: %w", err)
 		}
 		logVerbose("Written: %s", sarifPath)
-	}
 
-	if rc.effectiveFormat != output.FormatJSON && rc.effectiveFormat != output.FormatSARIF {
+	default: // pretty, compact
+		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
+		if err := writer.WriteJSON(result, jsonPath); err != nil {
+			return 0, fmt.Errorf("failed to write JSON: %w", err)
+		}
+		logVerbose("Written: %s", jsonPath)
 		mdPath := filepath.Join(rc.resolvedOutput, "review.md")
 		if err := writer.WriteMarkdown(result, mdPath); err != nil {
 			return 0, fmt.Errorf("failed to write Markdown: %w", err)
@@ -788,7 +1001,7 @@ func runCodeContextAnalysis(
 		}
 	}
 
-	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt)
+	analyzer := contextanalysis.NewAnalyzer(provider, lang, contextPrompt, maxResources)
 
 	// ── Sensitive data sanitization ─────────────────────────────────
 	// Redact sensitive values (passwords, tokens, ARNs, PEM, etc.)
@@ -884,6 +1097,9 @@ func runCodeContextAnalysis(
 		}
 	}
 
+	if result.ExcludedNoOp > 0 {
+		logVerbose("AI context: %d no-op/read resources excluded from analysis", result.ExcludedNoOp)
+	}
 	logVerbose("AI context (%s/%s): %d findings", providerName, model, len(result.Findings))
 	return result.Findings, result.Summary, nil
 }
