@@ -150,6 +150,8 @@ func (s *Server) handleToolsCall(req *Request) Response {
 		result, err = handleCache(params.Arguments, s.logger)
 	case "terraview_scanners":
 		result, err = handleScanners(params.Arguments, s.logger)
+	case "terraview_fix_suggest":
+		result, err = handleFixSuggest(params.Arguments, s.logger)
 	case "terraview_version":
 		result, err = handleVersion(params.Arguments, s.logger, s.version)
 	default:

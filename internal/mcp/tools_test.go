@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestAllTools_Returns11(t *testing.T) {
+func TestAllTools_Returns12(t *testing.T) {
 	tools := AllTools()
-	if len(tools) != 11 {
-		t.Fatalf("len(AllTools()) = %d, want 11", len(tools))
+	if len(tools) != 12 {
+		t.Fatalf("len(AllTools()) = %d, want 12", len(tools))
 	}
 }
 
@@ -36,6 +36,7 @@ func TestAllTools_ExpectedNames(t *testing.T) {
 		"terraview_cache":           false,
 		"terraview_scanners":        false,
 		"terraview_version":         false,
+		"terraview_fix_suggest":     false,
 	}
 
 	for _, tool := range AllTools() {

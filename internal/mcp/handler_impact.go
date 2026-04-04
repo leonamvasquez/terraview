@@ -16,7 +16,7 @@ func handleImpact(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult,
 		}
 	}
 
-	resources, graph, err := resolvePlan(args, logger)
+	_, resources, graph, err := resolvePlan(args, logger)
 	if err != nil {
 		return ToolsCallResult{}, err
 	}

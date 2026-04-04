@@ -16,7 +16,7 @@ func handleDiagram(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult
 		}
 	}
 
-	resources, topoGraph, err := resolvePlan(args, logger)
+	_, resources, topoGraph, err := resolvePlan(args, logger)
 	if err != nil {
 		return ToolsCallResult{}, err
 	}

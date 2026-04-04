@@ -16,10 +16,11 @@ type commonArgs struct {
 	Plan string `json:"plan"`
 }
 
-// resolvePlan resolves the plan path and returns the parsed resources and topology graph.
-// It requires a pre-generated plan JSON — auto-generation (terraform init/plan) is not
-// supported in MCP mode to avoid side effects during agent calls.
-func resolvePlan(args commonArgs, logger *log.Logger) ([]parser.NormalizedResource, *topology.Graph, error) {
+// resolvePlan resolves the plan path and returns the raw plan, normalized
+// resources, and topology graph. It requires a pre-generated plan JSON —
+// auto-generation (terraform init/plan) is not supported in MCP mode to avoid
+// side effects during agent calls.
+func resolvePlan(args commonArgs, logger *log.Logger) (*parser.TerraformPlan, []parser.NormalizedResource, *topology.Graph, error) {
 	planPath := args.Plan
 	dir := args.Dir
 	if dir == "" {
@@ -40,26 +41,26 @@ func resolvePlan(args commonArgs, logger *log.Logger) ([]parser.NormalizedResour
 	}
 
 	if planPath == "" {
-		return nil, nil, fmt.Errorf("no plan file specified and no plan.json found in %s — generate one with: terraform show -json > plan.json", dir)
+		return nil, nil, nil, fmt.Errorf("no plan file specified and no plan.json found in %s — generate one with: terraform show -json > plan.json", dir)
 	}
 
 	if _, err := os.Stat(planPath); err != nil {
-		return nil, nil, fmt.Errorf("plan file not found: %s", planPath)
+		return nil, nil, nil, fmt.Errorf("plan file not found: %s", planPath)
 	}
 
 	p := parser.NewParser()
 	plan, err := p.ParseFile(planPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse error: %w", err)
+		return nil, nil, nil, fmt.Errorf("parse error: %w", err)
 	}
 
 	resources := p.NormalizeResources(plan)
 	if len(resources) == 0 {
-		return nil, nil, fmt.Errorf("no resources found in plan %s", planPath)
+		return nil, nil, nil, fmt.Errorf("no resources found in plan %s", planPath)
 	}
 
 	graph := topology.BuildGraph(resources)
-	return resources, graph, nil
+	return plan, resources, graph, nil
 }
 
 // textResult creates a successful ToolsCallResult with a single text block.

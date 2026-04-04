@@ -43,7 +43,7 @@ func handleScan(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult, e
 	logger.Printf("[mcp:scan] arguments received: dir=%q scanner=%q plan=%q static=%v",
 		args.Dir, args.Scanner, args.Plan, args.Static)
 
-	resources, topoGraph, err := resolvePlan(args.commonArgs, logger)
+	_, resources, topoGraph, err := resolvePlan(args.commonArgs, logger)
 	if err != nil {
 		return ToolsCallResult{}, err
 	}
@@ -345,7 +345,7 @@ func runMCPContextAnalysis(
 		}
 	}
 
-	analyzer := contextanalysis.NewAnalyzer(provider, "", contextPrompt)
+	analyzer := contextanalysis.NewAnalyzer(provider, "", contextPrompt, maxResources)
 
 	result, err := analyzer.Analyze(ctx, resources, graph)
 	if err != nil {

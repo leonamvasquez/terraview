@@ -586,7 +586,7 @@ func TestHandleHistoryCompare_NotEnoughRecords(t *testing.T) {
 
 func TestAllTools_Count(t *testing.T) {
 	tools := AllTools()
-	expected := 11 // 4 original + 7 new
+	expected := 12 // 4 original + 7 existing + 1 fix_suggest
 	if len(tools) != expected {
 		t.Errorf("AllTools() returned %d tools, want %d", len(tools), expected)
 	}

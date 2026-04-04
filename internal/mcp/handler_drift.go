@@ -27,7 +27,7 @@ func handleDrift(rawArgs json.RawMessage, logger *log.Logger) (ToolsCallResult, 
 		}
 	}
 
-	resources, _, err := resolvePlan(args.commonArgs, logger)
+	_, resources, _, err := resolvePlan(args.commonArgs, logger)
 	if err != nil {
 		return ToolsCallResult{}, err
 	}

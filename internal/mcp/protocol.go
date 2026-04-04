@@ -76,11 +76,27 @@ type ToolsListResult struct {
 	Tools []ToolDef `json:"tools"`
 }
 
+// ToolAnnotations provides behavioral hints about a tool (MCP 2025-03+).
+// Clients use these to decide how to present or gate tool calls.
+type ToolAnnotations struct {
+	// ReadOnlyHint indicates the tool does not modify any state.
+	ReadOnlyHint bool `json:"readOnlyHint,omitempty"`
+	// DestructiveHint indicates the tool may irreversibly delete or overwrite data.
+	DestructiveHint bool `json:"destructiveHint,omitempty"`
+	// IdempotentHint indicates calling the tool multiple times with the same args
+	// produces the same result without additional side effects.
+	IdempotentHint bool `json:"idempotentHint,omitempty"`
+	// OpenWorldHint indicates the tool may interact with external systems (AI APIs,
+	// cloud providers, package registries).
+	OpenWorldHint bool `json:"openWorldHint,omitempty"`
+}
+
 // ToolDef defines a single MCP tool.
 type ToolDef struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	InputSchema json.RawMessage  `json:"inputSchema"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
 }
 
 // ToolsCallParams contains the tools/call request parameters.
