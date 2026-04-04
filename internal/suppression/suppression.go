@@ -28,6 +28,7 @@ package suppression
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -58,7 +59,9 @@ func (e Entry) matches(f rules.Finding) bool {
 	if e.Resource != "" && e.Resource != f.Resource {
 		return false
 	}
-	if e.Source != "" && e.Source != f.Source {
+	// Source matching: exact match OR suffix match so "checkov" matches both
+	// "scanner:checkov" (native scan) and "external:checkov" (--findings import).
+	if e.Source != "" && e.Source != f.Source && !strings.HasSuffix(f.Source, ":"+e.Source) {
 		return false
 	}
 	// At least one field must be set to avoid a wildcard entry suppressing everything.

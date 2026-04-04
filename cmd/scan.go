@@ -125,8 +125,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		impactFlag = true
 	}
 
-	// If no scanner specified, try auto-select
-	if scannerName == "" {
+	// If no scanner specified, try auto-select.
+	// Skip auto-selection when --findings is already provided with --static:
+	// the caller explicitly chose "import external findings, no AI, no scanner".
+	if scannerName == "" && !(staticOnly && findingsFile != "") {
 		// Load config to check for default scanner
 		cfg, err := config.Load(workDir)
 		if err != nil {

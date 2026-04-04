@@ -1,0 +1,44 @@
+{
+  "check_type": "terraform_plan",
+  "results": {
+    "failed_checks": [
+      {
+        "check_id": "CKV_AWS_158",
+        "check_name": "Ensure that CloudWatch Log Group is encrypted by KMS",
+        "check_type": "terraform_plan",
+        "check_result": {"result": "failed"},
+        "resource_address": "aws_cloudwatch_log_group.ecs",
+        "severity": "HIGH",
+        "guideline": "https://docs.bridgecrew.io/docs/ensure-cloudwatch-log-group-is-encrypted-by-kms"
+      },
+      {
+        "check_id": "CKV_AWS_338",
+        "check_name": "Ensure CloudWatch log groups retains logs for at least 1 year",
+        "check_type": "terraform_plan",
+        "check_result": {"result": "failed"},
+        "resource_address": "aws_cloudwatch_log_group.ecs",
+        "severity": "HIGH",
+        "guideline": "https://docs.bridgecrew.io/docs/ensure-cloudwatch-log-group-retains-logs-for-1-year"
+      },
+      {
+        "check_id": "CKV_AWS_51",
+        "check_name": "Ensure ECR image scanning on push is enabled",
+        "check_type": "terraform_plan",
+        "check_result": {"result": "failed"},
+        "resource_address": "aws_ecr_repository.app",
+        "severity": "HIGH",
+        "guideline": "https://docs.bridgecrew.io/docs/ensure-ecr-image-scanning-on-push-is-enabled"
+      },
+      {
+        "check_id": "CKV_AWS_136",
+        "check_name": "Ensure that ECR repositories are encrypted using KMS",
+        "check_type": "terraform_plan",
+        "check_result": {"result": "failed"},
+        "resource_address": "aws_ecr_repository.app",
+        "severity": "HIGH",
+        "guideline": "https://docs.bridgecrew.io/docs/ensure-ecr-repositories-are-encrypted-using-kms"
+      }
+    ],
+    "passed_checks": []
+  }
+}

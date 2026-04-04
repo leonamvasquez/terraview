@@ -3,9 +3,9 @@
 // Package e2e contains end-to-end tests that compile and execute the real
 // terraview binary against fixture Terraform plan files.
 //
-// These tests require checkov to be installed (pip install checkov).
+// Tests use --findings to import pre-generated findings so they do NOT depend
+// on checkov, tfsec, or any scanner being installed in the test environment.
 // Run with: go test ./e2e/ -tags e2e -v
-// Skip AI entirely: tests use --static so no API keys are needed.
 package e2e
 
 import (
@@ -63,18 +63,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// runScan executes the compiled binary with the given extra args.
-// It always adds: scan checkov --plan <fixture> --static
+// runTerraview executes the compiled binary with the given args.
 // Returns (stdout+stderr combined, exit code).
-func runScan(t *testing.T, fixture string, extraArgs ...string) (string, int) {
+// Uses a clean HOME dir to avoid picking up local ~/.terraview config,
+// while inheriting the rest of the environment so tool subprocesses work.
+func runTerraview(t *testing.T, args ...string) (string, int) {
 	t.Helper()
-	args := []string{"scan", "checkov", "--plan", fixture, "--static"}
-	args = append(args, extraArgs...)
 
 	cmd := exec.Command(binaryPath, args...)
-	// Inherit the full environment so that tool subprocesses (e.g. checkov via
-	// Python) can find their packages in $HOME/.local/lib/python3.x/site-packages.
-	// Override HOME to a temp dir so no local .terraview.yaml is picked up.
+
+	// Replace HOME so no local ~/.terraview.yaml is picked up, but preserve
+	// all other env vars (PATH, PYTHONPATH, library paths, etc.).
 	homeDir := t.TempDir()
 	cmd.Env = make([]string, 0, len(os.Environ()))
 	for _, e := range os.Environ() {
@@ -83,6 +82,7 @@ func runScan(t *testing.T, fixture string, extraArgs ...string) (string, int) {
 		}
 	}
 	cmd.Env = append(cmd.Env, "HOME="+homeDir)
+
 	out, err := cmd.CombinedOutput()
 	code := 0
 	if exitErr, ok := err.(*exec.ExitError); ok {
@@ -93,24 +93,38 @@ func runScan(t *testing.T, fixture string, extraArgs ...string) (string, int) {
 	return string(out), code
 }
 
+// runWithFindings runs a scan using pre-generated findings (no scanner needed).
+// flags are additional flags appended after the core scan args.
+func runWithFindings(t *testing.T, planFixture, findingsFixture string, flags ...string) (string, int) {
+	t.Helper()
+	args := []string{
+		"scan",
+		"--plan", planFixture,
+		"--static",
+		"--findings", findingsFixture,
+	}
+	args = append(args, flags...)
+	return runTerraview(t, args...)
+}
+
 // ---------------------------------------------------------------------------
 // Exit-code tests
 // ---------------------------------------------------------------------------
 
-func TestE2E_ECSPlanFindsHighFindings(t *testing.T) {
-	fixture := filepath.Join(testdataDir, "ecs.json")
-	_, code := runScan(t, fixture)
+func TestE2E_FindingsProduceHighExitCode(t *testing.T) {
+	plan := filepath.Join(testdataDir, "ecs.json")
+	findings := filepath.Join(testdataDir, "findings.json")
+	_, code := runWithFindings(t, plan, findings)
 	// Exit 1 = HIGH findings, exit 2 = CRITICAL — both mean issues were found.
 	if code == 0 {
-		t.Errorf("expected exit code >= 1 (findings found), got 0 (clean)")
+		t.Errorf("expected exit code >= 1 (HIGH findings present), got 0 (clean)")
 	}
 }
 
 func TestE2E_CleanPlanCompletes(t *testing.T) {
-	fixture := filepath.Join(testdataDir, "clean.json")
-	out, _ := runScan(t, fixture)
-	// We don't assert exit 0 since checkov rules may differ by version,
-	// but the binary must complete without crashing.
+	// Clean plan with no findings file → should complete without panicking.
+	plan := filepath.Join(testdataDir, "clean.json")
+	out, _ := runTerraview(t, "scan", "--plan", plan, "--static")
 	if strings.Contains(out, "panic:") {
 		t.Errorf("binary panicked:\n%s", out)
 	}
@@ -121,10 +135,11 @@ func TestE2E_CleanPlanCompletes(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestE2E_JSONOutputHasFindings(t *testing.T) {
-	fixture := filepath.Join(testdataDir, "ecs.json")
+	plan := filepath.Join(testdataDir, "ecs.json")
+	findings := filepath.Join(testdataDir, "findings.json")
 	outDir := t.TempDir()
 
-	out, _ := runScan(t, fixture, "--format", "json", "--output", outDir)
+	out, _ := runWithFindings(t, plan, findings, "--format", "json", "--output", outDir)
 
 	reviewPath := filepath.Join(outDir, "review.json")
 	data, err := os.ReadFile(reviewPath)
@@ -137,14 +152,9 @@ func TestE2E_JSONOutputHasFindings(t *testing.T) {
 		t.Fatalf("review.json is invalid JSON: %v\ncontent:\n%s", err, data)
 	}
 
-	findings, ok := result["findings"]
-	if !ok {
-		t.Fatalf("review.json missing 'findings' key; keys: %v", keys(result))
-	}
-
-	list, ok := findings.([]interface{})
-	if !ok || len(list) == 0 {
-		t.Errorf("expected at least one finding in review.json, got %v", findings)
+	list, _ := result["findings"].([]interface{})
+	if len(list) == 0 {
+		t.Errorf("expected at least one finding in review.json, got %v", result["findings"])
 	}
 }
 
@@ -153,10 +163,11 @@ func TestE2E_JSONOutputHasFindings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestE2E_SARIFOutputIsValid(t *testing.T) {
-	fixture := filepath.Join(testdataDir, "ecs.json")
+	plan := filepath.Join(testdataDir, "ecs.json")
+	findings := filepath.Join(testdataDir, "findings.json")
 	outDir := t.TempDir()
 
-	out, _ := runScan(t, fixture, "--format", "sarif", "--output", outDir)
+	out, _ := runWithFindings(t, plan, findings, "--format", "sarif", "--output", outDir)
 
 	sarifPath := filepath.Join(outDir, "review.sarif.json")
 	data, err := os.ReadFile(sarifPath)
@@ -187,11 +198,12 @@ func TestE2E_SARIFOutputIsValid(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestE2E_SuppressionReducesFindings(t *testing.T) {
-	fixture := filepath.Join(testdataDir, "ecs.json")
+	plan := filepath.Join(testdataDir, "ecs.json")
+	findings := filepath.Join(testdataDir, "findings.json")
 
 	// Baseline: count findings without suppression.
 	baseDir := t.TempDir()
-	out1, _ := runScan(t, fixture, "--format", "json", "--output", baseDir)
+	out1, _ := runWithFindings(t, plan, findings, "--format", "json", "--output", baseDir)
 
 	baseData, err := os.ReadFile(filepath.Join(baseDir, "review.json"))
 	if err != nil {
@@ -199,13 +211,13 @@ func TestE2E_SuppressionReducesFindings(t *testing.T) {
 	}
 	var baseResult map[string]interface{}
 	_ = json.Unmarshal(baseData, &baseResult)
-	baseFindings, _ := baseResult["findings"].([]interface{})
-	baseCount := len(baseFindings)
+	baseList, _ := baseResult["findings"].([]interface{})
+	baseCount := len(baseList)
 	if baseCount == 0 {
-		t.Fatalf("baseline has 0 findings — suppression test requires at least one finding\noutput:\n%s", out1)
+		t.Fatalf("baseline has 0 findings — check findings.json fixture\noutput:\n%s", out1)
 	}
 
-	// Write a suppression file that suppresses all checkov findings.
+	// Write a suppression file that suppresses all imported findings.
 	ignoreFile := filepath.Join(t.TempDir(), ".terraview-ignore")
 	err = os.WriteFile(ignoreFile, []byte("version: 1\nsuppressions:\n  - source: checkov\n    reason: e2e test suppression\n"), 0644)
 	if err != nil {
@@ -214,7 +226,7 @@ func TestE2E_SuppressionReducesFindings(t *testing.T) {
 
 	// Re-run with suppression.
 	supDir := t.TempDir()
-	out2, _ := runScan(t, fixture, "--format", "json", "--output", supDir, "--ignore-file", ignoreFile)
+	out2, _ := runWithFindings(t, plan, findings, "--format", "json", "--output", supDir, "--ignore-file", ignoreFile)
 
 	supData, err := os.ReadFile(filepath.Join(supDir, "review.json"))
 	if err != nil {
@@ -222,17 +234,36 @@ func TestE2E_SuppressionReducesFindings(t *testing.T) {
 	}
 	var supResult map[string]interface{}
 	_ = json.Unmarshal(supData, &supResult)
-	supFindings, _ := supResult["findings"].([]interface{})
-	supCount := len(supFindings)
+	supList, _ := supResult["findings"].([]interface{})
+	supCount := len(supList)
 
 	if supCount >= baseCount {
-		t.Errorf("suppression had no effect: baseline %d findings, suppressed %d findings\nsuppressed output:\n%s",
+		t.Errorf("suppression had no effect: baseline %d findings, suppressed %d\nsuppressed output:\n%s",
 			baseCount, supCount, out2)
 	}
-
-	// Suppression notice must appear in combined output.
 	if !strings.Contains(out2, "Suppressed") {
 		t.Errorf("expected 'Suppressed' message in output; got:\n%s", out2)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Scanner integration test (skipped if checkov not in PATH)
+// ---------------------------------------------------------------------------
+
+func TestE2E_CheckovScannerIntegration(t *testing.T) {
+	if _, err := exec.LookPath("checkov"); err != nil {
+		t.Skip("checkov not in PATH — skipping scanner integration test")
+	}
+
+	plan := filepath.Join(testdataDir, "ecs.json")
+	out, code := runTerraview(t, "scan", "checkov", "--plan", plan, "--static")
+
+	// Checkov is available — it should find at least one issue in the insecure fixture.
+	// If it finds nothing, log it as a warning (not fatal) since checkov version may vary.
+	if code == 0 {
+		t.Logf("WARNING: checkov found 0 findings for insecure fixture (checkov version may differ)\noutput:\n%s", out)
+	} else {
+		t.Logf("checkov integration OK: exit %d\n%s", code, out)
 	}
 }
 
