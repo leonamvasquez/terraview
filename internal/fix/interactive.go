@@ -37,6 +37,49 @@ type ApplySession struct {
 	NoColor bool   // suppress ANSI codes when true
 }
 
+// ApplyAll applies every pending fix without prompting.
+// Fixes with no file location are skipped and reported.
+// Returns the count of applied and failed fixes.
+func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
+	total := len(pending)
+	fmt.Printf("\n  Applying %d fix(es) automatically...\n\n", total)
+
+	for _, pf := range pending {
+		sevColor := ansiYellow
+		if pf.Finding.Severity == "CRITICAL" {
+			sevColor = ansiRed
+		}
+		label := fmt.Sprintf("%s%s%s  %s  %s",
+			s.col(sevColor), pf.Finding.Severity, s.col(ansiReset),
+			pf.Finding.RuleID, pf.Finding.Resource,
+		)
+
+		if pf.Location == nil {
+			fmt.Printf("  %s✗%s %s\n    %s⚠ .tf file not found — skipped%s\n\n",
+				s.col(ansiRed), s.col(ansiReset), label,
+				s.col(ansiYellow), s.col(ansiReset))
+			failed++
+			continue
+		}
+
+		if err := s.applyFix(pf); err != nil {
+			fmt.Printf("  %s✗%s %s\n    %s%v%s\n\n",
+				s.col(ansiRed), s.col(ansiReset), label,
+				s.col(ansiRed), err, s.col(ansiReset))
+			failed++
+		} else {
+			rel, _ := filepath.Rel(s.WorkDir, pf.Location.File)
+			fmt.Printf("  %s✓%s %s\n    %s→ %s%s\n\n",
+				s.col(ansiGreen), s.col(ansiReset), label,
+				s.col(ansiDim), rel, s.col(ansiReset))
+			applied++
+		}
+	}
+
+	s.printSummary(applied, failed, total)
+	return applied, failed
+}
+
 // Review presents each pending fix for user approval and applies accepted ones.
 // It returns the count of applied and rejected fixes.
 func (s *ApplySession) Review(pending []PendingFix) (applied, rejected int) {

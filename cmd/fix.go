@@ -18,6 +18,7 @@ import (
 
 var (
 	fixMaxFlag      int
+	fixAllFlag      bool
 	fixProviderFlag string
 	fixModelFlag    string
 )
@@ -37,6 +38,7 @@ Requires a previous 'terraview scan' in this project directory.`,
 
 func init() {
 	fixCmd.Flags().IntVar(&fixMaxFlag, "max-fix", 5, "Maximum number of findings to fix")
+	fixCmd.Flags().BoolVar(&fixAllFlag, "all", false, "Fix all CRITICAL/HIGH findings without interactive prompts")
 	fixCmd.Flags().StringVar(&fixProviderFlag, "provider", "", "AI provider override (default: from last scan or config)")
 	fixCmd.Flags().StringVar(&fixModelFlag, "model", "", "AI model override")
 }
@@ -68,12 +70,21 @@ func runFix(cmd *cobra.Command, _ []string) error {
 	}
 
 	// ── Filter to actionable findings ───────────────────────────────────────
-	targets := filterFixTargets(ls.Findings, fixMaxFlag)
+	maxFix := fixMaxFlag
+	if fixAllFlag {
+		maxFix = 0 // 0 = no cap
+	}
+	targets := filterFixTargets(ls.Findings, maxFix)
 	if len(targets) == 0 {
 		fmt.Printf("\n  %s✓ No CRITICAL/HIGH findings to fix.%s\n\n", green, reset)
 		return nil
 	}
-	fmt.Printf("  %d CRITICAL/HIGH finding(s) eligible · fixing up to %d\n\n", len(ls.FindingsBySeverity("CRITICAL", "HIGH")), fixMaxFlag)
+	eligible := len(ls.FindingsBySeverity("CRITICAL", "HIGH"))
+	if fixAllFlag {
+		fmt.Printf("  %d CRITICAL/HIGH finding(s) — fixing all\n\n", eligible)
+	} else {
+		fmt.Printf("  %d CRITICAL/HIGH finding(s) eligible · fixing up to %d\n\n", eligible, fixMaxFlag)
+	}
 
 	// ── Resolve AI provider ─────────────────────────────────────────────────
 	providerName := fixProviderFlag
@@ -214,13 +225,17 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	// ── Phase 2: interactive review ─────────────────────────────────────────
+	// ── Phase 2: apply ──────────────────────────────────────────────────────
 	_ = rc
 	session := fix.ApplySession{
 		WorkDir: searchDir,
 		NoColor: noColor,
 	}
-	session.Review(pending)
+	if fixAllFlag {
+		session.ApplyAll(pending)
+	} else {
+		session.Review(pending)
+	}
 
 	return nil
 }
@@ -233,10 +248,7 @@ type parsedResource struct {
 }
 
 func filterFixTargets(findings []rules.Finding, max int) []rules.Finding {
-	if max <= 0 {
-		max = 5
-	}
-	out := make([]rules.Finding, 0, max)
+	out := make([]rules.Finding, 0)
 	seen := map[string]bool{}
 	for _, f := range findings {
 		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {
@@ -248,7 +260,7 @@ func filterFixTargets(findings []rules.Finding, max int) []rules.Finding {
 		}
 		seen[key] = true
 		out = append(out, f)
-		if len(out) == max {
+		if max > 0 && len(out) == max {
 			break
 		}
 	}
