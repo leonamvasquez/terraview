@@ -88,6 +88,8 @@ func init() {
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(fixCmd)
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
 	rootCmd.AddCommand(driftCmd)

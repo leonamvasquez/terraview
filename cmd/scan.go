@@ -1351,6 +1351,21 @@ func recordToHistory(rc reviewConfig, result aggregator.ReviewResult) {
 		return
 	}
 
+	// Always persist full findings for `terraview status` / `terraview fix`.
+	ls := history.LastScan{
+		Timestamp:      rec.Timestamp,
+		ProjectDir:     resolveProjectDir(),
+		PlanFile:       rc.resolvedPlan,
+		Scanner:        rc.scannerName,
+		Provider:       rc.aiProvider,
+		Model:          rc.aiModel,
+		TotalResources: result.TotalResources,
+		Findings:       result.Findings,
+	}
+	if err := history.SaveLastScan(ls); err != nil {
+		fmt.Fprintf(os.Stderr, "[history] last-scan: %v\n", err)
+	}
+
 	// Auto-cleanup if enabled
 	if rc.cfg.History.AutoCleanup {
 		cleanupCfg := history.CleanupConfig{
