@@ -53,6 +53,7 @@ var (
 	noRedactFlag      bool   // --no-redact: disable sensitive data redaction
 	maxResourcesFlag  int    // --max-resources: override AI prompt resource limit (0=auto)
 	fixFlag           bool   // --fix: generate AI-powered HCL fix suggestions for CRITICAL/HIGH findings
+	fixApplyFlag      bool   // --apply: interactive apply mode — review and patch .tf files in place
 	maxFixFlag        int    // --max-fix: max number of findings to generate fixes for (default 5)
 	ignoreFile        string // --ignore-file: path to .terraview-ignore suppression file
 )
@@ -111,6 +112,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
 	scanCmd.Flags().IntVar(&maxResourcesFlag, "max-resources", 0, "Max resources included in AI prompt context (0=auto by model)")
 	scanCmd.Flags().BoolVar(&fixFlag, "fix", false, "Generate AI-powered HCL fix suggestions for CRITICAL and HIGH findings")
+	scanCmd.Flags().BoolVar(&fixApplyFlag, "apply", false, "Interactively review and apply AI fixes directly to .tf files (use with --fix)")
 	scanCmd.Flags().IntVar(&maxFixFlag, "max-fix", 5, "Maximum number of findings to generate AI fixes for (used with --fix)")
 	scanCmd.Flags().StringVar(&ignoreFile, "ignore-file", "", "Path to suppression file (default: .terraview-ignore in project dir)")
 }
@@ -260,7 +262,11 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 	}
 
 	if fixFlag && len(result.Findings) > 0 {
-		generateFixes(rc, result.Findings, resources, rawPlan, maxFixFlag)
+		if fixApplyFlag {
+			generateFixesInteractive(rc, result.Findings, resources, rawPlan, maxFixFlag)
+		} else {
+			generateFixes(rc, result.Findings, resources, rawPlan, maxFixFlag)
+		}
 	}
 
 	return rc.resolvedPlan, exitCode, nil
@@ -384,6 +390,139 @@ func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser
 		warnings := fix.ValidateFix(suggestion)
 		printFixSuggestion(suggestion, f.Severity, warnings)
 	}
+}
+
+// generateFixesInteractive runs the same fix generation pipeline as generateFixes
+// but then presents each result through an interactive approve/reject session
+// that patches .tf files in place (--fix --apply mode).
+func generateFixesInteractive(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan, maxFix int) {
+	if maxFix <= 0 {
+		maxFix = 5
+	}
+
+	targets := make([]rules.Finding, 0, len(findings))
+	seen := map[string]bool{}
+	for _, f := range findings {
+		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {
+			continue
+		}
+		key := f.RuleID + "|" + f.Resource
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, f)
+		if len(targets) == maxFix {
+			break
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	resourceMap := make(map[string]parser.NormalizedResource, len(resources))
+	for _, r := range resources {
+		resourceMap[r.Address] = r
+	}
+	planIndex := fix.BuildIndex(rawPlan, resources)
+
+	providerName := rc.aiProvider
+	if providerName == "" {
+		fmt.Printf("\n%s --fix --apply requires an AI provider. Configure one with: terraview provider list\n", output.Prefix())
+		return
+	}
+
+	const perCallTimeout = 30
+	const perFindingBudget = perCallTimeout*2 + 5
+
+	providerCfg := ai.ProviderConfig{
+		Model:       rc.aiModel,
+		APIKey:      rc.aiAPIKey,
+		BaseURL:     rc.aiURL,
+		Temperature: 0.1,
+		MaxTokens:   1024,
+		MaxRetries:  1,
+		TimeoutSecs: perCallTimeout,
+	}
+
+	globalCtx, cancel := context.WithTimeout(context.Background(), time.Duration(perFindingBudget*len(targets)+30)*time.Second)
+	defer cancel()
+
+	provider, err := ai.NewProvider(globalCtx, providerName, providerCfg)
+	if err != nil {
+		fmt.Printf("\n%s fix: AI provider unavailable: %v\n", output.Prefix(), err)
+		return
+	}
+
+	suggester := fix.NewSuggester(provider)
+
+	fmt.Printf("\n%s Generating %d fix suggestion(s)...\n", output.Prefix(), len(targets))
+
+	// Phase 1: generate all suggestions upfront (batch, with progress).
+	pending := make([]fix.PendingFix, 0, len(targets))
+	for i, f := range targets {
+		fmt.Printf("  [%d/%d] %s on %s... ", i+1, len(targets), f.RuleID, f.Resource)
+
+		res, ok := resourceMap[f.Resource]
+		resourceType := f.Resource
+		if idx := strings.Index(f.Resource, "."); idx >= 0 {
+			resourceType = f.Resource[:idx]
+		}
+		var resourceConfig map[string]interface{}
+		if ok {
+			resourceType = res.Type
+			resourceConfig = res.Values
+		}
+
+		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingBudget)*time.Second)
+		req := fix.FixRequest{
+			Finding: fix.FixFinding{
+				RuleID:   f.RuleID,
+				Severity: f.Severity,
+				Message:  f.Message,
+				Category: f.Category,
+			},
+			ResourceAddr:   f.Resource,
+			ResourceType:   resourceType,
+			ResourceConfig: resourceConfig,
+			PlanIndex:      planIndex,
+		}
+
+		suggestion, err := suggester.Suggest(findingCtx, req)
+		findingCancel()
+
+		if err != nil {
+			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
+				fmt.Printf("⏩ skipped (timeout)\n")
+			} else {
+				fmt.Printf("✗ %v\n", err)
+			}
+			continue
+		}
+		fmt.Printf("✓\n")
+
+		// Locate the resource in .tf files for in-place patching.
+		loc, _ := fix.FindResource(workDir, f.Resource)
+
+		pending = append(pending, fix.PendingFix{
+			Finding:    f,
+			Suggestion: suggestion,
+			Location:   loc,
+			Warnings:   fix.ValidateFix(suggestion),
+		})
+	}
+
+	if len(pending) == 0 {
+		fmt.Printf("\n%s No fix suggestions could be generated.\n", output.Prefix())
+		return
+	}
+
+	// Phase 2: interactive review session.
+	session := fix.ApplySession{
+		WorkDir: workDir,
+		NoColor: noColor,
+	}
+	session.Review(pending)
 }
 
 // printFixSuggestion renders a single fix suggestion to stdout, including any
