@@ -97,6 +97,15 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no AI provider configured — use --provider or run: terraview provider list")
 	}
 
+	// searchDir: where to find and patch .tf files.
+	// Prefer ls.ProjectDir (saved from the scan run) so that `terraview fix`
+	// works correctly regardless of the current working directory.
+	// --dir overrides when explicitly provided.
+	searchDir := ls.ProjectDir
+	if workDir != "" && workDir != "." {
+		searchDir = workDir
+	}
+
 	// ── Load plan for resource context ─────────────────────────────────────
 	planPath := ls.PlanFile
 	if planFile != "" {
@@ -190,7 +199,7 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		}
 		fmt.Printf("✓\n")
 
-		loc, _ := fix.FindResource(workDir, f.Resource)
+		loc, _ := fix.FindResource(searchDir, f.Resource)
 
 		pending = append(pending, fix.PendingFix{
 			Finding:    f,
@@ -208,7 +217,7 @@ func runFix(cmd *cobra.Command, _ []string) error {
 	// ── Phase 2: interactive review ─────────────────────────────────────────
 	_ = rc
 	session := fix.ApplySession{
-		WorkDir: workDir,
+		WorkDir: searchDir,
 		NoColor: noColor,
 	}
 	session.Review(pending)
