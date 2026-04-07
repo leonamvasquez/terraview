@@ -147,7 +147,8 @@ func (g *geminiCLIProvider) Complete(ctx context.Context, system, user string) (
 }
 
 // execWithFallback runs the Gemini CLI with the primary model, automatically
-// falling back to the next model in the fallback list on ModelNotFoundError.
+// falling back to the next model in the fallback list on ModelNotFoundError or
+// TerminalQuotaError (capacity exhausted for that specific model).
 // Returns the raw stdout, the model that succeeded, and any terminal error.
 func (g *geminiCLIProvider) execWithFallback(ctx context.Context, prompt string) (string, string, error) {
 	var lastErr error
@@ -156,9 +157,9 @@ func (g *geminiCLIProvider) execWithFallback(ctx context.Context, prompt string)
 		if err == nil {
 			return out, model, nil
 		}
-		if ai.IsModelNotFound(err) {
-			// Model unavailable — try next candidate silently
-			lastErr = fmt.Errorf("model %q not found, trying next fallback: %w", model, err)
+		if ai.IsModelNotFound(err) || isGeminiQuotaExhausted(err) {
+			// Model unavailable or quota exhausted — try next candidate silently
+			lastErr = fmt.Errorf("model %q unavailable (%w), trying next fallback", model, err)
 			continue
 		}
 		// Any other error (timeout, parse, etc.) is returned immediately.
@@ -166,6 +167,18 @@ func (g *geminiCLIProvider) execWithFallback(ctx context.Context, prompt string)
 	}
 
 	return "", "", fmt.Errorf("all gemini-cli models exhausted: %w", lastErr)
+}
+
+// isGeminiQuotaExhausted reports whether the error is a Gemini CLI
+// TerminalQuotaError — capacity exhausted for the specific model.
+// This should trigger fallback to the next model in the list.
+func isGeminiQuotaExhausted(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "terminalquotaerror") ||
+		strings.Contains(msg, "exhausted your capacity")
 }
 
 // runCLI executes the gemini CLI subprocess with the given model and prompt.

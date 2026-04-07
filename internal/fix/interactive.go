@@ -1,8 +1,10 @@
 package fix
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -58,6 +60,14 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 			fmt.Printf("  %s✗%s %s\n    %s⚠ .tf file not found — skipped%s\n\n",
 				s.col(ansiRed), s.col(ansiReset), label,
 				s.col(ansiYellow), s.col(ansiReset))
+			failed++
+			continue
+		}
+
+		if HasCriticalWarning(pf.Warnings) {
+			fmt.Printf("  %s✗%s %s\n    %s⚠ fix bloqueado por aviso crítico — revise com %sterraview fix%s%s\n\n",
+				s.col(ansiRed), s.col(ansiReset), label,
+				s.col(ansiYellow), s.col(ansiBold), s.col(ansiReset+ansiYellow), s.col(ansiReset))
 			failed++
 			continue
 		}
@@ -278,17 +288,97 @@ func readKey() string {
 }
 
 func (s *ApplySession) applyFix(pf PendingFix) error {
+	// Pre-flight: verify the generated HCL has balanced braces before touching
+	// any file. An unbalanced block would corrupt the target file.
+	if pf.Suggestion.HCL != "" && !isBraceBalanced(pf.Suggestion.HCL) {
+		return fmt.Errorf("HCL gerado tem chaves desbalanceadas — fix rejeitado para evitar corrupção do arquivo")
+	}
+
+	// Backup the file before any modification so we can roll back if validate fails.
+	bakPath, err := BackupFile(pf.Location.File)
+	if err != nil {
+		return fmt.Errorf("backup: %w", err)
+	}
+
 	// Replace the existing resource block with the AI fix.
 	if pf.Suggestion.HCL != "" {
 		if err := ApplyToFile(pf.Location, pf.Suggestion.HCL); err != nil {
+			_ = RestoreBackup(bakPath)
 			return err
 		}
 	}
-	// Append prerequisite resources (new resources) to the same file.
-	if len(pf.Suggestion.Prerequisites) > 0 {
-		if err := AppendToFile(pf.Location.File, pf.Suggestion.Prerequisites); err != nil {
+
+	// Append prerequisite resources — only those not already present in the project.
+	prereqs := deduplicatePrereqs(pf.Suggestion.Prerequisites, s.WorkDir)
+	if len(prereqs) > 0 {
+		if err := AppendToFile(pf.Location.File, prereqs); err != nil {
+			_ = RestoreBackup(bakPath)
 			return fmt.Errorf("append prerequisites: %w", err)
 		}
+	}
+
+	// Run terraform validate to catch any HCL errors introduced by the fix.
+	if validateErr := terraformValidate(s.WorkDir); validateErr != nil {
+		_ = RestoreBackup(bakPath)
+		return fmt.Errorf("terraform validate falhou — fix revertido automaticamente:\n%w", validateErr)
+	}
+
+	// Validation passed — remove the backup.
+	_ = os.Remove(bakPath)
+	return nil
+}
+
+// deduplicatePrereqs filters out prerequisite HCL blocks whose resource already
+// exists somewhere in dir. Prevents duplicate resource declarations.
+func deduplicatePrereqs(blocks []string, dir string) []string {
+	out := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		rType, rName := parsePrereqHeader(block)
+		if rType == "" {
+			out = append(out, block) // can't parse — include it and let validate catch
+			continue
+		}
+		loc, _ := FindResource(dir, rType+"."+rName)
+		if loc != nil {
+			continue // already exists — skip
+		}
+		out = append(out, block)
+	}
+	return out
+}
+
+// parsePrereqHeader extracts (resourceType, resourceName) from the first
+// `resource "TYPE" "NAME"` line of a prerequisite HCL block.
+func parsePrereqHeader(block string) (rType, rName string) {
+	for _, line := range strings.Split(block, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, `resource "`) {
+			continue
+		}
+		// resource "aws_kms_key" "my_key" {
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			return "", ""
+		}
+		return strings.Trim(parts[1], `"`), strings.Trim(parts[2], `"`)
+	}
+	return "", ""
+}
+
+// terraformValidate runs `terraform validate -no-color` in dir.
+// Returns nil if terraform is not installed (non-fatal) or validation passes.
+func terraformValidate(dir string) error {
+	bin, err := exec.LookPath("terraform")
+	if err != nil {
+		return nil // terraform not installed; skip validation
+	}
+	var out bytes.Buffer
+	cmd := exec.Command(bin, "validate", "-no-color")
+	cmd.Dir = dir
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(out.String()))
 	}
 	return nil
 }

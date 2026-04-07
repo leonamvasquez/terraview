@@ -57,6 +57,48 @@ func FindResource(dir, addr string) (*Location, error) {
 	return found, nil // nil = not found, caller handles gracefully
 }
 
+// ReadFileContext returns a compact summary of all resource declarations in the
+// same file as loc, excluding the target resource itself. This gives the AI
+// visibility into existing naming conventions, references, and sibling resources
+// without sending the full file content (which may be very large).
+//
+// Format: one line per resource → `resource "TYPE" "NAME"  # line N`
+func ReadFileContext(loc *Location, workDir string) string {
+	data, err := os.ReadFile(loc.File)
+	if err != nil {
+		return ""
+	}
+
+	rel, _ := filepath.Rel(workDir, loc.File)
+	targetType, targetName := splitAddr(filepath.Base(loc.File)) // placeholder — overridden below
+	_ = targetType
+	_ = targetName
+
+	// Re-derive target type/name from Location for accurate exclusion.
+	targetHeader := ""
+	lines := strings.Split(string(data), "\n")
+	if loc.StartLine > 0 && loc.StartLine <= len(lines) {
+		targetHeader = strings.TrimSpace(lines[loc.StartLine-1])
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# %s\n", rel)
+
+	for i, line := range lines {
+		trim := strings.TrimSpace(line)
+		if !strings.HasPrefix(trim, `resource "`) {
+			continue
+		}
+		lineNo := i + 1
+		if lineNo == loc.StartLine || trim == targetHeader {
+			continue // skip the resource being fixed
+		}
+		fmt.Fprintf(&sb, "%s  # line %d\n", trim, lineNo)
+	}
+
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 // ReadLines returns the raw lines for the block defined by loc.
 func ReadLines(loc *Location) ([]string, error) {
 	data, err := os.ReadFile(loc.File)
@@ -86,8 +128,8 @@ func splitAddr(addr string) (rType, rName string) {
 }
 
 // findInFile scans a single .tf file for 'resource "rType" "rName"' and
-// returns the Location of the complete block. Uses brace-depth counting to
-// find the matching closing '}'.
+// returns the Location of the complete block. Uses a string-and-heredoc-aware
+// brace depth counter to find the matching closing '}'.
 func findInFile(path, rType, rName string) (*Location, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -100,10 +142,40 @@ func findInFile(path, rType, rName string) (*Location, error) {
 	lineNum := 0
 	depth := 0
 	var loc *Location
+	heredocMarker := "" // non-empty while we are inside a <<MARKER block
 
 	for sc.Scan() {
 		lineNum++
 		line := sc.Text()
+
+		// ── Heredoc tracking ──────────────────────────────────────────────────
+		// A heredoc starts with <<MARKER or <<-MARKER and ends when MARKER
+		// appears alone on a line (possibly with leading whitespace for <<-).
+		// While inside a heredoc we must not count braces.
+		if heredocMarker != "" {
+			if strings.TrimSpace(line) == heredocMarker {
+				heredocMarker = ""
+			}
+			// Still count towards loc tracking but no brace changes.
+			if loc != nil {
+				// depth unchanged — heredoc content doesn't affect structure
+			}
+			continue
+		}
+		if loc != nil || strings.Contains(line, needle) {
+			// Check for heredoc start on this line: <<MARKER or <<-MARKER
+			if idx := strings.Index(line, "<<"); idx >= 0 {
+				marker := strings.TrimSpace(line[idx+2:])
+				marker = strings.TrimPrefix(marker, "-") // <<-MARKER
+				// Strip any trailing comment
+				if i := strings.IndexByte(marker, '#'); i >= 0 {
+					marker = strings.TrimSpace(marker[:i])
+				}
+				if marker != "" && !strings.ContainsAny(marker, " \t{\"") {
+					heredocMarker = marker
+				}
+			}
+		}
 
 		if loc == nil {
 			if strings.Contains(line, needle) {
@@ -118,7 +190,9 @@ func findInFile(path, rType, rName string) (*Location, error) {
 		}
 
 		// We are inside the block — track brace depth.
-		depth += countBraces(line)
+		if heredocMarker == "" { // don't count braces inside heredocs
+			depth += countBraces(line)
+		}
 		if depth <= 0 {
 			loc.EndLine = lineNum
 			return loc, nil
@@ -130,17 +204,58 @@ func findInFile(path, rType, rName string) (*Location, error) {
 	return nil, nil // not found in this file
 }
 
-// countBraces returns net brace depth change for a single line.
-// Does not handle braces inside strings (acceptable for Terraform HCL).
+// countBraces returns the net brace depth change for a single line.
+// It is string-aware: braces inside double-quoted literals and after # or //
+// comments are ignored, preventing jsonencode({...}) and JSON policies from
+// confusing the block boundary finder.
 func countBraces(line string) int {
 	depth := 0
-	for _, ch := range line {
+	inStr := false
+	i := 0
+	for i < len(line) {
+		ch := line[i]
+		if inStr {
+			if ch == '\\' {
+				i += 2 // skip escaped character (e.g. \", \\)
+				continue
+			}
+			if ch == '"' {
+				inStr = false
+			}
+			i++
+			continue
+		}
+		// Outside a string
+		if ch == '"' {
+			inStr = true
+			i++
+			continue
+		}
+		// EOL comment: # ... or // ... — skip the rest of the line
+		if ch == '#' {
+			break
+		}
+		if ch == '/' && i+1 < len(line) && line[i+1] == '/' {
+			break
+		}
 		switch ch {
 		case '{':
 			depth++
 		case '}':
 			depth--
 		}
+		i++
 	}
 	return depth
+}
+
+// isBraceBalanced reports whether the HCL block string has balanced braces,
+// using the same string-aware logic as countBraces.
+// A block generated by AI that is not balanced will corrupt the target file.
+func isBraceBalanced(hcl string) bool {
+	depth := 0
+	for _, line := range strings.Split(hcl, "\n") {
+		depth += countBraces(line)
+	}
+	return depth == 0
 }

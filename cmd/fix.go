@@ -70,9 +70,12 @@ func runFix(cmd *cobra.Command, _ []string) error {
 	}
 
 	// ── Filter to actionable findings ───────────────────────────────────────
+	// --all means "apply without interactive prompts".
+	// It only removes the cap when --max-fix was NOT explicitly set by the user;
+	// if both are provided (--all --max-fix 30), the explicit limit is respected.
 	maxFix := fixMaxFlag
-	if fixAllFlag {
-		maxFix = 0 // 0 = no cap
+	if fixAllFlag && !cmd.Flags().Changed("max-fix") {
+		maxFix = 0 // no cap: fix everything
 	}
 	targets := filterFixTargets(ls.Findings, maxFix)
 	if len(targets) == 0 {
@@ -80,7 +83,7 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	eligible := len(ls.FindingsBySeverity("CRITICAL", "HIGH"))
-	if fixAllFlag {
+	if fixAllFlag && maxFix == 0 {
 		fmt.Printf("  %d CRITICAL/HIGH finding(s) — fixing all\n\n", eligible)
 	} else {
 		fmt.Printf("  %d CRITICAL/HIGH finding(s) eligible · fixing up to %d\n\n", eligible, fixMaxFlag)
@@ -183,6 +186,11 @@ func runFix(cmd *cobra.Command, _ []string) error {
 			resourceConfig = pr.values
 		}
 
+		// Locate the resource in the .tf files BEFORE calling the AI so we can
+		// send the actual HCL source as context. The AI uses this to make a
+		// minimal targeted change instead of rewriting the block from scratch.
+		loc, _ := fix.FindResource(searchDir, f.Resource)
+
 		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingBudget)*time.Second)
 		req := fix.FixRequest{
 			Finding: fix.FixFinding{
@@ -197,6 +205,14 @@ func runFix(cmd *cobra.Command, _ []string) error {
 			PlanIndex:      planIndex,
 		}
 
+		// Enrich the request with actual source context when available.
+		if loc != nil {
+			if lines, err := fix.ReadLines(loc); err == nil {
+				req.CurrentHCL = strings.Join(lines, "\n")
+			}
+			req.FileContext = fix.ReadFileContext(loc, searchDir)
+		}
+
 		suggestion, err := suggester.Suggest(findingCtx, req)
 		findingCancel()
 
@@ -209,8 +225,6 @@ func runFix(cmd *cobra.Command, _ []string) error {
 			continue
 		}
 		fmt.Printf("✓\n")
-
-		loc, _ := fix.FindResource(searchDir, f.Resource)
 
 		pending = append(pending, fix.PendingFix{
 			Finding:    f,

@@ -10,39 +10,60 @@ import (
 )
 
 const systemPrompt = `You are a Terraform security expert specialized in IaC remediation.
-Given a security finding and resource context from a Terraform plan, generate a minimal HCL fix.
+You will receive a security finding and the ACTUAL HCL SOURCE CODE of the affected resource as it exists in the .tf file.
+
+Your task: produce the MINIMUM change to the source HCL that fixes the finding.
 
 Respond ONLY with a JSON object — no markdown, no code fences, no text outside JSON:
 {
-  "hcl": "<corrected resource block as valid Terraform HCL>",
-  "explanation": "<one sentence: what attribute changed and why it fixes the security issue>",
-  "prerequisites": ["<full HCL block for any new resource required, e.g. aws_kms_key>"],
+  "hcl": "<the complete corrected resource block — must be valid Terraform HCL>",
+  "explanation": "<one sentence: what changed and why it fixes the issue>",
+  "prerequisites": ["<full HCL block for any NEW resource that must be created — omit if nothing new is needed>"],
   "effort": "<low|medium|high>"
 }
 
-## STRICT RULES — violating any rule makes the fix unusable
+## GOLDEN RULE: preserve the source, patch the minimum
 
-### References (most important)
-- If plan_context.plan_resources lists existing resources of the required type, use the FIRST address as the reference (e.g. aws_kms_key.main.arn)
-- If plan_context.canonical_name is provided, use it EXACTLY as the name for the new resource (e.g. resource "aws_kms_key" "ecs" { })
-- If plan_context.resolved_references provides a value for an attribute (rest_api_id, resource_id, vpc_id, subnet_ids, etc.), copy that value EXACTLY into the fix
-- NEVER invent resource names — only use names from plan_context or derived from canonical_name
+When current_hcl is provided:
+- Start from that exact source code — do NOT rewrite or restructure it
+- Preserve every existing attribute, reference, variable (var.X), local (local.Y), expression, and comment
+- Only add or change the single attribute or block needed to fix the finding
+- Keep the same indentation style and spacing as the original
 
-### Forbidden patterns — any of these causes terraform apply to fail
-- Placeholder strings: "example_*", "YOUR_*", "PLACEHOLDER_*", "your-*", "<attribute_name>", "REPLACE_WITH_*"
+## References — never invent, always reuse
+
+- If file_context lists a resource of the required type (e.g. aws_kms_key), reference it: aws_kms_key.NAME.arn
+- If plan_context.plan_resources lists an existing resource, use its address as the reference
+- If plan_context.resolved_references gives a value for an attribute, copy it EXACTLY
+- If plan_context.canonical_name is set, use it as the name for the new resource
+- NEVER invent resource names, account IDs, ARNs, or placeholder values
+
+## Forbidden patterns — any of these causes terraform apply to fail
+
+- Placeholder strings: "example_*", "YOUR_*", "PLACEHOLDER_*", "your-*", "<attr>", "REPLACE_WITH_*"
 - Fake account IDs: "111122223333", "123456789012", "000000000000", "ACCOUNT_ID"
-- Fake ARNs: any arn:aws: string with REGION, ACCOUNT_ID, or "your-" in it
-- String-quoted Terraform references: DO NOT write "aws_kms_key.main.arn" (quoted) — write aws_kms_key.main.arn (unquoted reference)
+- Fake ARNs: arn:aws: with REGION, ACCOUNT_ID, or "your-" anywhere in it
+- String-quoted Terraform references: WRONG: kms_key_id = "aws_kms_key.main.arn" / RIGHT: kms_key_id = aws_kms_key.main.arn
 
-### HCL syntax rules
-- NEVER use ''' triple-quote heredoc — use jsonencode() for JSON content in container_definitions
-- NEVER write block attributes as lists: settings = [{ ... }] is WRONG → use settings { ... } block form
-- Resource blocks must have type and name labels: resource "aws_kms_key" "ecs" { ... }
-- Do not include terraform{}, provider{}, variable{}, or data{} blocks
+## HCL syntax rules
 
-### Scope
-- Make the MINIMUM change required — do not add unrelated attributes
-- effort: "low" = change/add one attribute, "medium" = add a resource reference, "high" = significant restructure`
+- Use jsonencode({}) for JSON — never heredoc with raw JSON (heredoc braces break block detection)
+- Never write blocks as lists: logging_config = [{ ... }] is WRONG → logging_config { ... }
+- Resource blocks must have both type and name: resource "aws_kms_key" "my_key" { ... }
+- Do not emit terraform{}, provider{}, variable{}, output{}, or data{} blocks in "hcl"
+- Prerequisites must be complete, standalone resource blocks that terraform validate will accept
+
+## Prerequisites rules
+
+- Only emit a prerequisite when the resource truly does not exist anywhere in the project
+- file_context shows all other resources in the same file — check it before creating a new resource
+- If an existing resource of the needed type is listed, reference it instead of creating a new one
+
+## Effort guide
+
+- low: add/change one attribute (e.g. enable_key_rotation = true)
+- medium: add a reference to another resource (e.g. kms_key_id = aws_kms_key.main.arn)
+- high: add a nested block or restructure (e.g. server_side_encryption_configuration { ... })`
 
 // Suggester generates HCL fix suggestions using an AI provider.
 type Suggester struct {
@@ -115,7 +136,8 @@ type planContext struct {
 }
 
 // buildUserMessage serializes the fix request context into a structured JSON
-// user message, including plan context when a PlanIndex is available.
+// user message. When CurrentHCL is set it becomes the primary context; the
+// plan-JSON config is included as secondary fallback only.
 func buildUserMessage(req FixRequest) string {
 	type payload struct {
 		Finding struct {
@@ -126,6 +148,8 @@ func buildUserMessage(req FixRequest) string {
 		} `json:"finding"`
 		ResourceType  string                 `json:"resource_type"`
 		ResourceAddr  string                 `json:"resource_addr"`
+		CurrentHCL    string                 `json:"current_hcl,omitempty"`
+		FileContext   string                 `json:"file_context,omitempty"`
 		CurrentConfig map[string]interface{} `json:"current_config,omitempty"`
 		PlanContext   *planContext           `json:"plan_context,omitempty"`
 	}
@@ -138,8 +162,14 @@ func buildUserMessage(req FixRequest) string {
 	p.ResourceType = req.ResourceType
 	p.ResourceAddr = req.ResourceAddr
 
-	// Always truncate config to relevant attributes for this rule.
-	p.CurrentConfig = TruncateConfig(req.ResourceConfig, req.Finding.RuleID)
+	// Primary: actual HCL source (variables and references preserved).
+	p.CurrentHCL = req.CurrentHCL
+	p.FileContext = req.FileContext
+
+	// Secondary: truncated plan-JSON config (resolved values, useful when HCL not available).
+	if req.CurrentHCL == "" {
+		p.CurrentConfig = TruncateConfig(req.ResourceConfig, req.Finding.RuleID)
+	}
 
 	// Build plan context from the index when available.
 	if req.PlanIndex != nil {

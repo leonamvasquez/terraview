@@ -2,6 +2,7 @@ package fix
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -46,6 +47,49 @@ func AppendToFile(path string, blocks []string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// BackupFile copies src to src+".tvfix.bak". Returns the backup path.
+func BackupFile(src string) (string, error) {
+	bak := src + ".tvfix.bak"
+	in, err := os.Open(src)
+	if err != nil {
+		return "", fmt.Errorf("open for backup: %w", err)
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(bak, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("create backup: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return "", fmt.Errorf("copy backup: %w", err)
+	}
+	return bak, nil
+}
+
+// RestoreBackup copies bakPath back to the original file and removes the backup.
+func RestoreBackup(bakPath string) error {
+	orig := strings.TrimSuffix(bakPath, ".tvfix.bak")
+	in, err := os.Open(bakPath)
+	if err != nil {
+		return fmt.Errorf("open backup: %w", err)
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(orig, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("restore backup: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("restore copy: %w", err)
+	}
+	_ = os.Remove(bakPath)
 	return nil
 }
 
