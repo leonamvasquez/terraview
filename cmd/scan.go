@@ -94,9 +94,22 @@ Examples:
   terraview scan checkov --fix --max-fix 10   # AI fix suggestions (up to 10 findings)
 
 Terragrunt:
-  terraview scan checkov --terragrunt           # use terragrunt for plan
-  terraview scan tfsec --terragrunt -d modules/vpc`,
-	Args: cobra.MaximumNArgs(1),
+  terraview scan checkov --terragrunt               # auto-detect terragrunt config
+  terraview scan checkov --terragrunt dev.hcl        # use specific config file
+  terraview scan checkov --terragrunt=terragrunt/prd.hcl`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		// Allow 2 positional args when --terragrunt is "auto" and the extra arg
+		// is the config path (NoOptDefVal splits "--terragrunt dev.hcl" into
+		// flag="auto" + positional arg "dev.hcl").
+		max := 1
+		if terragruntFlag == "auto" && len(args) == 2 {
+			max = 2
+		}
+		if len(args) > max {
+			return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args))
+		}
+		return nil
+	},
 	RunE: runScan,
 }
 
@@ -118,6 +131,13 @@ func init() {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	// Handle --terragrunt <file> parsed as extra positional arg due to NoOptDefVal.
+	// "--terragrunt dev.hcl" → terragruntFlag="auto", args=["checkov","dev.hcl"]
+	if terragruntFlag == "auto" && len(args) > 1 {
+		terragruntFlag = args[len(args)-1]
+		args = args[:len(args)-1]
+	}
+
 	// Resolve scanner from positional arg
 	scannerName := ""
 	if len(args) > 0 {

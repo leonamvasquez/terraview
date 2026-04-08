@@ -117,14 +117,21 @@ func ReadLines(loc *Location) ([]string, error) {
 
 // splitAddr extracts (resourceType, resourceName) from a Terraform address.
 //
-//	"aws_iam_role.eks_node"         → ("aws_iam_role", "eks_node")
-//	"module.vpc.aws_vpc.main"       → ("aws_vpc", "main")
+//	"aws_iam_role.eks_node"                → ("aws_iam_role", "eks_node")
+//	"module.vpc.aws_vpc.main"              → ("aws_vpc", "main")
+//	`aws_lambda_function.fn["handler"]`    → ("aws_lambda_function", "fn")
 func splitAddr(addr string) (rType, rName string) {
 	parts := strings.Split(addr, ".")
 	if len(parts) < 2 {
 		return "", ""
 	}
-	return parts[len(parts)-2], parts[len(parts)-1]
+	rType = parts[len(parts)-2]
+	rName = parts[len(parts)-1]
+	// Strip for_each instance key: `name["key"]` or `name[0]` → `name`
+	if idx := strings.IndexByte(rName, '['); idx >= 0 {
+		rName = rName[:idx]
+	}
+	return rType, rName
 }
 
 // findInFile scans a single .tf file for 'resource "rType" "rName"' and

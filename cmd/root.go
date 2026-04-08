@@ -25,8 +25,8 @@ var (
 	outputFormat   string
 	activeProvider string
 	activeModel    string
-	terragruntFlag bool   // --terragrunt: use terragrunt instead of terraform
-	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config
+	terragruntFlag string // --terragrunt [config]: use terragrunt; optionally specify config file
+	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config (deprecated, use --terragrunt <file>)
 )
 
 // Version is set at build time via ldflags.
@@ -83,8 +83,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "Output format: pretty, compact, json, sarif, html (default pretty)")
 	rootCmd.PersistentFlags().StringVar(&activeProvider, "provider", "", "AI provider (ollama, gemini, claude, deepseek, openrouter)")
 	rootCmd.PersistentFlags().StringVar(&activeModel, "model", "", "AI model to use")
-	rootCmd.PersistentFlags().BoolVar(&terragruntFlag, "terragrunt", false, "Use Terragrunt instead of Terraform for plan generation")
-	rootCmd.PersistentFlags().StringVar(&tgConfigFile, "tg-config", "", "Path to custom terragrunt.hcl config file (implies --terragrunt)")
+	rootCmd.PersistentFlags().StringVar(&terragruntFlag, "terragrunt", "", "Use Terragrunt for plan generation (optionally specify config file path)")
+	rootCmd.PersistentFlags().Lookup("terragrunt").NoOptDefVal = "auto"
+	rootCmd.PersistentFlags().StringVar(&tgConfigFile, "tg-config", "", "Path to custom terragrunt.hcl config file (deprecated: use --terragrunt <file>)")
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
@@ -434,24 +435,48 @@ func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unpar
 	var executor terraformexec.PlanExecutor
 	var err error
 
-	// --tg-config implies --terragrunt
-	if tgConfigFile != "" {
-		terragruntFlag = true
+	// Resolve terragrunt config: --terragrunt <file> takes priority over --tg-config
+	useTerragrunt := terragruntFlag != ""
+	configFile := tgConfigFile
+
+	// --terragrunt dev.hcl → use that file as config
+	if terragruntFlag != "" && terragruntFlag != "auto" {
+		configFile = terragruntFlag
 	}
 
-	// Auto-detect terragrunt project when --terragrunt was not explicitly set
-	if !terragruntFlag && terraformexec.IsTerragruntProject(workDir) {
-		terragruntFlag = true
+	// --tg-config implies --terragrunt (backward compat)
+	if configFile != "" {
+		useTerragrunt = true
 	}
 
-	if terragruntFlag {
-		// When --tg-config is provided, skip workspace validation (no terragrunt.hcl needed in workDir)
-		if tgConfigFile == "" {
-			if err := terraformexec.ValidateTerragruntWorkspace(workDir); err != nil {
-				return "", nil, err
-			}
+	// Auto-detect terragrunt project when not explicitly set
+	if !useTerragrunt && terraformexec.IsTerragruntProject(workDir) {
+		useTerragrunt = true
+		logVerbose("Auto-detected Terragrunt project")
+	}
+
+	if useTerragrunt {
+		if configFile != "" {
+			fmt.Fprintf(os.Stderr, "%s Terragrunt mode: config=%s\n", output.Prefix(), configFile)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s Terragrunt mode: auto-detect\n", output.Prefix())
 		}
-		executor, err = terraformexec.NewTerragruntExecutor(workDir, tgConfigFile)
+
+		if configFile == "" {
+			// Multi-module root: discover child modules, plan each, merge
+			if terraformexec.IsTerragruntRootWithModules(workDir) {
+				executor, err = terraformexec.NewTerragruntMultiExecutor(workDir, "")
+			} else {
+				// Single module: validate workspace and plan directly
+				if err := terraformexec.ValidateTerragruntWorkspace(workDir); err != nil {
+					return "", nil, err
+				}
+				executor, err = terraformexec.NewTerragruntExecutor(workDir, "")
+			}
+		} else {
+			// Config file provided: skip workspace validation
+			executor, err = terraformexec.NewTerragruntExecutor(workDir, configFile)
+		}
 	} else {
 		if err := workspace.Validate(workDir); err != nil {
 			return "", nil, err

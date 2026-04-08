@@ -131,6 +131,28 @@ resource "aws_kms_key" "other" {
 	}
 }
 
+func TestSplitAddr_ForEach(t *testing.T) {
+	tests := []struct {
+		addr     string
+		wantType string
+		wantName string
+	}{
+		{"aws_lambda_function.functions[\"handler\"]", "aws_lambda_function", "functions"},
+		{"aws_instance.web[0]", "aws_instance", "web"},
+		{"module.vpc.aws_vpc.main", "aws_vpc", "main"},
+		{"aws_iam_role.eks_node", "aws_iam_role", "eks_node"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.addr, func(t *testing.T) {
+			gotType, gotName := splitAddr(tc.addr)
+			if gotType != tc.wantType || gotName != tc.wantName {
+				t.Errorf("splitAddr(%q) = (%q, %q), want (%q, %q)",
+					tc.addr, gotType, gotName, tc.wantType, tc.wantName)
+			}
+		})
+	}
+}
+
 func TestDeduplicatePrereqs(t *testing.T) {
 	dir := t.TempDir()
 	// Write an existing resource
