@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"log"
 	"sort"
 )
 
@@ -44,10 +45,17 @@ func MergeTerraformPlans(plans map[string]*TerraformPlan) (*TerraformPlan, error
 		plan := plans[modName]
 		prefix := "module." + modName
 
-		// Version info from first plan
+		// Version info from first plan; warn on mismatch
 		if i == 0 {
 			merged.FormatVersion = plan.FormatVersion
 			merged.TerraformVersion = plan.TerraformVersion
+		} else {
+			if plan.FormatVersion != merged.FormatVersion {
+				log.Printf("[merge] aviso: módulo %q usa format_version %q (esperado %q)", modName, plan.FormatVersion, merged.FormatVersion)
+			}
+			if plan.TerraformVersion != merged.TerraformVersion {
+				log.Printf("[merge] aviso: módulo %q usa terraform %q (esperado %q)", modName, plan.TerraformVersion, merged.TerraformVersion)
+			}
 		}
 
 		// Merge ResourceChanges with address prefixing
@@ -76,10 +84,12 @@ func MergeTerraformPlans(plans map[string]*TerraformPlan) (*TerraformPlan, error
 			merged.PlannedValues.RootModule.ChildModules, childModule,
 		)
 
-		// Merge Configuration.ProviderConfig (union)
+		// Merge Configuration.ProviderConfig (union; first wins, warn on duplicate)
 		for k, v := range plan.Configuration.ProviderConfig {
 			if _, exists := merged.Configuration.ProviderConfig[k]; !exists {
 				merged.Configuration.ProviderConfig[k] = v
+			} else {
+				log.Printf("[merge] aviso: provider %q duplicado no módulo %q (usando config do primeiro módulo)", k, modName)
 			}
 		}
 
@@ -89,8 +99,11 @@ func MergeTerraformPlans(plans map[string]*TerraformPlan) (*TerraformPlan, error
 			Module: &plan.Configuration.RootModule,
 		}
 
-		// Merge Variables (union, last wins)
+		// Merge Variables (union, last wins on conflict)
 		for k, v := range plan.Variables {
+			if _, exists := merged.Variables[k]; exists {
+				log.Printf("[merge] aviso: variável %q sobrescrita pelo módulo %q", k, modName)
+			}
 			merged.Variables[k] = v
 		}
 	}
