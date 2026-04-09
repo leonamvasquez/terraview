@@ -94,9 +94,9 @@ Examples:
   terraview scan checkov --fix --max-fix 10   # AI fix suggestions (up to 10 findings)
 
 Terragrunt:
-  terraview scan checkov --terragrunt               # auto-detect terragrunt config
-  terraview scan checkov --terragrunt dev.hcl        # use specific config file
-  terraview scan checkov --terragrunt=terragrunt/prd.hcl`,
+  terraview scan checkov --terragrunt                    # auto-detect terragrunt config
+  terraview scan checkov --terragrunt dev.hcl            # use specific config file
+  terraview scan checkov --terragrunt terragrunt/prd.hcl # path to config file`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Allow 2 positional args when --terragrunt is "auto" and the extra arg
 		// is the config path (NoOptDefVal splits "--terragrunt dev.hcl" into
