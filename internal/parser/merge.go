@@ -41,14 +41,23 @@ func MergeTerraformPlans(plans map[string]*TerraformPlan) (*TerraformPlan, error
 		Variables: make(map[string]Variable),
 	}
 
-	for i, modName := range modNames {
+	versionSet := false
+	for _, modName := range modNames {
 		plan := plans[modName]
+
+		// Skip modules with no resource changes
+		if len(plan.ResourceChanges) == 0 {
+			log.Printf("[merge] aviso: módulo %q sem resource_changes, ignorado", modName)
+			continue
+		}
+
 		prefix := "module." + modName
 
-		// Version info from first plan; warn on mismatch
-		if i == 0 {
+		// Version info from first non-empty plan; warn on mismatch
+		if !versionSet {
 			merged.FormatVersion = plan.FormatVersion
 			merged.TerraformVersion = plan.TerraformVersion
+			versionSet = true
 		} else {
 			if plan.FormatVersion != merged.FormatVersion {
 				log.Printf("[merge] aviso: módulo %q usa format_version %q (esperado %q)", modName, plan.FormatVersion, merged.FormatVersion)

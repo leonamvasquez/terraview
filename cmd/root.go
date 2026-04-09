@@ -445,7 +445,7 @@ func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unpar
 	// Auto-detect terragrunt project when not explicitly set
 	if !useTerragrunt && terraformexec.IsTerragruntProject(workDir) {
 		useTerragrunt = true
-		logVerbose("Auto-detected Terragrunt project")
+		fmt.Fprintf(os.Stderr, "%s Auto-detected Terragrunt project at %s\n", output.Prefix(), workDir)
 	}
 
 	if useTerragrunt {

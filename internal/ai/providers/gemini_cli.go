@@ -199,6 +199,9 @@ func (g *geminiCLIProvider) runCLI(ctx context.Context, prompt, model string) (s
 
 	cmd := exec.CommandContext(execCtx, "gemini", args...)
 	setProcessGroup(cmd)
+	// WaitDelay: after context cancellation, wait up to 5s for graceful exit
+	// before SIGKILL. Prevents zombie processes if Cancel signal is ignored.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr bytes.Buffer
