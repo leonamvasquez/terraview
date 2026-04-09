@@ -5356,3 +5356,84 @@ func TestMergeAndScore_WithImpactFlagAndResources(t *testing.T) {
 		t.Error("expected blast radius when impactFlag is true")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// history.go — buildListFilter
+// ---------------------------------------------------------------------------
+
+func TestBuildListFilter_AllProjects(t *testing.T) {
+	f, err := buildListFilter(true, "", "", 10, "/some/dir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.ProjectHash != "" {
+		t.Error("expected empty project hash when all=true")
+	}
+	if f.Limit != 10 {
+		t.Errorf("limit = %d, want 10", f.Limit)
+	}
+}
+
+func TestBuildListFilter_SpecificProject(t *testing.T) {
+	f, err := buildListFilter(false, "/custom/project", "", 5, "/default/dir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.ProjectHash == "" {
+		t.Error("expected non-empty project hash")
+	}
+	if f.Limit != 5 {
+		t.Errorf("limit = %d, want 5", f.Limit)
+	}
+}
+
+func TestBuildListFilter_WithSince(t *testing.T) {
+	f, err := buildListFilter(true, "", "7d", 20, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.Since.IsZero() {
+		t.Error("expected non-zero since time")
+	}
+}
+
+func TestBuildListFilter_InvalidSince(t *testing.T) {
+	_, err := buildListFilter(false, "", "invalid", 20, "/dir")
+	if err == nil {
+		t.Error("expected error for invalid since")
+	}
+}
+
+func TestBuildListFilter_WorkDirFallback(t *testing.T) {
+	f, err := buildListFilter(false, "", "", 10, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.ProjectHash == "" {
+		t.Error("expected project hash from cwd fallback")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// history.go — validateExportParams
+// ---------------------------------------------------------------------------
+
+func TestValidateExportParams_Valid(t *testing.T) {
+	for _, f := range []string{"json", "csv"} {
+		if err := validateExportParams("/tmp/out."+f, f); err != nil {
+			t.Errorf("unexpected error for format %q: %v", f, err)
+		}
+	}
+}
+
+func TestValidateExportParams_NoOutput(t *testing.T) {
+	if err := validateExportParams("", "json"); err == nil {
+		t.Error("expected error for empty output file")
+	}
+}
+
+func TestValidateExportParams_InvalidFormat(t *testing.T) {
+	if err := validateExportParams("/tmp/out.txt", "xml"); err == nil {
+		t.Error("expected error for invalid format")
+	}
+}
