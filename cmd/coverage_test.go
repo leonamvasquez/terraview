@@ -3596,29 +3596,26 @@ func TestRunScan_FindingsFileFlag(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// generatePlan — tgConfigFile implies terragrunt
+// generatePlan — --terragrunt <config> triggers terragrunt executor
 // ---------------------------------------------------------------------------
 
-func TestGeneratePlan_TgConfigImpliesTerragrunt(t *testing.T) {
+func TestGeneratePlan_TerragruntFlagWithConfig(t *testing.T) {
 	origWork := workDir
 	origTG := terragruntFlag
-	origTGConfig := tgConfigFile
 	tmpDir := t.TempDir()
 
 	defer func() {
 		workDir = origWork
 		terragruntFlag = origTG
-		tgConfigFile = origTGConfig
 	}()
 
 	workDir = tmpDir
-	terragruntFlag = ""
-	tgConfigFile = filepath.Join(tmpDir, "custom-tg.hcl")
+	terragruntFlag = filepath.Join(tmpDir, "custom-tg.hcl")
 
 	os.WriteFile(filepath.Join(tmpDir, "custom-tg.hcl"), []byte("# custom"), 0644)
 
-	// When tgConfigFile is set, generatePlan should use the terragrunt executor
-	// path even though terragruntFlag is empty (backward compat)
+	// When terragruntFlag points to a config file, generatePlan should use
+	// the terragrunt executor path
 	_, _, err := generatePlan()
 	if err == nil {
 		t.Log("generatePlan succeeded (terragrunt may be installed)")
@@ -3632,18 +3629,15 @@ func TestGeneratePlan_TgConfigImpliesTerragrunt(t *testing.T) {
 func TestGeneratePlan_InvalidWorkspace(t *testing.T) {
 	origWork := workDir
 	origTG := terragruntFlag
-	origTGConfig := tgConfigFile
 	tmpDir := t.TempDir()
 
 	defer func() {
 		workDir = origWork
 		terragruntFlag = origTG
-		tgConfigFile = origTGConfig
 	}()
 
 	workDir = tmpDir
 	terragruntFlag = ""
-	tgConfigFile = ""
 
 	_, _, err := generatePlan()
 	if err == nil {

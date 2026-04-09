@@ -26,7 +26,6 @@ var (
 	activeProvider string
 	activeModel    string
 	terragruntFlag string // --terragrunt [config]: use terragrunt; optionally specify config file
-	tgConfigFile   string // --tg-config: path to custom terragrunt.hcl config (deprecated, use --terragrunt <file>)
 )
 
 // Version is set at build time via ldflags.
@@ -85,7 +84,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&activeModel, "model", "", "AI model to use")
 	rootCmd.PersistentFlags().StringVar(&terragruntFlag, "terragrunt", "", "Use Terragrunt for plan generation (optionally specify config file path)")
 	rootCmd.PersistentFlags().Lookup("terragrunt").NoOptDefVal = "auto"
-	rootCmd.PersistentFlags().StringVar(&tgConfigFile, "tg-config", "", "Path to custom terragrunt.hcl config file (deprecated: use --terragrunt <file>)")
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
@@ -435,18 +433,13 @@ func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unpar
 	var executor terraformexec.PlanExecutor
 	var err error
 
-	// Resolve terragrunt config: --terragrunt <file> takes priority over --tg-config
+	// Resolve terragrunt config from --terragrunt flag
 	useTerragrunt := terragruntFlag != ""
-	configFile := tgConfigFile
+	configFile := ""
 
 	// --terragrunt dev.hcl → use that file as config
 	if terragruntFlag != "" && terragruntFlag != "auto" {
 		configFile = terragruntFlag
-	}
-
-	// --tg-config implies --terragrunt (backward compat)
-	if configFile != "" {
-		useTerragrunt = true
 	}
 
 	// Auto-detect terragrunt project when not explicitly set
