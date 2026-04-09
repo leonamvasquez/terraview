@@ -198,6 +198,7 @@ func (g *geminiCLIProvider) runCLI(ctx context.Context, prompt, model string) (s
 	}
 
 	cmd := exec.CommandContext(execCtx, "gemini", args...)
+	setProcessGroup(cmd)
 	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr bytes.Buffer
