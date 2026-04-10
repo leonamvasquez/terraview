@@ -102,5 +102,14 @@ func TestIsTerragruntRootWithModules_SkipsHidden(t *testing.T) {
 	}
 }
 
+func TestMaxParallelModules_WithinBounds(t *testing.T) {
+	if maxParallelModules < 1 {
+		t.Errorf("maxParallelModules = %d, want >= 1", maxParallelModules)
+	}
+	if maxParallelModules > 6 {
+		t.Errorf("maxParallelModules = %d, want <= 6", maxParallelModules)
+	}
+}
+
 // Compile-time check that TerragruntMultiExecutor implements PlanExecutor.
 var _ PlanExecutor = (*TerragruntMultiExecutor)(nil)

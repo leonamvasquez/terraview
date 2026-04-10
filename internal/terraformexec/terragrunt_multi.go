@@ -5,12 +5,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
 )
+
+// maxParallelModules caps the number of concurrent module plans.
+// Defaults to GOMAXPROCS (usually NumCPU) but never more than 6,
+// since each module spawns a terragrunt subprocess that can be
+// memory-intensive.
+var maxParallelModules = min(runtime.GOMAXPROCS(0), 6)
 
 // TerragruntMultiExecutor handles multi-module Terragrunt projects.
 // It discovers child modules, plans each one sequentially, and merges
@@ -73,49 +84,76 @@ func (e *TerragruntMultiExecutor) Plan() (string, error) {
 	total := len(e.modules)
 	plans := make(map[string]*parser.TerraformPlan)
 	var warnings []string
+	var mu sync.Mutex
+	var done int64
 
-	fmt.Fprintf(os.Stderr, "%s Discovered %d Terragrunt modules\n", output.Prefix(), total)
+	workers := maxParallelModules
+	if workers > total {
+		workers = total
+	}
 
-	for i, modDir := range e.modules {
+	fmt.Fprintf(os.Stderr, "%s Discovered %d Terragrunt modules (parallel: %d workers)\n",
+		output.Prefix(), total, workers)
+
+	g := new(errgroup.Group)
+	g.SetLimit(workers)
+
+	for _, modDir := range e.modules {
+		modDir := modDir // capture loop variable
 		modName := filepath.Base(modDir)
 
-		fmt.Fprintf(os.Stderr, "%s Planning module %s (%d/%d)...\n",
-			output.Prefix(), modName, i+1, total)
+		g.Go(func() error {
+			n := atomic.AddInt64(&done, 1)
+			fmt.Fprintf(os.Stderr, "%s Planning module %s (%d/%d)...\n",
+				output.Prefix(), modName, n, total)
 
-		modExec, err := NewTerragruntExecutor(modDir, e.configFile)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s: %v", modName, err))
-			continue
-		}
-
-		if modExec.NeedsInit() {
-			if err := modExec.Init(); err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s (init): %v", modName, err))
-				continue
+			modExec, err := NewTerragruntExecutor(modDir, e.configFile)
+			if err != nil {
+				mu.Lock()
+				warnings = append(warnings, fmt.Sprintf("%s: %v", modName, err))
+				mu.Unlock()
+				return nil
 			}
-		}
 
-		planPath, err := modExec.Plan()
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s (plan): %v", modName, err))
-			continue
-		}
-
-		p := parser.NewParser()
-		plan, err := p.ParseFile(planPath)
-		if err != nil {
-			// Module with no resource changes is normal — skip silently
-			if strings.Contains(err.Error(), "no resource changes") {
-				fmt.Fprintf(os.Stderr, "%s Module %s has no changes, skipping\n",
-					output.Prefix(), modName)
-				continue
+			if modExec.NeedsInit() {
+				if err := modExec.Init(); err != nil {
+					mu.Lock()
+					warnings = append(warnings, fmt.Sprintf("%s (init): %v", modName, err))
+					mu.Unlock()
+					return nil
+				}
 			}
-			warnings = append(warnings, fmt.Sprintf("%s (parse): %v", modName, err))
-			continue
-		}
 
-		plans[modName] = plan
+			planPath, err := modExec.Plan()
+			if err != nil {
+				mu.Lock()
+				warnings = append(warnings, fmt.Sprintf("%s (plan): %v", modName, err))
+				mu.Unlock()
+				return nil
+			}
+
+			p := parser.NewParser()
+			plan, err := p.ParseFile(planPath)
+			if err != nil {
+				if strings.Contains(err.Error(), "no resource changes") {
+					fmt.Fprintf(os.Stderr, "%s Module %s has no changes, skipping\n",
+						output.Prefix(), modName)
+					return nil
+				}
+				mu.Lock()
+				warnings = append(warnings, fmt.Sprintf("%s (parse): %v", modName, err))
+				mu.Unlock()
+				return nil
+			}
+
+			mu.Lock()
+			plans[modName] = plan
+			mu.Unlock()
+			return nil
+		})
 	}
+
+	_ = g.Wait() // individual errors are collected in warnings, never returned
 
 	if len(plans) == 0 {
 		if len(warnings) > 0 {
