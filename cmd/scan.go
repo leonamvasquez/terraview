@@ -128,6 +128,26 @@ func init() {
 	scanCmd.Flags().BoolVar(&fixApplyFlag, "apply", false, "Interactively review and apply AI fixes directly to .tf files (use with --fix)")
 	scanCmd.Flags().IntVar(&maxFixFlag, "max-fix", 5, "Maximum number of findings to generate AI fixes for (used with --fix)")
 	scanCmd.Flags().StringVar(&ignoreFile, "ignore-file", "", "Path to suppression file (default: .terraview-ignore in project dir)")
+
+	// pt-BR flag translations (brFlag is set in root.go init which runs before scan.go init)
+	if brFlag {
+		translateFlags(scanCmd, map[string]string{
+			"static":         "Apenas análise estática: desabilitar análise contextual IA",
+			"strict":         "Modo estrito: achados HIGH também retornam código de saída 2",
+			"explain":        "Gerar explicação em linguagem natural com IA",
+			"diagram":        "Exibir diagrama ASCII de infraestrutura",
+			"impact":         "Analisar impacto de dependências das mudanças",
+			"findings":       "Importar achados externos de Checkov/tfsec/Trivy JSON",
+			"explain-scores": "Exibir decomposição detalhada dos scores para auditoria",
+			"all":            "Habilitar tudo: explain + diagram + impact",
+			"no-redact":      "Desabilitar redação de dados sensíveis (usar apenas com providers locais)",
+			"max-resources":  "Máximo de recursos incluídos no contexto do prompt IA (0=auto por modelo)",
+			"fix":            "Gerar sugestões de correção HCL com IA para findings CRITICAL e HIGH",
+			"apply":          "Revisar e aplicar interativamente correções IA nos arquivos .tf (usar com --fix)",
+			"max-fix":        "Número máximo de findings para gerar correções IA (usado com --fix)",
+			"ignore-file":    "Caminho para arquivo de supressão (padrão: .terraview-ignore no diretório do projeto)",
+		})
+	}
 }
 
 func runScan(cmd *cobra.Command, args []string) error {

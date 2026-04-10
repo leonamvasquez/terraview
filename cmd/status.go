@@ -25,6 +25,13 @@ Run 'terraview fix' to interactively patch these findings.`,
 
 func init() {
 	statusCmd.Flags().BoolVar(&statusAllFlag, "all", false, "Show all severities, not just CRITICAL/HIGH")
+
+	// pt-BR flag translations (brFlag set in root.go init which runs before status.go init)
+	if brFlag {
+		translateFlags(statusCmd, map[string]string{
+			"all": "Exibir todas as severidades, não apenas CRITICAL/HIGH",
+		})
+	}
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {

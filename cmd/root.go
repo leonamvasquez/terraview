@@ -42,9 +42,15 @@ Scanner and AI run in parallel by default.
 
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
+  status      Show open findings from the last scan
+  fix         AI-generated fixes for open findings (interactive)
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
   drift       Detect and classify infrastructure drift
+
+History & Cache:
+  history     View scan history, trends, and comparisons
+  cache       Manage the AI response cache
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
@@ -55,6 +61,9 @@ Scanner Management:
   scanners    Manage security scanners
               scanners list | install | default
 
+Integration:
+  mcp         Model Context Protocol server for AI agents
+
 Utilities:
   version     Show version information
   setup       Interactive environment setup
@@ -62,12 +71,20 @@ Utilities:
 Get started:
   cd my-terraform-project
   terraview scan checkov                    # scanner + AI (default)
-  terraview scan checkov --static           # scanner only
+  terraview scan checkov --static           # scanner only, no AI
   terraview scan checkov --all              # everything enabled
+  terraview scan checkov --fix              # scan + AI fix suggestions
+  terraview status                          # show open findings
+  terraview fix                             # apply AI fixes interactively
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation
   terraview drift                           # detect drift
-  terraview provider list                   # manage AI providers`,
+  terraview history                         # scan history
+  terraview provider list                   # manage AI providers
+
+Terragrunt:
+  terraview scan checkov --terragrunt                    # auto-detect config
+  terraview scan checkov --terragrunt dev.hcl            # specific config file`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -122,22 +139,29 @@ func init() {
 			disableCmdColors()
 		}
 	}
+
 }
 
 func applyBRTranslations() {
 	// Root
-	rootCmd.Short = "Revisor semântico para planos Terraform"
-	rootCmd.Long = `terraview — Revisor semântico para planos Terraform
+	rootCmd.Short = "Scanner de segurança + análise contextual IA para planos Terraform"
+	rootCmd.Long = `terraview — Scanner de segurança + análise contextual IA para planos Terraform
 
-Escaneamento de segurança e revisão com IA para planos Terraform.
+Combina scanners de segurança estáticos (Checkov, tfsec, Terrascan) com análise
+contextual por IA que detecta riscos entre recursos que scanners não encontram.
+Scanner e IA rodam em paralelo por padrão.
 
 Comandos Principais:
-  scan        Escaneamento de segurança + análise IA opcional
-  apply       Escanear e aplicar condicionalmente o plano
+  scan        Escaneamento de segurança + análise IA (paralelo)
+  status      Exibir findings abertos do último scan
+  fix         Correções geradas por IA para findings abertos (interativo)
   diagram     Gerar diagrama ASCII de infraestrutura
   explain     Explicação de infraestrutura com IA
   drift       Detectar e classificar drift de infraestrutura
-  modules     Analisar uso e saúde dos módulos
+
+Histórico & Cache:
+  history     Visualizar histórico de scans, tendências e comparações
+  cache       Gerenciar cache de respostas IA
 
 Gerenciamento de Providers:
   provider    Gerenciar providers de IA e runtimes LLM
@@ -148,24 +172,42 @@ Gerenciamento de Scanners:
   scanners    Gerenciar scanners de segurança
               scanners list | install | default
 
+Integração:
+  mcp         Servidor Model Context Protocol para agentes IA
+
 Utilitários:
   version     Exibir informações de versão
   setup       Configuração interativa do ambiente
 
 Primeiros passos:
   cd meu-projeto-terraform
-  terraview scan checkov                    # scanner de segurança
-  terraview scan checkov --provider gemini  # scanner + análise IA
+  terraview scan checkov                    # scanner + IA (padrão)
+  terraview scan checkov --static           # apenas scanner, sem IA
   terraview scan checkov --all              # tudo habilitado
+  terraview scan checkov --fix              # scan + sugestões de fix IA
+  terraview status                          # exibir findings abertos
+  terraview fix                             # aplicar fixes IA interativamente
   terraview diagram                         # diagrama de infraestrutura
   terraview explain                         # explicação com IA
   terraview drift                           # detectar drift
-  terraview modules                         # verificar saúde dos módulos
-  terraview provider list                   # gerenciar providers de IA`
+  terraview history                         # histórico de scans
+  terraview provider list                   # gerenciar providers de IA
+
+Terragrunt:
+  terraview scan checkov --terragrunt                    # auto-detectar config
+  terraview scan checkov --terragrunt dev.hcl            # arquivo de config específico`
 
 	// scan
-	scanCmd.Short = "Escaneamento de segurança e análise IA opcional de um plano Terraform"
-	scanCmd.Long = `Analisa um plano Terraform usando um scanner de segurança e/ou revisão com IA.
+	scanCmd.Short = "Escaneamento de segurança + análise contextual IA de um plano Terraform"
+	scanCmd.Long = `Analisa um plano Terraform usando scanners de segurança e análise contextual IA.
+
+Por padrão, o terraview executa TANTO o scanner de segurança QUANTO a análise
+contextual IA em paralelo. O scanner verifica recursos individuais contra regras;
+a IA analisa relações entre recursos, padrões de arquitetura e riscos de
+dependência que scanners estáticos não detectam.
+
+A IA roda automaticamente quando um provider está configurado (via .terraview.yaml,
+flag --provider, ou 'terraview provider use'). Use --static para desabilitar a IA.
 
 O scanner é especificado como argumento posicional.
 Se --plan não for especificado, o terraview executará automaticamente:
@@ -174,16 +216,51 @@ Se --plan não for especificado, o terraview executará automaticamente:
   terraform show   (exporta JSON)
 
 Exemplos:
-  terraview scan checkov                       # apenas scanner de segurança
-  terraview scan checkov --provider gemini     # scanner + análise IA
+  terraview scan checkov                       # scanner + IA (padrão)
+  terraview scan checkov --static              # apenas scanner, sem IA
   terraview scan checkov --all                 # tudo habilitado
-  terraview scan checkov --explain             # scanner + explicação IA
-  terraview scan checkov --diagram             # scanner + diagrama
-  terraview scan checkov --impact             # análise de impacto
+  terraview scan checkov --provider gemini     # usar provider IA específico
+  terraview scan checkov --explain             # scanner + IA + explicação
+  terraview scan checkov --diagram             # scanner + IA + diagrama
+  terraview scan checkov --impact              # scanner + IA + análise de impacto
   terraview scan checkov --format compact      # saída mínima
   terraview scan checkov --format sarif        # SARIF para CI
   terraview scan checkov --strict              # HIGH retorna código de saída 2
-  terraview scan checkov --findings ext.json   # importar achados externos`
+  terraview scan checkov --findings ext.json   # importar achados externos
+  terraview scan checkov --fix                 # sugestões de fix IA (top 5)
+  terraview scan checkov --fix --max-fix 10    # sugestões de fix IA (até 10)
+
+Terragrunt:
+  terraview scan checkov --terragrunt                    # auto-detectar config terragrunt
+  terraview scan checkov --terragrunt dev.hcl            # usar arquivo de config específico
+  terraview scan checkov --terragrunt terragrunt/prd.hcl # caminho para arquivo de config`
+
+	// status
+	statusCmd.Short = "Exibir findings abertos do último scan"
+	statusCmd.Long = `Exibe os findings de segurança do scan mais recente para este projeto.
+Mostra um delta contra o scan anterior e lista todos os findings CRITICAL/HIGH abertos.
+
+Execute 'terraview fix' para corrigir estes findings interativamente.`
+	translateFlags(statusCmd, map[string]string{
+		"all": "Exibir todas as severidades, não apenas CRITICAL/HIGH",
+	})
+
+	// fix
+	fixCmd.Short = "Revisar e aplicar interativamente correções geradas por IA"
+	fixCmd.Long = `Lê os findings do último scan e gera correções HCL com IA.
+Cada correção é apresentada para aprovação antes de ser aplicada ao arquivo .tf.
+
+Requer um 'terraview scan' anterior neste diretório do projeto.`
+	fixCmd.Example = `  terraview fix
+  terraview fix --max-fix 10
+  terraview fix --all
+  terraview fix --provider claude --model claude-haiku-4-5`
+	translateFlags(fixCmd, map[string]string{
+		"max-fix":  "Número máximo de findings para gerar correções",
+		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
+		"provider": "Override do provider de IA (padrão: do último scan ou config)",
+		"model":    "Override do modelo de IA",
+	})
 
 	// diagram
 	diagramCmd.Short = "Gerar diagrama ASCII de infraestrutura"
@@ -192,10 +269,23 @@ Exemplos:
 Este comando é determinístico e não requer IA.
 Se --plan não for especificado, o terraview gera o plano automaticamente.
 
+Modos de diagrama:
+  topo   Visão topológica com conexões, nesting VPC e agregação de recursos (padrão)
+  flat   Visão flat original baseada em camadas
+
 Exemplos:
   terraview diagram
+  terraview diagram --diagram-mode topo
+  terraview diagram --diagram-mode flat
   terraview diagram --plan plan.json
-  terraview diagram --output ./relatorios`
+  terraview diagram --output ./relatorios
+
+Terragrunt:
+  terraview diagram --terragrunt
+  terraview diagram --terragrunt -d modules/vpc`
+	translateFlags(diagramCmd, map[string]string{
+		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
+	})
 
 	// drift
 	driftCmd.Short = "Detectar e classificar drift de infraestrutura"
@@ -230,6 +320,79 @@ Exemplos:
   terraview explain --provider gemini
   terraview explain --format json`
 
+	// history
+	historyCmd.Short = "Visualizar histórico de scans e tendências"
+	historyCmd.Long = `Visualizar histórico de scans armazenado localmente em SQLite.
+
+Todo scan do terraview registra resultados automaticamente. Use history para
+consultar, comparar e acompanhar a postura de segurança ao longo do tempo.
+
+Uso:
+  terraview history                           # últimos 20 scans, projeto atual
+  terraview history --all                     # todos os projetos
+  terraview history --limit 50
+  terraview history --since 7d
+  terraview history --since 2025-01-01
+  terraview history --format json|csv
+  terraview history trend                     # tendências com sparkline
+  terraview history compare                   # último vs anterior
+  terraview history clear                     # limpar projeto atual
+  terraview history export --format csv -o scans.csv`
+	translateFlags(historyCmd, map[string]string{
+		"all":     "Exibir todos os projetos",
+		"limit":   "Número máximo de scans a exibir",
+		"project": "Filtrar por diretório do projeto",
+		"since":   "Exibir scans desde (ex: 7d, 30d, 2025-01-01)",
+		"format":  "Formato de saída: pretty, json, csv",
+	})
+
+	historyTrendCmd.Short = "Exibir tendências de score com sparklines"
+	historyTrendCmd.Long = `Exibe como scores de segurança e contagens de findings evoluem ao longo do tempo.
+Mostra gráficos sparkline e percentuais de variação.
+
+Uso:
+  terraview history trend
+  terraview history trend --limit 30`
+	translateFlags(historyTrendCmd, map[string]string{
+		"limit": "Número de scans para tendência",
+		"since": "Tendência desde (ex: 7d, 30d)",
+	})
+
+	historyCompareCmd.Short = "Comparar último scan com um anterior"
+	historyCompareCmd.Long = `Compara o último scan contra um scan anterior ou ponto no tempo.
+
+Uso:
+  terraview history compare                   # último vs anterior
+  terraview history compare --with 5          # último vs scan #5
+  terraview history compare --since 7d        # último vs scan mais antigo em 7 dias`
+	translateFlags(historyCompareCmd, map[string]string{
+		"with":  "Comparar com scan #ID",
+		"since": "Comparar com scan mais antigo desde (ex: 7d)",
+	})
+
+	historyClearCmd.Short = "Limpar histórico de scans"
+	historyClearCmd.Long = `Remove registros do histórico de scans.
+
+Uso:
+  terraview history clear                     # apenas projeto atual
+  terraview history clear --all               # todos os projetos
+  terraview history clear --before 30d        # mais antigos que 30 dias`
+	translateFlags(historyClearCmd, map[string]string{
+		"all":    "Limpar todos os projetos",
+		"before": "Limpar scans mais antigos que (ex: 30d, 0d)",
+	})
+
+	historyExportCmd.Short = "Exportar histórico de scans para arquivo"
+	historyExportCmd.Long = `Exporta histórico de scans para arquivo CSV ou JSON.
+
+Uso:
+  terraview history export --format csv -o scans.csv
+  terraview history export --format json -o scans.json`
+	translateFlags(historyExportCmd, map[string]string{
+		"format": "Formato de exportação: json, csv",
+		"output": "Caminho do arquivo de saída (obrigatório)",
+	})
+
 	// provider
 	providerCmd.Short = "Gerenciar providers de IA e runtimes LLM"
 	providerCmd.Long = `Gerencia os providers de IA e runtimes usados pelo terraview.
@@ -242,7 +405,7 @@ Subcomandos:
   install     Instalar runtime LLM (Ollama)
   uninstall   Remover runtime LLM`
 
-	// provider subcommands (already partially in PT)
+	// provider subcommands
 	aiListCmd.Short = "Listar providers disponíveis e escolher o padrão interativamente"
 	aiUseCmd.Short = "Definir provider padrão (sem interação, útil em scripts)"
 	aiUseCmd.Long = `Define o provider padrão globalmente sem modo interativo.
@@ -265,8 +428,8 @@ Este comando é idempotente: executá-lo várias vezes não
 reinstalará — apenas validará a instalação existente.
 
 Exemplos:
-  terraview install llm
-  terraview install llm --model codellama:13b`
+  terraview provider install ollama
+  terraview provider install ollama --model codellama:13b`
 
 	uninstallCmd.Short = "Desinstalar dependências gerenciadas pelo terraview"
 	uninstallCmd.Long = "Remove dependências externas que foram instaladas pelo terraview."
@@ -280,10 +443,59 @@ instalado simplesmente confirmará que não há nada a remover.
 Exemplos:
   terraview uninstall llm`
 
+	// mcp
+	mcpCmd.Short = "Servidor Model Context Protocol (MCP)"
+	mcpCmd.Long = `Servidor MCP para integração com agentes IA.
+
+Expõe funcionalidades do terraview via Model Context Protocol,
+permitindo que agentes IA (Claude Code, Cursor, Windsurf) chamem
+ferramentas do terraview programaticamente via stdio.
+
+Uso:
+  terraview mcp serve`
+
+	mcpServeCmd.Short = "Iniciar o servidor MCP via stdio"
+	mcpServeCmd.Long = `Inicia um servidor Model Context Protocol que lê mensagens JSON-RPC 2.0
+do stdin e escreve respostas no stdout.
+
+Logs vão para stderr. Apenas JSON-RPC válido aparece no stdout.
+
+Registrar no Claude Code:
+  claude mcp add terraview -- terraview mcp serve
+
+Registrar no Cursor (.cursor/mcp.json):
+  {
+    "mcpServers": {
+      "terraview": {
+        "command": "terraview",
+        "args": ["mcp", "serve"]
+      }
+    }
+  }
+
+Ferramentas expostas:
+  terraview_scan             Scan de segurança com scorecard
+  terraview_explain          Explicação de infraestrutura com IA
+  terraview_diagram          Diagrama ASCII de infraestrutura
+  terraview_drift            Detecção e classificação de drift
+  terraview_history          Consultar histórico de scans
+  terraview_history_trend    Tendências de score ao longo do tempo
+  terraview_history_compare  Comparar dois scans lado a lado
+  terraview_impact           Blast radius / impacto de dependências
+  terraview_cache            Status e gerenciamento do cache IA
+  terraview_scanners         Listar scanners de segurança disponíveis
+  terraview_version          Informações de versão e ambiente`
+
+	// cache (pick() evaluates at package init before --br is set, so override here)
+	cacheCmd.Short = "Gerenciar o cache de respostas IA"
+	cacheCmd.Long = "Gerencia o cache persistente de respostas IA armazenado em ~/.terraview/cache/"
+	cacheClearCmd.Short = "Limpar o cache de respostas IA"
+	cacheStatusCmd.Short = "Exibir estatísticas do cache"
+
 	// version / setup
 	versionCmd.Short = "Exibir a versão do terraview"
 	setupCmd.Short = "Configuração interativa do ambiente"
-	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe o status 
+	setupCmd.Long = `Detecta scanners de segurança e providers de IA instalados, exibe o status
 do ambiente, scanner padrão configurado e providers disponíveis.
 
 Este comando é informacional e não-destrutivo — apenas verifica o que
@@ -291,7 +503,26 @@ está disponível. Para instalar scanners, use 'terraview scanners install'.
 
 Exemplos:
   terraview setup`
-	// Translate persistent flag descriptions
+
+	// scanners
+	scannersCmd.Short = "Gerenciar scanners de segurança"
+	scannersCmd.Long = "Listar, instalar e gerenciar binários de scanners de segurança."
+	scannersListCmd.Short = "Listar todos os scanners com status de instalação"
+	scannersInstallCmd.Short = "Instalar um ou mais binários de scanner"
+	scannersInstallCmd.Long = `Instala binários de scanners de segurança no diretório gerenciado pelo terraview.
+
+Exemplos:
+  terraview scanners install checkov
+  terraview scanners install tfsec terrascan
+  terraview scanners install --all
+  terraview scanners install checkov --force`
+	scannersDefaultCmd.Short = "Definir ou exibir o scanner padrão"
+	scannersDefaultCmd.Long = `Define ou exibe o scanner padrão usado pelo 'terraview scan'.
+
+Exemplos:
+  terraview scanners default              # exibir scanner padrão
+  terraview scanners default checkov      # definir checkov como padrão`
+	// Translate persistent flag descriptions (defined in root.go init, always available)
 	rootCmd.PersistentFlags().Lookup("verbose").Usage = "Habilitar saída detalhada"
 	rootCmd.PersistentFlags().Lookup("dir").Usage = "Diretório do workspace Terraform"
 	rootCmd.PersistentFlags().Lookup("br").Usage = "Saída em Português Brasileiro (pt-BR)"
@@ -301,31 +532,48 @@ Exemplos:
 	rootCmd.PersistentFlags().Lookup("format").Usage = "Formato de saída: pretty, compact, json, sarif (padrão pretty)"
 	rootCmd.PersistentFlags().Lookup("provider").Usage = "Provider de IA (ollama, gemini, claude, deepseek, openrouter)"
 	rootCmd.PersistentFlags().Lookup("model").Usage = "Modelo de IA a ser usado"
+	rootCmd.PersistentFlags().Lookup("terragrunt").Usage = "Usar Terragrunt para gerar plano (opcionalmente especificar arquivo de config)"
 
-	// Translate local flags for each command
-	translateFlags(scanCmd, map[string]string{
-		"strict":   "Modo estrito: achados HIGH também retornam código de saída 2",
-		"explain":  "Gerar explicação em linguagem natural com IA",
-		"diagram":  "Exibir diagrama ASCII de infraestrutura",
-		"impact":   "Analisar impacto de dependências das mudanças",
-		"findings": "Importar achados externos de Checkov/tfsec/Trivy JSON",
-		"all":      "Habilitar tudo: explain + diagram + impact",
+	// Translate local flags for commands whose init() runs BEFORE root.go
+	// (alphabetical: ai.go → mcp.go). Commands after root.go (scan.go, scanners.go,
+	// status.go) translate their own flags in their init() functions.
+	translateFlags(fixCmd, map[string]string{
+		"max-fix":  "Número máximo de findings para gerar correções",
+		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
+		"provider": "Override do provider de IA (padrão: do último scan ou config)",
+		"model":    "Override do modelo de IA",
+	})
+	translateFlags(diagramCmd, map[string]string{
+		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
 	})
 	translateFlags(driftCmd, map[string]string{
 		"intelligence": "Classificação avançada de drift e scoring de risco",
 	})
+	translateFlags(historyCmd, map[string]string{
+		"all":     "Exibir todos os projetos",
+		"limit":   "Número máximo de scans a exibir",
+		"project": "Filtrar por diretório do projeto",
+		"since":   "Exibir scans desde (ex: 7d, 30d, 2025-01-01)",
+		"format":  "Formato de saída: pretty, json, csv",
+	})
+	translateFlags(historyTrendCmd, map[string]string{
+		"limit": "Número de scans para tendência",
+		"since": "Tendência desde (ex: 7d, 30d)",
+	})
+	translateFlags(historyCompareCmd, map[string]string{
+		"with":  "Comparar com scan #ID",
+		"since": "Comparar com scan mais antigo desde (ex: 7d)",
+	})
+	translateFlags(historyClearCmd, map[string]string{
+		"all":    "Limpar todos os projetos",
+		"before": "Limpar scans mais antigos que (ex: 30d, 0d)",
+	})
+	translateFlags(historyExportCmd, map[string]string{
+		"format": "Formato de exportação: json, csv",
+		"output": "Caminho do arquivo de saída (obrigatório)",
+	})
 	translateFlags(installLLMCmd, map[string]string{
 		"model": "Modelo a baixar (padrão da config ou llama3.1:8b)",
-	})
-	// Scanners subcommands
-	scannersCmd.Short = "Gerenciar scanners de segurança"
-	scannersCmd.Long = "Listar, instalar e gerenciar binários de scanners de segurança."
-	scannersListCmd.Short = "Listar todos os scanners com status de instalação"
-	scannersInstallCmd.Short = "Instalar um ou mais binários de scanner"
-	scannersDefaultCmd.Short = "Definir ou exibir o scanner padrão"
-	translateFlags(scannersInstallCmd, map[string]string{
-		"force": "Forçar reinstalação mesmo se já instalado",
-		"all":   "Instalar todos os scanners faltantes",
 	})
 
 	// Translate Cobra built-in template labels
