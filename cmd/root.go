@@ -46,7 +46,6 @@ Core Commands:
   fix         AI-generated fixes for open findings (interactive)
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
-  drift       Detect and classify infrastructure drift
 
 History & Cache:
   history     View scan history, trends, and comparisons
@@ -76,7 +75,6 @@ Get started:
   terraview fix                             # apply AI fixes interactively
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation
-  terraview drift                           # detect drift
   terraview history                         # scan history
   terraview provider list                   # manage AI providers
 
@@ -106,7 +104,6 @@ func init() {
 	rootCmd.AddCommand(fixCmd)
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
-	rootCmd.AddCommand(driftCmd)
 
 	// Provider management (includes install/uninstall as subcommands)
 	rootCmd.AddCommand(providerCmd)
@@ -155,7 +152,6 @@ Comandos Principais:
   fix         Correções geradas por IA para findings abertos (interativo)
   diagram     Gerar diagrama ASCII de infraestrutura
   explain     Explicação de infraestrutura com IA
-  drift       Detectar e classificar drift de infraestrutura
 
 Histórico & Cache:
   history     Visualizar histórico de scans, tendências e comparações
@@ -185,7 +181,6 @@ Primeiros passos:
   terraview fix                             # aplicar fixes IA interativamente
   terraview diagram                         # diagrama de infraestrutura
   terraview explain                         # explicação com IA
-  terraview drift                           # detectar drift
   terraview history                         # histórico de scans
   terraview provider list                   # gerenciar providers de IA
 
@@ -281,25 +276,6 @@ Terragrunt:
 	translateFlags(diagramCmd, map[string]string{
 		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
 	})
-
-	// drift
-	driftCmd.Short = "Detectar e classificar drift de infraestrutura"
-	driftCmd.Long = `Executa terraform plan para detectar drift entre estado e infraestrutura.
-
-Classifica cada mudança por nível de risco e gera um relatório de drift.
-Use --intelligence para classificação avançada (intencional vs suspeito).
-
-Códigos de saída:
-  0 — sem drift ou apenas mudanças de baixo risco
-  1 — drift de risco ALTO detectado
-  2 — drift de risco CRÍTICO detectado
-
-Exemplos:
-  terraview drift
-  terraview drift --plan plan.json
-  terraview drift --intelligence          # classificar + score de risco
-  terraview drift --format compact
-  terraview drift --format json`
 
 	// explain
 	explainCmd.Short = "Explicação em linguagem natural da infraestrutura com IA"
@@ -472,7 +448,6 @@ Ferramentas expostas:
   terraview_scan             Scan de segurança com scorecard
   terraview_explain          Explicação de infraestrutura com IA
   terraview_diagram          Diagrama ASCII de infraestrutura
-  terraview_drift            Detecção e classificação de drift
   terraview_history          Consultar histórico de scans
   terraview_history_trend    Tendências de score ao longo do tempo
   terraview_history_compare  Comparar dois scans lado a lado
@@ -540,9 +515,6 @@ Exemplos:
 	})
 	translateFlags(diagramCmd, map[string]string{
 		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
-	})
-	translateFlags(driftCmd, map[string]string{
-		"intelligence": "Classificação avançada de drift e scoring de risco",
 	})
 	translateFlags(historyCmd, map[string]string{
 		"all":     "Exibir todos os projetos",

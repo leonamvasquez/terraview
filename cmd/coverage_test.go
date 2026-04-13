@@ -17,7 +17,6 @@ import (
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
-	"github.com/leonamvasquez/terraview/internal/drift"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/parser"
@@ -666,32 +665,6 @@ func TestSortedScannerNames_LargeMap(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// printDriftSummary (drift.go) - additional edge cases
-// ---------------------------------------------------------------------------
-
-func TestPrintDriftSummary_CompactWithOnlyUpdates(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 1,
-		Updates:      1,
-		MaxSeverity:  "LOW",
-		ExitCode:     1,
-	}
-	out := captureStdout(func() { printDriftSummary(result, "compact") })
-	if !strings.Contains(out, "1 changes") && !strings.Contains(out, "1 change") {
-		t.Errorf("expected change count in output, got %q", out)
-	}
-}
-
-func TestPrintDriftSummary_UnknownFormat(t *testing.T) {
-	result := drift.DriftResult{TotalChanges: 2}
-	// Unknown format should still work (defaults to full or compact)
-	out := captureStdout(func() { printDriftSummary(result, "unknown-format") })
-	if out == "" {
-		t.Error("expected some output even with unknown format")
-	}
-}
-
 // ===========================================================================
 // applyTemplateToCmds — deeper coverage
 // ===========================================================================
@@ -1006,180 +979,6 @@ func TestRunDiagram_NoPlanFile(t *testing.T) {
 }
 
 // ===========================================================================
-// runDrift — integration test with fixture plan
-// ===========================================================================
-
-func TestRunDrift_WithFixture(t *testing.T) {
-	oldPlanFile := planFile
-	oldOutputDir := outputDir
-	oldWorkDir := workDir
-	oldFormat := outputFormat
-	oldIntel := driftIntelligenceFlag
-	defer func() {
-		planFile = oldPlanFile
-		outputDir = oldOutputDir
-		workDir = oldWorkDir
-		outputFormat = oldFormat
-		driftIntelligenceFlag = oldIntel
-	}()
-
-	fixturePath := filepath.Join("..", "examples", "plan.json")
-	if _, err := os.Stat(fixturePath); err != nil {
-		t.Skip("fixture plan.json not available")
-	}
-
-	tmpDir := t.TempDir()
-	planFile = fixturePath
-	outputDir = tmpDir
-	workDir = tmpDir
-	outputFormat = ""
-	driftIntelligenceFlag = false
-
-	var runErr error
-	captureStdout(func() {
-		runErr = runDrift(nil, nil)
-	})
-
-	// May return ExitError for non-zero drift — that's OK
-	if runErr != nil {
-		if _, ok := runErr.(*ExitError); !ok {
-			t.Fatalf("runDrift error: %v", runErr)
-		}
-	}
-
-	// drift.json should be written
-	if _, statErr := os.Stat(filepath.Join(tmpDir, "drift.json")); statErr != nil {
-		t.Error("drift.json not created")
-	}
-}
-
-func TestRunDrift_WithIntelligence(t *testing.T) {
-	oldPlanFile := planFile
-	oldOutputDir := outputDir
-	oldWorkDir := workDir
-	oldFormat := outputFormat
-	oldIntel := driftIntelligenceFlag
-	defer func() {
-		planFile = oldPlanFile
-		outputDir = oldOutputDir
-		workDir = oldWorkDir
-		outputFormat = oldFormat
-		driftIntelligenceFlag = oldIntel
-	}()
-
-	fixturePath := filepath.Join("..", "examples", "plan.json")
-	if _, err := os.Stat(fixturePath); err != nil {
-		t.Skip("fixture plan.json not available")
-	}
-
-	tmpDir := t.TempDir()
-	planFile = fixturePath
-	outputDir = tmpDir
-	workDir = tmpDir
-	outputFormat = ""
-	driftIntelligenceFlag = true
-
-	var runErr error
-	captureStdout(func() {
-		runErr = runDrift(nil, nil)
-	})
-
-	if runErr != nil {
-		if _, ok := runErr.(*ExitError); !ok {
-			t.Fatalf("runDrift error: %v", runErr)
-		}
-	}
-
-	// Both drift.json and drift-intelligence.json should be written
-	if _, statErr := os.Stat(filepath.Join(tmpDir, "drift.json")); statErr != nil {
-		t.Error("drift.json not created")
-	}
-	if _, statErr := os.Stat(filepath.Join(tmpDir, "drift-intelligence.json")); statErr != nil {
-		t.Error("drift-intelligence.json not created")
-	}
-}
-
-func TestRunDrift_CompactFormat(t *testing.T) {
-	oldPlanFile := planFile
-	oldOutputDir := outputDir
-	oldWorkDir := workDir
-	oldFormat := outputFormat
-	oldIntel := driftIntelligenceFlag
-	defer func() {
-		planFile = oldPlanFile
-		outputDir = oldOutputDir
-		workDir = oldWorkDir
-		outputFormat = oldFormat
-		driftIntelligenceFlag = oldIntel
-	}()
-
-	fixturePath := filepath.Join("..", "examples", "plan.json")
-	if _, err := os.Stat(fixturePath); err != nil {
-		t.Skip("fixture plan.json not available")
-	}
-
-	tmpDir := t.TempDir()
-	planFile = fixturePath
-	outputDir = tmpDir
-	workDir = tmpDir
-	outputFormat = "compact"
-	driftIntelligenceFlag = false
-
-	var runErr error
-	out := captureStdout(func() {
-		runErr = runDrift(nil, nil)
-	})
-
-	if runErr != nil {
-		if _, ok := runErr.(*ExitError); !ok {
-			t.Fatalf("runDrift compact error: %v", runErr)
-		}
-	}
-
-	if !strings.Contains(out, "terraview drift:") {
-		t.Errorf("compact output should contain 'terraview drift:', got: %s", out)
-	}
-}
-
-func TestRunDrift_JSONFormat(t *testing.T) {
-	oldPlanFile := planFile
-	oldOutputDir := outputDir
-	oldWorkDir := workDir
-	oldFormat := outputFormat
-	oldIntel := driftIntelligenceFlag
-	defer func() {
-		planFile = oldPlanFile
-		outputDir = oldOutputDir
-		workDir = oldWorkDir
-		outputFormat = oldFormat
-		driftIntelligenceFlag = oldIntel
-	}()
-
-	fixturePath := filepath.Join("..", "examples", "plan.json")
-	if _, err := os.Stat(fixturePath); err != nil {
-		t.Skip("fixture plan.json not available")
-	}
-
-	tmpDir := t.TempDir()
-	planFile = fixturePath
-	outputDir = tmpDir
-	workDir = tmpDir
-	outputFormat = "json"
-	driftIntelligenceFlag = false
-
-	var runErr error
-	captureStdout(func() {
-		runErr = runDrift(nil, nil)
-	})
-
-	if runErr != nil {
-		if _, ok := runErr.(*ExitError); !ok {
-			t.Fatalf("runDrift json error: %v", runErr)
-		}
-	}
-}
-
-// ===========================================================================
 // versionCmd — coverage
 // ===========================================================================
 
@@ -1414,85 +1213,6 @@ func TestCanResolveAIProvider(t *testing.T) {
 	cfg.LLM.Provider = "nonexistent_fake_provider"
 	if canResolveAIProvider(cfg) {
 		t.Error("nonexistent provider should return false")
-	}
-}
-
-// ===========================================================================
-// printDriftSummary — direct coverage
-// ===========================================================================
-
-func TestPrintDriftSummary_NoChanges(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 0,
-		ExitCode:     0,
-	}
-
-	out := captureStdout(func() {
-		printDriftSummary(result, "pretty")
-	})
-
-	if !strings.Contains(out, "No infrastructure drift") {
-		t.Errorf("expected 'No infrastructure drift', got: %s", out)
-	}
-}
-
-func TestPrintDriftSummary_WithChanges(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 5,
-		Creates:      2,
-		Updates:      1,
-		Deletes:      1,
-		Replaces:     1,
-		MaxSeverity:  "HIGH",
-		ExitCode:     1,
-		Summary:      "Drift detected with high risk",
-		Findings: []rules.Finding{
-			{Severity: "HIGH", Message: "IAM role modified"},
-		},
-	}
-
-	out := captureStdout(func() {
-		printDriftSummary(result, "pretty")
-	})
-
-	for _, want := range []string{"Creates", "Updates", "Deletes", "Replaces", "HIGH", "IAM role modified"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in drift summary", want)
-		}
-	}
-}
-
-func TestPrintDriftSummary_Compact(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 3,
-		MaxSeverity:  "MEDIUM",
-		ExitCode:     0,
-		Findings: []rules.Finding{
-			{Severity: "MEDIUM", Message: "Tags changed"},
-		},
-	}
-
-	out := captureStdout(func() {
-		printDriftSummary(result, "compact")
-	})
-
-	if !strings.Contains(out, "terraview drift:") {
-		t.Errorf("compact format should contain 'terraview drift:', got: %s", out)
-	}
-}
-
-func TestPrintDriftSummary_CompactNoChanges(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 0,
-		ExitCode:     0,
-	}
-
-	out := captureStdout(func() {
-		printDriftSummary(result, "compact")
-	})
-
-	if !strings.Contains(out, "no changes detected") {
-		t.Errorf("compact no-changes should contain 'no changes detected', got: %s", out)
 	}
 }
 
@@ -2460,24 +2180,6 @@ func TestRunDiagram_BadPlan(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runDrift — error paths
-// ---------------------------------------------------------------------------
-
-func TestRunDrift_NoPlanNoTerraform(t *testing.T) {
-	oldWorkDir, oldPlanFile := workDir, planFile
-	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
-	workDir = dir
-	planFile = ""
-
-	err := runDrift(nil, nil)
-	// Either error (no terraform/no workspace) or success - just don't panic
-	_ = err
-}
-
-// ---------------------------------------------------------------------------
 // output.FormatSARIF constant via renderOutput
 // ---------------------------------------------------------------------------
 
@@ -2728,53 +2430,6 @@ func TestRunDiagram_ValidPlan(t *testing.T) {
 	out := string(outBytes)
 	if !strings.Contains(out, "vpc") && !strings.Contains(out, "aws") && len(out) < 10 {
 		t.Errorf("expected diagram output, got: %q", out[:min(100, len(out))])
-	}
-}
-
-// ---------------------------------------------------------------------------
-// runDrift — with valid plan
-// ---------------------------------------------------------------------------
-
-func TestRunDrift_ValidPlan(t *testing.T) {
-	oldWorkDir, oldPlanFile := workDir, planFile
-	defer func() { workDir, planFile = oldWorkDir, oldPlanFile }()
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(""), 0644)
-
-	plan := map[string]interface{}{
-		"format_version": "1.0",
-		"resource_changes": []interface{}{
-			map[string]interface{}{
-				"address": "aws_instance.web",
-				"type":    "aws_instance",
-				"name":    "web",
-				"change": map[string]interface{}{
-					"actions": []interface{}{"create"},
-					"after":   map[string]interface{}{"instance_type": "t3.micro"},
-				},
-			},
-		},
-	}
-	data, _ := json.Marshal(plan)
-	planPath := filepath.Join(dir, "plan.json")
-	os.WriteFile(planPath, data, 0644)
-
-	workDir = dir
-	planFile = planPath
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(r)
-
-	if err != nil {
-		t.Fatalf("runDrift error: %v", err)
 	}
 }
 
@@ -3535,55 +3190,6 @@ func TestRenderOutput_SARIFWritesFile(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runDrift — with plan that has update actions
-// ---------------------------------------------------------------------------
-
-func TestRunDrift_ValidPlanWithUpdates(t *testing.T) {
-	origWork := workDir
-	origPlan := planFile
-	origOutputDir := outputDir
-	origHome := os.Getenv("HOME")
-	origVerbose := verbose
-	origBR := brFlag
-
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer func() {
-		workDir = origWork
-		planFile = origPlan
-		outputDir = origOutputDir
-		os.Setenv("HOME", origHome)
-		verbose = origVerbose
-		brFlag = origBR
-	}()
-
-	workDir = tmpDir
-	brFlag = false
-	verbose = false
-
-	planData := `{"resource_changes":[{"address":"aws_instance.test","type":"aws_instance","change":{"actions":["update"],"before":{"ami":"ami-old","instance_type":"t3.micro"},"after":{"ami":"ami-new","instance_type":"t3.micro"}}}]}`
-	planPath := filepath.Join(tmpDir, "plan.json")
-	os.WriteFile(planPath, []byte(planData), 0644)
-
-	planFile = planPath
-	outputDir = tmpDir
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(r)
-
-	if err != nil {
-		t.Fatalf("runDrift error: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // resolveReviewConfig — various flag combinations
 // ---------------------------------------------------------------------------
 
@@ -4134,45 +3740,6 @@ func TestRunScan_StaticNoScannerNoFindings(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for --static with no scanner")
 	}
-}
-
-// ---------------------------------------------------------------------------
-// runDrift — with brFlag enabled
-// ---------------------------------------------------------------------------
-
-func TestRunDrift_WithBRFlag(t *testing.T) {
-	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["update"],"before":{"instance_type":"t3.micro"},"after":{"instance_type":"t3.large"}}}]}`
-	os.WriteFile(filepath.Join(tmpDir, "plan.json"), []byte(planJSON), 0644)
-
-	oldWorkDir := workDir
-	oldBR := brFlag
-	oldFormat := outputFormat
-	oldPlanFile := planFile
-	defer func() {
-		workDir = oldWorkDir
-		brFlag = oldBR
-		outputFormat = oldFormat
-		planFile = oldPlanFile
-	}()
-
-	workDir = tmpDir
-	brFlag = true
-	outputFormat = "json"
-	planFile = filepath.Join(tmpDir, "plan.json")
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDrift(nil, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-	io.ReadAll(r)
-
-	_ = err
 }
 
 // ---------------------------------------------------------------------------
