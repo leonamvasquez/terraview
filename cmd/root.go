@@ -54,7 +54,6 @@ History & Cache:
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
-              provider install | uninstall
 
 Scanner Management:
   scanners    Manage security scanners
@@ -160,7 +159,6 @@ Histórico & Cache:
 Gerenciamento de Providers:
   provider    Gerenciar providers de IA e runtimes LLM
               provider list | use | current | test
-              provider install | uninstall
 
 Gerenciamento de Scanners:
   scanners    Gerenciar scanners de segurança
@@ -388,32 +386,6 @@ Exemplos:
 	aiCurrentCmd.Short = "Exibir o provider de IA atualmente configurado"
 	aiTestCmd.Short = "Testar conectividade com o provider de IA configurado"
 
-	// install / uninstall
-	installCmd.Short = "Instalar dependências do terraview"
-	installCmd.Long = "Instala e configura dependências externas necessárias pelo terraview."
-	installLLMCmd.Short = "Instalar Ollama e baixar o modelo LLM padrão"
-	installLLMCmd.Long = `Instala automaticamente o runtime Ollama para inferência LLM local,
-baixa o modelo configurado e valida a instalação.
-
-Este comando é idempotente: executá-lo várias vezes não
-reinstalará — apenas validará a instalação existente.
-
-Exemplos:
-  terraview provider install ollama
-  terraview provider install ollama --model codellama:13b`
-
-	uninstallCmd.Short = "Desinstalar dependências gerenciadas pelo terraview"
-	uninstallCmd.Long = "Remove dependências externas que foram instaladas pelo terraview."
-	uninstallLLMCmd.Short = "Desinstalar Ollama e remover todos os modelos"
-	uninstallLLMCmd.Long = `Remove o binário do Ollama, para qualquer serviço em execução
-e deleta dados de modelos baixados.
-
-Este comando é idempotente: executá-lo quando o Ollama não está
-instalado simplesmente confirmará que não há nada a remover.
-
-Exemplos:
-  terraview uninstall llm`
-
 	// mcp
 	mcpCmd.Short = "Servidor Model Context Protocol (MCP)"
 	mcpCmd.Long = `Servidor MCP para integração com agentes IA.
@@ -539,10 +511,6 @@ Exemplos:
 		"format": "Formato de exportação: json, csv",
 		"output": "Caminho do arquivo de saída (obrigatório)",
 	})
-	translateFlags(installLLMCmd, map[string]string{
-		"model": "Modelo a baixar (padrão da config ou llama3.1:8b)",
-	})
-
 	// Translate Cobra built-in template labels
 	brUsageTemplate := `Uso:{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}

@@ -76,8 +76,6 @@ func init() {
 	providerCmd.AddCommand(aiUseCmd)
 	providerCmd.AddCommand(aiCurrentCmd)
 	providerCmd.AddCommand(aiTestCmd)
-	providerCmd.AddCommand(installCmd)
-	providerCmd.AddCommand(uninstallCmd)
 }
 
 // runAIList shows an interactive provider picker, then a model picker, tests
