@@ -1366,41 +1366,6 @@ func TestMoveUp(t *testing.T) {
 // runScan — error path coverage
 // ===========================================================================
 
-func TestRunScan_AllFlagEnablesFeatures(t *testing.T) {
-	oldAll := allFlag
-	oldExplain := explainFlag
-	oldDiagram := diagramFlag
-	oldImpact := impactFlag
-	oldWorkDir := workDir
-	defer func() {
-		allFlag = oldAll
-		explainFlag = oldExplain
-		diagramFlag = oldDiagram
-		impactFlag = oldImpact
-		workDir = oldWorkDir
-	}()
-
-	// Verify --all sets feature flags
-	allFlag = true
-	explainFlag = false
-	diagramFlag = false
-	impactFlag = false
-	workDir = t.TempDir()
-
-	// Will fail due to no .tf files, but flags should be set
-	_ = runScan(nil, nil)
-
-	if !explainFlag {
-		t.Error("--all should set explainFlag")
-	}
-	if !diagramFlag {
-		t.Error("--all should set diagramFlag")
-	}
-	if !impactFlag {
-		t.Error("--all should set impactFlag")
-	}
-}
-
 func TestRunScan_NoProviderNoScanner(t *testing.T) {
 	oldWorkDir := workDir
 	oldStatic := staticOnly
@@ -1734,41 +1699,6 @@ func TestMergeAndScore_WithDisabledRules(t *testing.T) {
 	}
 }
 
-func TestMergeAndScore_ExplainScores(t *testing.T) {
-	oldFlag := explainScoresFlag
-	defer func() { explainScoresFlag = oldFlag }()
-	explainScoresFlag = true
-
-	cfg := config.Config{}
-	cfg.Scoring.SeverityWeights = config.SeverityWeightsConfig{
-		Critical: 10,
-		High:     7,
-		Medium:   4,
-		Low:      1,
-	}
-
-	rc := reviewConfig{
-		cfg:          cfg,
-		resolvedPlan: "test.json",
-	}
-
-	resources := []parser.NormalizedResource{
-		{Address: "aws_instance.web", Action: "create", Type: "aws_instance"},
-	}
-	topoGraph := topology.BuildGraph(resources)
-
-	sr := scanResult{
-		hardFindings: []rules.Finding{
-			{RuleID: "R1", Severity: "HIGH", Resource: "aws_instance.web", Message: "test"},
-		},
-	}
-
-	result := mergeAndScore(rc, resources, topoGraph, sr)
-	if result.ScoreDecomposition == nil {
-		t.Error("expected ScoreDecomposition to be set when explainScoresFlag is true")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // resolveReviewConfig — partial (with fixture plan and minimal config)
 // ---------------------------------------------------------------------------
@@ -1947,12 +1877,10 @@ func TestRenderOutput_PrettyFormat(t *testing.T) {
 	dir := t.TempDir()
 
 	// Save/restore package-level flags
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -1998,12 +1926,10 @@ func TestRenderOutput_PrettyFormat(t *testing.T) {
 func TestRenderOutput_JSONFormat(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2048,12 +1974,10 @@ func TestRenderOutput_JSONFormat(t *testing.T) {
 func TestRenderOutput_SARIFFormat(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2097,12 +2021,10 @@ func TestRenderOutput_SARIFFormat(t *testing.T) {
 func TestRenderOutput_StrictMode(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = true
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2140,12 +2062,10 @@ func TestRenderOutput_StrictMode(t *testing.T) {
 func TestRenderOutput_WithScannerResult(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2182,12 +2102,10 @@ func TestRenderOutput_WithScannerResult(t *testing.T) {
 func TestRenderOutput_BRFlag(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = true
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2292,85 +2210,7 @@ func TestCanResolveAIProvider_Unknown(t *testing.T) {
 // mergeAndScore — additional branch coverage
 // ---------------------------------------------------------------------------
 
-func TestMergeAndScore_WithDiagramFlag(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = true
-	impactFlag = false
-	explainScoresFlag = false
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg:          config.Config{},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create"},
-	}
-	graph := topology.BuildGraph(resources)
-	sr := scanResult{}
-
-	result := mergeAndScore(rc, resources, graph, sr)
-	if result.Diagram == "" {
-		t.Error("expected diagram to be generated when diagramFlag is true")
-	}
-}
-
-func TestMergeAndScore_WithImpactFlag(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = true
-	explainScoresFlag = false
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg:          config.Config{},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create"},
-	}
-	graph := topology.BuildGraph(resources)
-	sr := scanResult{}
-
-	result := mergeAndScore(rc, resources, graph, sr)
-	if result.BlastRadius == nil {
-		t.Error("expected blast radius when impactFlag is true")
-	}
-}
-
-func TestMergeAndScore_WithExplainScores(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = true
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg:          config.Config{},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create"},
-	}
-	sr := scanResult{
-		hardFindings: []rules.Finding{
-			{Resource: "aws_instance.web", Severity: "HIGH", Message: "test"},
-		},
-	}
-
-	result := mergeAndScore(rc, resources, nil, sr)
-	if result.ScoreDecomposition == nil {
-		t.Error("expected score decomposition with explainScoresFlag")
-	}
-}
-
 func TestMergeAndScore_WithContextFindings(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = false
-
 	rc := reviewConfig{
 		resolvedPlan: "test.json",
 		cfg:          config.Config{},
@@ -2393,12 +2233,6 @@ func TestMergeAndScore_WithContextFindings(t *testing.T) {
 }
 
 func TestMergeAndScore_MetaAnalysis(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = false
-
 	rc := reviewConfig{
 		resolvedPlan: "test.json",
 		cfg:          config.Config{},
@@ -2650,12 +2484,10 @@ func TestRunDrift_NoPlanNoTerraform(t *testing.T) {
 func TestRenderOutput_CompactFormat(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -2818,16 +2650,10 @@ func TestExecuteReview_ValidPlanStaticOnly(t *testing.T) {
 	outputDir = outDir
 	findingsFile = ""
 
-	// Save/restore flags that mergeAndScore and renderOutput use
-	oldBR, oldStrict, oldImpact, oldExplainScores, oldDiagram := brFlag, strict, impactFlag, explainScoresFlag, diagramFlag
-	defer func() {
-		brFlag, strict, impactFlag, explainScoresFlag, diagramFlag = oldBR, oldStrict, oldImpact, oldExplainScores, oldDiagram
-	}()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
-	diagramFlag = false
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -3182,49 +3008,6 @@ func TestRunCacheClear_WithDir(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// runScan — allFlag branch + static+no-scanner error
-// ---------------------------------------------------------------------------
-
-func TestRunScan_AllFlagSetsFeatures(t *testing.T) {
-	origAll := allFlag
-	origExplain := explainFlag
-	origDiagram := diagramFlag
-	origImpact := impactFlag
-	origStatic := staticOnly
-	origWork := workDir
-	origHome := os.Getenv("HOME")
-
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer func() {
-		allFlag = origAll
-		explainFlag = origExplain
-		diagramFlag = origDiagram
-		impactFlag = origImpact
-		staticOnly = origStatic
-		workDir = origWork
-		os.Setenv("HOME", origHome)
-	}()
-
-	workDir = tmpDir
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".terraview.yaml"), []byte(""), 0644)
-
-	allFlag = true
-	staticOnly = true
-
-	// Should error because --static + no scanner + allFlag
-	err := runScan(nil, nil)
-	if err == nil {
-		t.Fatal("expected error for --static with no scanner specified")
-	}
-	// After allFlag=true, explainFlag/diagramFlag/impactFlag should be set
-	if !explainFlag || !diagramFlag || !impactFlag {
-		t.Error("expected allFlag to enable explain, diagram, impact")
-	}
-}
-
 func TestRunScan_NoScannerNoProvider(t *testing.T) {
 	origStatic := staticOnly
 	origWork := workDir
@@ -3320,74 +3103,16 @@ func TestScanArgs_TerragruntSpaceSyntax(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// renderOutput — impactFlag with BlastRadius
-// ---------------------------------------------------------------------------
-
-func TestRenderOutput_WithImpactAndBlastRadius(t *testing.T) {
-	dir := t.TempDir()
-
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
-	brFlag = false
-	strict = false
-	impactFlag = true
-	explainScoresFlag = false
-
-	rc := reviewConfig{
-		resolvedOutput:  dir,
-		effectiveFormat: output.FormatPretty,
-	}
-	result := aggregator.ReviewResult{
-		PlanFile:       "test.json",
-		TotalResources: 1,
-		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
-		Score:          scoring.Score{OverallScore: 9.0},
-		SeverityCounts: map[string]int{},
-		CategoryCounts: map[string]int{},
-		BlastRadius: &blast.BlastResult{
-			Impacts: []blast.Impact{
-				{Resource: "aws_instance.web", Action: "create", DirectDeps: []string{"aws_security_group.web"}, TotalAffected: 1, RiskLevel: "medium"},
-			},
-			MaxRadius: 2,
-			Summary:   "Moderate blast radius",
-		},
-	}
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	exitCode, err := renderOutput(rc, result, nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-	out, _ := io.ReadAll(r)
-
-	if err != nil {
-		t.Fatalf("renderOutput error: %v", err)
-	}
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-	// The blast radius output should have been printed
-	if !strings.Contains(string(out), "blast") && !strings.Contains(string(out), "Blast") && !strings.Contains(string(out), "radius") {
-		t.Log("output:", string(out))
-	}
-}
-
-// ---------------------------------------------------------------------------
 // renderOutput — BR flag + scanner result (exercises FormatScannerHeaderBR)
 // ---------------------------------------------------------------------------
 
 func TestRenderOutput_BRFlagWithScannerResult(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = true
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -3432,12 +3157,10 @@ func TestRenderOutput_BRFlagWithScannerResult(t *testing.T) {
 func TestRenderOutput_JSONOnlyNoMarkdown(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -3483,12 +3206,10 @@ func TestRenderOutput_JSONOnlyNoMarkdown(t *testing.T) {
 func TestRenderOutput_StrictModeExitCodeZero(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = true
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -3772,12 +3493,10 @@ func TestDetectCurrentPlanHash_CoverageWithPlan(t *testing.T) {
 func TestRenderOutput_SARIFWritesFile(t *testing.T) {
 	dir := t.TempDir()
 
-	oldBR, oldStrict, oldImpact, oldExplainScores := brFlag, strict, impactFlag, explainScoresFlag
-	defer func() { brFlag, strict, impactFlag, explainScoresFlag = oldBR, oldStrict, oldImpact, oldExplainScores }()
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
 	brFlag = false
 	strict = false
-	impactFlag = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		resolvedOutput:  dir,
@@ -3928,9 +3647,6 @@ func TestExecuteReview_StaticWithFindings(t *testing.T) {
 	origStatic := staticOnly
 	origBR := brFlag
 	origFindings := findingsFile
-	origImpact := impactFlag
-	origDiagram := diagramFlag
-	origExplainScores := explainScoresFlag
 	origStrict := strict
 
 	tmpDir := t.TempDir()
@@ -3944,18 +3660,12 @@ func TestExecuteReview_StaticWithFindings(t *testing.T) {
 		staticOnly = origStatic
 		brFlag = origBR
 		findingsFile = origFindings
-		impactFlag = origImpact
-		diagramFlag = origDiagram
-		explainScoresFlag = origExplainScores
 		strict = origStrict
 	}()
 
 	workDir = tmpDir
 	brFlag = false
 	staticOnly = true
-	impactFlag = false
-	diagramFlag = false
-	explainScoresFlag = false
 	strict = false
 	outputFormat = "json"
 	outputDir = tmpDir
@@ -3999,12 +3709,6 @@ func TestExecuteReview_StaticWithFindings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMergeAndScore_ContextFindingsWithAI(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = false
-
 	rc := reviewConfig{
 		resolvedPlan: "test.json",
 		cfg:          config.Config{},
@@ -4024,46 +3728,6 @@ func TestMergeAndScore_ContextFindingsWithAI(t *testing.T) {
 	result := mergeAndScore(rc, resources, graph, sr)
 	// AI findings may be filtered by hallucination validator, but function should not panic
 	_ = result
-}
-
-// ---------------------------------------------------------------------------
-// mergeAndScore — with scanner findings + impact + explain scores
-// ---------------------------------------------------------------------------
-
-func TestMergeAndScore_WithScannerFindingsAndImpact(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = true
-	explainScoresFlag = true
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg:          config.Config{},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create"},
-		{Type: "aws_s3_bucket", Name: "data", Action: "create"},
-	}
-	graph := topology.BuildGraph(resources)
-	sr := scanResult{
-		hardFindings: []rules.Finding{
-			{RuleID: "CKV-001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Message: "Scanner finding", Remediation: "Fix"},
-		},
-		scannerResult: &scanner.AggregatedResult{
-			ScannerStats: []scanner.ScannerStat{
-				{Name: "checkov", Findings: 1},
-			},
-		},
-	}
-
-	result := mergeAndScore(rc, resources, graph, sr)
-	if len(result.Findings) == 0 {
-		t.Error("expected findings from scanner")
-	}
-	if result.BlastRadius == nil {
-		t.Error("expected blast radius when impactFlag is true")
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -4150,19 +3814,13 @@ func TestRenderOutput_SARIFFormatWithFindings(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatSARIF,
@@ -4206,19 +3864,13 @@ func TestRenderOutput_MarkdownWithScanner(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = true
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatPretty,
@@ -4265,19 +3917,13 @@ func TestRenderOutput_StrictModeEscalation(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = true
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatJSON,
@@ -4318,19 +3964,13 @@ func TestRenderOutput_FullFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatJSON,
@@ -4367,12 +4007,6 @@ func TestRenderOutput_FullFormat(t *testing.T) {
 }
 
 func TestMergeAndScore_WithMetaAnalysis(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = false
-
 	rc := reviewConfig{
 		resolvedPlan: "test.json",
 		cfg:          config.Config{},
@@ -4867,46 +4501,6 @@ func TestRunScan_ScannerFromPositionalArg(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runScan — allFlag sets features
-// ---------------------------------------------------------------------------
-
-func TestRunScan_AllFlagSetsAllFeatures(t *testing.T) {
-	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("# tf"), 0644)
-
-	oldAll := allFlag
-	oldWorkDir := workDir
-	oldExplain := explainFlag
-	oldDiagram := diagramFlag
-	oldImpact := impactFlag
-	defer func() {
-		allFlag = oldAll
-		workDir = oldWorkDir
-		explainFlag = oldExplain
-		diagramFlag = oldDiagram
-		impactFlag = oldImpact
-	}()
-
-	allFlag = true
-	explainFlag = false
-	diagramFlag = false
-	impactFlag = false
-	workDir = tmpDir
-
-	_ = runScan(nil, nil)
-
-	if !explainFlag {
-		t.Error("expected explainFlag to be set by --all")
-	}
-	if !diagramFlag {
-		t.Error("expected diagramFlag to be set by --all")
-	}
-	if !impactFlag {
-		t.Error("expected impactFlag to be set by --all")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // canResolveAIProvider — with empty config
 // ---------------------------------------------------------------------------
 
@@ -4993,19 +4587,13 @@ func TestRenderOutput_ImpactFlagWithBlastRadius(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = true
 	strict = false
-	explainScoresFlag = false
 
 	resources := []parser.NormalizedResource{{Type: "aws_instance", Name: "web", Action: "create", Address: "aws_instance.web"}}
 	graph := topology.BuildGraph(resources)
@@ -5048,19 +4636,13 @@ func TestRenderOutput_CompactFormatWithHighFinding(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatCompact,
@@ -5109,19 +4691,13 @@ func TestRenderOutput_ExplainScoresFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = false
-	explainScoresFlag = true
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatPretty,
@@ -5152,19 +4728,13 @@ func TestRenderOutput_BRFlagWithScannerStats(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = true
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatPretty,
@@ -5244,19 +4814,13 @@ func TestRenderOutput_SARIFWritesSarifFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldBR := brFlag
-	oldImpact := impactFlag
 	oldStrict := strict
-	oldExplainScores := explainScoresFlag
 	defer func() {
 		brFlag = oldBR
-		impactFlag = oldImpact
 		strict = oldStrict
-		explainScoresFlag = oldExplainScores
 	}()
 	brFlag = false
-	impactFlag = false
 	strict = false
-	explainScoresFlag = false
 
 	rc := reviewConfig{
 		effectiveFormat: output.FormatSARIF,
@@ -5290,70 +4854,6 @@ func TestRenderOutput_SARIFWritesSarifFile(t *testing.T) {
 	sarifPath := filepath.Join(tmpDir, "review.sarif.json")
 	if _, err := os.Stat(sarifPath); err != nil {
 		t.Errorf("SARIF file not written: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// mergeAndScore — with explain scores flag
-// ---------------------------------------------------------------------------
-
-func TestMergeAndScore_WithExplainScoresFlag(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = false
-	explainScoresFlag = true
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg: config.Config{
-			Scoring: config.ScoringConfig{
-				SeverityWeights: config.SeverityWeightsConfig{
-					Critical: 10, High: 5, Medium: 2, Low: 1,
-				},
-			},
-		},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create"},
-	}
-	sr := scanResult{
-		hardFindings: []rules.Finding{
-			{RuleID: "SEC-001", Severity: "HIGH", Category: "security",
-				Resource: "aws_instance.web", Message: "Test", Remediation: "Fix"},
-		},
-	}
-
-	result := mergeAndScore(rc, resources, nil, sr)
-	if result.ScoreDecomposition == nil {
-		t.Error("expected score decomposition when explainScoresFlag is true")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// mergeAndScore — with impact flag
-// ---------------------------------------------------------------------------
-
-func TestMergeAndScore_WithImpactFlagAndResources(t *testing.T) {
-	oldDiagram, oldImpact, oldExplainScores := diagramFlag, impactFlag, explainScoresFlag
-	defer func() { diagramFlag, impactFlag, explainScoresFlag = oldDiagram, oldImpact, oldExplainScores }()
-	diagramFlag = false
-	impactFlag = true
-	explainScoresFlag = false
-
-	rc := reviewConfig{
-		resolvedPlan: "test.json",
-		cfg:          config.Config{},
-	}
-	resources := []parser.NormalizedResource{
-		{Type: "aws_instance", Name: "web", Action: "create", Address: "aws_instance.web"},
-	}
-	graph := topology.BuildGraph(resources)
-	sr := scanResult{}
-
-	result := mergeAndScore(rc, resources, graph, sr)
-	if result.BlastRadius == nil {
-		t.Error("expected blast radius when impactFlag is true")
 	}
 }
 

@@ -72,8 +72,6 @@ Get started:
   cd my-terraform-project
   terraview scan checkov                    # scanner + AI (default)
   terraview scan checkov --static           # scanner only, no AI
-  terraview scan checkov --all              # everything enabled
-  terraview scan checkov --fix              # scan + AI fix suggestions
   terraview status                          # show open findings
   terraview fix                             # apply AI fixes interactively
   terraview diagram                         # infrastructure diagram
@@ -183,8 +181,6 @@ Primeiros passos:
   cd meu-projeto-terraform
   terraview scan checkov                    # scanner + IA (padrão)
   terraview scan checkov --static           # apenas scanner, sem IA
-  terraview scan checkov --all              # tudo habilitado
-  terraview scan checkov --fix              # scan + sugestões de fix IA
   terraview status                          # exibir findings abertos
   terraview fix                             # aplicar fixes IA interativamente
   terraview diagram                         # diagrama de infraestrutura
@@ -218,17 +214,16 @@ Se --plan não for especificado, o terraview executará automaticamente:
 Exemplos:
   terraview scan checkov                       # scanner + IA (padrão)
   terraview scan checkov --static              # apenas scanner, sem IA
-  terraview scan checkov --all                 # tudo habilitado
   terraview scan checkov --provider gemini     # usar provider IA específico
-  terraview scan checkov --explain             # scanner + IA + explicação
-  terraview scan checkov --diagram             # scanner + IA + diagrama
-  terraview scan checkov --impact              # scanner + IA + análise de impacto
   terraview scan checkov --format compact      # saída mínima
   terraview scan checkov --format sarif        # SARIF para CI
   terraview scan checkov --strict              # HIGH retorna código de saída 2
   terraview scan checkov --findings ext.json   # importar achados externos
-  terraview scan checkov --fix                 # sugestões de fix IA (top 5)
-  terraview scan checkov --fix --max-fix 10    # sugestões de fix IA (até 10)
+
+Comandos relacionados:
+  terraview explain                            # explicação de infra com IA
+  terraview diagram                            # diagrama ASCII da infra
+  terraview fix                                # gerar/aplicar fixes por IA
 
 Terragrunt:
   terraview scan checkov --terragrunt                    # auto-detectar config terragrunt
