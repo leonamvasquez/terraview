@@ -395,7 +395,7 @@ permitindo que agentes IA (Claude Code, Cursor, Windsurf) chamem
 ferramentas do terraview programaticamente via stdio.
 
 Uso:
-  terraview mcp serve`
+  terraview mcp server`
 
 	mcpServeCmd.Short = "Iniciar o servidor MCP via stdio"
 	mcpServeCmd.Long = `Inicia um servidor Model Context Protocol que lê mensagens JSON-RPC 2.0
@@ -404,14 +404,14 @@ do stdin e escreve respostas no stdout.
 Logs vão para stderr. Apenas JSON-RPC válido aparece no stdout.
 
 Registrar no Claude Code:
-  claude mcp add terraview -- terraview mcp serve
+  claude mcp add terraview -- terraview mcp server
 
 Registrar no Cursor (.cursor/mcp.json):
   {
     "mcpServers": {
       "terraview": {
         "command": "terraview",
-        "args": ["mcp", "serve"]
+        "args": ["mcp", "server"]
       }
     }
   }

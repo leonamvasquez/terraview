@@ -76,7 +76,7 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - **Drift Detection** — detects and classifies infrastructure drift with optional `--intelligence` for advanced risk scoring
 - **Module Analysis** — version pinning, source hygiene, and nesting depth checks via `terraview modules`
 - **Scan History** — SQLite-backed tracking with sparkline trends, side-by-side comparison, and CSV/JSON export
-- **MCP Server** — Model Context Protocol integration for AI agents (Claude Code, Cursor, Windsurf) via `terraview mcp serve`
+- **MCP Server** — Model Context Protocol integration for AI agents (Claude Code, Cursor, Windsurf) via `terraview mcp server`
 - **Native CI/CD** — semantic exit codes (0/1/2) + SARIF, JSON, Markdown output for GitHub Actions, GitLab CI and Azure DevOps
 - **Supply chain hardening** — SBOM (CycloneDX), cosign signatures, SLSA Build Provenance Level 3 on every release
 - **Bilingual (en/pt-BR)** — `--br` flag available on all commands
@@ -475,13 +475,15 @@ history:
 Model Context Protocol server for AI agent integration. Exposes terraview tools via JSON-RPC 2.0 over stdio.
 
 ```bash
-terraview mcp serve
+terraview mcp server
 ```
+
+> The alias `terraview mcp serve` still works for backward compatibility.
 
 Register with Claude Code:
 
 ```bash
-claude mcp add terraview -- terraview mcp serve
+claude mcp add terraview -- terraview mcp server
 ```
 
 Register with Cursor (`.cursor/mcp.json`):
@@ -491,13 +493,13 @@ Register with Cursor (`.cursor/mcp.json`):
   "mcpServers": {
     "terraview": {
       "command": "terraview",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "server"]
     }
   }
 }
 ```
 
-Exposes 11 tools: `terraview_scan`, `terraview_explain`, `terraview_diagram`, `terraview_drift`, `terraview_history`, `terraview_history_trend`, `terraview_history_compare`, `terraview_impact`, `terraview_cache`, `terraview_scanners`, `terraview_version`.
+Exposes 11 tools: `terraview_scan`, `terraview_explain`, `terraview_diagram`, `terraview_history`, `terraview_history_trend`, `terraview_history_compare`, `terraview_impact`, `terraview_cache`, `terraview_scanners`, `terraview_fix_suggest`, `terraview_version`.
 
 ### Provider Management
 
@@ -1244,7 +1246,7 @@ terraview history clear                     # clear current project
 Model Context Protocol server for AI agent integration.
 
 ```bash
-terraview mcp serve                         # start MCP server over stdio
+terraview mcp server                        # start MCP server over stdio
 ```
 
 ### Provider management

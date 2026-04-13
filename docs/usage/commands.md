@@ -17,7 +17,6 @@ Core Commands:
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
-              provider install | uninstall
 
 Scanner Management:
   scanners    Manage security scanners
@@ -25,7 +24,7 @@ Scanner Management:
 
 Integration:
   mcp         Model Context Protocol server for AI agents
-              mcp serve
+              mcp server
 
 Utilities:
   cache       Manage the AI response cache
@@ -280,15 +279,17 @@ history:
 Servidor MCP para integração com agentes AI. Expõe funcionalidades do terraview via JSON-RPC 2.0 sobre stdio, permitindo que Claude Code, Cursor e Windsurf chamem tools programaticamente.
 
 ```bash
-terraview mcp serve                         # iniciar servidor MCP
+terraview mcp server                        # iniciar servidor MCP
 ```
+
+O alias `terraview mcp serve` continua funcionando para compatibilidade.
 
 ### Registro com agentes
 
 **Claude Code:**
 
 ```bash
-claude mcp add terraview -- terraview mcp serve
+claude mcp add terraview -- terraview mcp server
 ```
 
 **Cursor** (`.cursor/mcp.json`):
@@ -298,7 +299,7 @@ claude mcp add terraview -- terraview mcp serve
   "mcpServers": {
     "terraview": {
       "command": "terraview",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "server"]
     }
   }
 }
@@ -311,13 +312,13 @@ claude mcp add terraview -- terraview mcp serve
 | `terraview_scan` | Security scan com scorecard |
 | `terraview_explain` | Explicação da infraestrutura por IA |
 | `terraview_diagram` | Diagrama ASCII da infraestrutura |
-| `terraview_drift` | Detecção e classificação de drift |
 | `terraview_history` | Consultar histórico de scans |
 | `terraview_history_trend` | Tendências de scores ao longo do tempo |
 | `terraview_history_compare` | Comparar dois scans lado a lado |
 | `terraview_impact` | Blast radius / análise de impacto |
 | `terraview_cache` | Status e gerenciamento do cache de IA |
 | `terraview_scanners` | Listar scanners disponíveis |
+| `terraview_fix_suggest` | Sugestões de correção geradas por IA |
 | `terraview_version` | Versão e informações do ambiente |
 
 ---
