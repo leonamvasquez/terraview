@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,37 +17,138 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ── flags ───────────────────────────────────────────────────────────────────
+
 var (
-	fixMaxFlag      int
-	fixAllFlag      bool
+	// shared across plan + apply
 	fixProviderFlag string
 	fixModelFlag    string
+	fixMaxFlag      int
+	fixSeverityFlag string
+	fixFileFlag     string
+
+	// apply-only
+	fixAutoApproveFlag bool
 )
+
+// ── commands ────────────────────────────────────────────────────────────────
 
 var fixCmd = &cobra.Command{
 	Use:   "fix",
-	Short: "Interactively review and apply AI-generated fixes for open findings",
-	Long: `Reads findings from the last scan and generates AI-powered HCL fixes.
-Each fix is presented for approval before being applied directly to the .tf file.
+	Short: "Preview and apply AI-generated fixes for open findings",
+	Long: `Parent command for fix workflows. Reads findings from the last scan and
+generates AI-powered HCL fixes.
+
+Subcommands:
+  plan    Dry-run — generate fixes and show colored diffs without writing
+  apply   Apply fixes interactively (default) or automatically (--auto-approve)
 
 Requires a previous 'terraview scan' in this project directory.`,
-	Example: `  terraview fix
-  terraview fix --max-fix 10
-  terraview fix --provider claude --model claude-haiku-4-5`,
-	RunE: runFix,
+	Example: `  terraview fix plan
+  terraview fix apply
+  terraview fix apply --auto-approve
+  terraview fix apply CKV_AWS_18
+  terraview fix apply --severity CRITICAL --file vpc.tf`,
+}
+
+var fixPlanCmd = &cobra.Command{
+	Use:   "plan",
+	Short: "Dry-run: generate fixes and show diffs without writing",
+	Long: `Generates AI-powered fix suggestions for CRITICAL/HIGH findings from the
+last scan and displays colored diffs for each. No files are modified.
+
+Run 'terraview fix apply' to apply these fixes.`,
+	Example: `  terraview fix plan
+  terraview fix plan --severity CRITICAL
+  terraview fix plan --file vpc.tf`,
+	RunE: runFixPlan,
+}
+
+var fixApplyCmd = &cobra.Command{
+	Use:   "apply [finding-id]",
+	Short: "Apply AI-generated fixes (interactive by default)",
+	Long: `Generates AI-powered fix suggestions and applies them to .tf files.
+
+Default mode is interactive: each fix is shown with a diff, and you approve or
+reject per fix. Use --auto-approve to apply all without prompting (CI/scripts).
+
+Filters:
+  [finding-id]      positional arg — only fix findings with this rule ID
+  --severity LEVEL  only CRITICAL or HIGH
+  --file PATH       only fixes that modify this file
+  --max N           cap the number of fixes generated (0 = unlimited)`,
+	Example: `  terraview fix apply
+  terraview fix apply --auto-approve
+  terraview fix apply CKV_AWS_18
+  terraview fix apply --severity CRITICAL
+  terraview fix apply --file vpc.tf
+  terraview fix apply --severity HIGH --max 5`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runFixApply,
 }
 
 func init() {
-	fixCmd.Flags().IntVar(&fixMaxFlag, "max-fix", 5, "Maximum number of findings to fix")
-	fixCmd.Flags().BoolVar(&fixAllFlag, "all", false, "Fix all CRITICAL/HIGH findings without interactive prompts")
-	fixCmd.Flags().StringVar(&fixProviderFlag, "provider", "", "AI provider override (default: from last scan or config)")
-	fixCmd.Flags().StringVar(&fixModelFlag, "model", "", "AI model override")
+	rootCmd.AddCommand(fixCmd)
+	fixCmd.AddCommand(fixPlanCmd)
+	fixCmd.AddCommand(fixApplyCmd)
+
+	// Shared flags on both subcommands
+	for _, c := range []*cobra.Command{fixPlanCmd, fixApplyCmd} {
+		c.Flags().StringVar(&fixProviderFlag, "provider", "", "AI provider override (default: from last scan or config)")
+		c.Flags().StringVar(&fixModelFlag, "model", "", "AI model override")
+		c.Flags().IntVar(&fixMaxFlag, "max", 0, "Maximum number of fixes to generate (0 = unlimited)")
+		c.Flags().StringVar(&fixSeverityFlag, "severity", "", "Only fix findings of this severity (CRITICAL, HIGH)")
+		c.Flags().StringVar(&fixFileFlag, "file", "", "Only fix findings whose .tf file matches this path")
+	}
+
+	fixApplyCmd.Flags().BoolVar(&fixAutoApproveFlag, "auto-approve", false, "Apply all fixes without interactive confirmation")
 }
 
-func runFix(cmd *cobra.Command, _ []string) error {
+// ── run handlers ────────────────────────────────────────────────────────────
+
+type fixFilter struct {
+	findingID string
+	severity  string
+	file      string
+	max       int
+}
+
+func runFixPlan(cmd *cobra.Command, args []string) error {
+	filter := fixFilter{
+		findingID: "",
+		severity:  strings.ToUpper(fixSeverityFlag),
+		file:      fixFileFlag,
+		max:       fixMaxFlag,
+	}
+	return generateAndHandleFixes(cmd, filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
+		session.Preview(pending)
+	})
+}
+
+func runFixApply(cmd *cobra.Command, args []string) error {
+	filter := fixFilter{
+		severity: strings.ToUpper(fixSeverityFlag),
+		file:     fixFileFlag,
+		max:      fixMaxFlag,
+	}
+	if len(args) > 0 {
+		filter.findingID = args[0]
+	}
+
+	return generateAndHandleFixes(cmd, filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
+		if fixAutoApproveFlag {
+			session.ApplyAll(pending)
+		} else {
+			session.Review(pending)
+		}
+	})
+}
+
+// ── core generator ──────────────────────────────────────────────────────────
+
+func generateAndHandleFixes(cmd *cobra.Command, filter fixFilter, handler func(*fix.ApplySession, []fix.PendingFix)) error {
 	projectDir := resolveProjectDir()
 
-	// ── Load last scan ──────────────────────────────────────────────────────
 	ls, err := history.LoadLastScan(projectDir)
 	if err != nil {
 		return fmt.Errorf("reading last scan: %w", err)
@@ -64,39 +166,25 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		humanAge(age),
 		len(ls.Findings),
 	)
-
 	if age > 24*time.Hour {
 		fmt.Printf("  %s⚠ Last scan is over 24h old — consider running terraview scan first.%s\n", yellow, reset)
 	}
 
-	// ── Filter to actionable findings ───────────────────────────────────────
-	// --all means "apply without interactive prompts".
-	// It only removes the cap when --max-fix was NOT explicitly set by the user;
-	// if both are provided (--all --max-fix 30), the explicit limit is respected.
-	maxFix := fixMaxFlag
-	if fixAllFlag && !cmd.Flags().Changed("max-fix") {
-		maxFix = 0 // no cap: fix everything
-	}
-	targets := filterFixTargets(ls.Findings, maxFix)
+	// Filter eligible findings
+	targets := filterFixTargets(ls.Findings, filter)
 	if len(targets) == 0 {
-		fmt.Printf("\n  %s✓ No CRITICAL/HIGH findings to fix.%s\n\n", green, reset)
+		fmt.Printf("\n  %s✓ No findings match the filter.%s\n\n", green, reset)
 		return nil
 	}
-	eligible := len(ls.FindingsBySeverity("CRITICAL", "HIGH"))
-	if fixAllFlag && maxFix == 0 {
-		fmt.Printf("  %d CRITICAL/HIGH finding(s) — fixing all\n\n", eligible)
-	} else {
-		fmt.Printf("  %d CRITICAL/HIGH finding(s) eligible · fixing up to %d\n\n", eligible, fixMaxFlag)
-	}
+	fmt.Printf("  %d finding(s) to process\n\n", len(targets))
 
-	// ── Resolve AI provider ─────────────────────────────────────────────────
+	// Resolve AI provider
 	providerName := fixProviderFlag
 	modelName := fixModelFlag
 	if providerName == "" {
 		providerName = ls.Provider
 		if providerName == "" {
-			cfg, cfgErr := config.Load(workDir)
-			if cfgErr == nil {
+			if cfg, cfgErr := config.Load(workDir); cfgErr == nil {
 				providerName = cfg.LLM.Provider
 				if modelName == "" {
 					modelName = cfg.LLM.Model
@@ -111,39 +199,28 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no AI provider configured — use --provider or run: terraview provider list")
 	}
 
-	// searchDir: where to find and patch .tf files.
-	// Prefer ls.ProjectDir (saved from the scan run) so that `terraview fix`
-	// works correctly regardless of the current working directory.
-	// --dir overrides when explicitly provided.
 	searchDir := ls.ProjectDir
 	if workDir != "" && workDir != "." {
 		searchDir = workDir
 	}
 
-	// ── Load plan for resource context ─────────────────────────────────────
+	// Load plan for resource context
 	planPath := ls.PlanFile
 	if planFile != "" {
-		planPath = planFile // explicit --plan flag overrides
+		planPath = planFile
 	}
-
-	var rc reviewConfig
 	rawPlan, resources, _, planErr := parsePlan(planPath)
 	if planErr != nil {
 		fmt.Printf("  %s⚠ Could not load plan (%v) — fixes will have less context.%s\n", yellow, planErr, reset)
-	} else {
-		rc.resolvedPlan = planPath
 	}
 
-	// Resolve API key from env / config
-	apiKey := resolveAPIKey(providerName)
-
-	// ── Build provider ──────────────────────────────────────────────────────
+	// Build provider
 	const perCallTimeout = 30
 	const perFindingBudget = perCallTimeout*2 + 5
 
 	providerCfg := ai.ProviderConfig{
 		Model:       modelName,
-		APIKey:      apiKey,
+		APIKey:      resolveAPIKey(providerName),
 		Temperature: 0.1,
 		MaxTokens:   1024,
 		MaxRetries:  1,
@@ -158,10 +235,8 @@ func runFix(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("AI provider: %w", err)
 	}
-
 	suggester := fix.NewSuggester(provider)
 
-	// ── Build resource index ────────────────────────────────────────────────
 	resourceMap := make(map[string]parsedResource, len(resources))
 	for _, r := range resources {
 		resourceMap[r.Address] = parsedResource{typ: r.Type, values: r.Values}
@@ -172,7 +247,7 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		planIndex = fix.BuildIndex(rawPlan, resources)
 	}
 
-	// ── Phase 1: generate suggestions ──────────────────────────────────────
+	// Phase 1: generate suggestions
 	fmt.Printf("%s Generating %d fix suggestion(s)...\n", output.Prefix(), len(targets))
 
 	pending := make([]fix.PendingFix, 0, len(targets))
@@ -186,10 +261,13 @@ func runFix(cmd *cobra.Command, _ []string) error {
 			resourceConfig = pr.values
 		}
 
-		// Locate the resource in the .tf files BEFORE calling the AI so we can
-		// send the actual HCL source as context. The AI uses this to make a
-		// minimal targeted change instead of rewriting the block from scratch.
 		loc, _ := fix.FindResource(searchDir, f.Resource)
+
+		// --file filter: skip if the located file doesn't match
+		if filter.file != "" && !locationMatchesFile(loc, filter.file, searchDir) {
+			fmt.Printf("⏩ skipped (file filter)\n")
+			continue
+		}
 
 		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingBudget)*time.Second)
 		req := fix.FixRequest{
@@ -204,8 +282,6 @@ func runFix(cmd *cobra.Command, _ []string) error {
 			ResourceConfig: resourceConfig,
 			PlanIndex:      planIndex,
 		}
-
-		// Enrich the request with actual source context when available.
 		if loc != nil {
 			if lines, err := fix.ReadLines(loc); err == nil {
 				req.CurrentHCL = strings.Join(lines, "\n")
@@ -239,46 +315,62 @@ func runFix(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	// ── Phase 2: apply ──────────────────────────────────────────────────────
-	_ = rc
-	session := fix.ApplySession{
-		WorkDir: searchDir,
-		NoColor: noColor,
-	}
-	if fixAllFlag {
-		session.ApplyAll(pending)
-	} else {
-		session.Review(pending)
-	}
-
+	session := &fix.ApplySession{WorkDir: searchDir, NoColor: noColor}
+	handler(session, pending)
 	return nil
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────
 
 type parsedResource struct {
 	typ    string
 	values map[string]interface{}
 }
 
-func filterFixTargets(findings []rules.Finding, max int) []rules.Finding {
+func filterFixTargets(findings []rules.Finding, f fixFilter) []rules.Finding {
 	out := make([]rules.Finding, 0)
 	seen := map[string]bool{}
-	for _, f := range findings {
-		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {
+	for _, fnd := range findings {
+		// default eligibility: CRITICAL/HIGH only
+		if fnd.Severity != "CRITICAL" && fnd.Severity != "HIGH" {
 			continue
 		}
-		key := f.RuleID + "|" + f.Resource
+		if f.severity != "" && fnd.Severity != f.severity {
+			continue
+		}
+		if f.findingID != "" && !strings.EqualFold(fnd.RuleID, f.findingID) {
+			continue
+		}
+		key := fnd.RuleID + "|" + fnd.Resource
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		out = append(out, f)
-		if max > 0 && len(out) == max {
+		out = append(out, fnd)
+		if f.max > 0 && len(out) == f.max {
 			break
 		}
 	}
 	return out
+}
+
+// locationMatchesFile returns true when the located .tf file matches the user's
+// --file filter. Accepts either a basename match or a substring of the relative
+// path so users can pass `vpc.tf` or `modules/vpc/main.tf`.
+func locationMatchesFile(loc *fix.Location, want, base string) bool {
+	if loc == nil {
+		return false
+	}
+	rel, err := filepath.Rel(base, loc.File)
+	if err != nil {
+		rel = loc.File
+	}
+	want = filepath.ToSlash(want)
+	rel = filepath.ToSlash(rel)
+	if strings.EqualFold(filepath.Base(rel), filepath.Base(want)) {
+		return true
+	}
+	return strings.Contains(rel, want)
 }
 
 func extractType(addr string) string {

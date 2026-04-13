@@ -43,7 +43,8 @@ Scanner and AI run in parallel by default.
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
   status      Show open findings from the last scan
-  fix         AI-generated fixes for open findings (interactive)
+  fix         AI-generated fixes for open findings
+              fix plan | fix apply
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
 
@@ -71,7 +72,8 @@ Get started:
   terraview scan checkov                    # scanner + AI (default)
   terraview scan checkov --static           # scanner only, no AI
   terraview status                          # show open findings
-  terraview fix                             # apply AI fixes interactively
+  terraview fix plan                        # dry-run: preview AI fixes
+  terraview fix apply                       # apply AI fixes interactively
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation
   terraview history                         # scan history
@@ -100,7 +102,6 @@ func init() {
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(fixCmd)
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
 
@@ -148,7 +149,8 @@ Scanner e IA rodam em paralelo por padrão.
 Comandos Principais:
   scan        Escaneamento de segurança + análise IA (paralelo)
   status      Exibir findings abertos do último scan
-  fix         Correções geradas por IA para findings abertos (interativo)
+  fix         Correções geradas por IA para findings abertos
+              fix plan | fix apply
   diagram     Gerar diagrama ASCII de infraestrutura
   explain     Explicação de infraestrutura com IA
 
@@ -176,7 +178,8 @@ Primeiros passos:
   terraview scan checkov                    # scanner + IA (padrão)
   terraview scan checkov --static           # apenas scanner, sem IA
   terraview status                          # exibir findings abertos
-  terraview fix                             # aplicar fixes IA interativamente
+  terraview fix plan                        # dry-run: preview dos fixes IA
+  terraview fix apply                       # aplicar fixes IA interativamente
   terraview diagram                         # diagrama de infraestrutura
   terraview explain                         # explicação com IA
   terraview history                         # histórico de scans
@@ -216,7 +219,7 @@ Exemplos:
 Comandos relacionados:
   terraview explain                            # explicação de infra com IA
   terraview diagram                            # diagrama ASCII da infra
-  terraview fix                                # gerar/aplicar fixes por IA
+  terraview fix apply                          # gerar/aplicar fixes por IA
 
 Terragrunt:
   terraview scan checkov --terragrunt                    # auto-detectar config terragrunt
@@ -228,26 +231,56 @@ Terragrunt:
 	statusCmd.Long = `Exibe os findings de segurança do scan mais recente para este projeto.
 Mostra um delta contra o scan anterior e lista todos os findings CRITICAL/HIGH abertos.
 
-Execute 'terraview fix' para corrigir estes findings interativamente.`
+Execute 'terraview fix apply' para corrigir estes findings interativamente.`
 	translateFlags(statusCmd, map[string]string{
 		"all": "Exibir todas as severidades, não apenas CRITICAL/HIGH",
 	})
 
-	// fix
-	fixCmd.Short = "Revisar e aplicar interativamente correções geradas por IA"
-	fixCmd.Long = `Lê os findings do último scan e gera correções HCL com IA.
-Cada correção é apresentada para aprovação antes de ser aplicada ao arquivo .tf.
+	// fix (parent + subcommands plan / apply)
+	fixCmd.Short = "Pré-visualizar e aplicar correções geradas por IA"
+	fixCmd.Long = `Comando pai para fluxos de correção. Lê findings do último scan e gera
+correções HCL via IA.
+
+Subcomandos:
+  plan    Dry-run — gera fixes e mostra diff colorido sem gravar
+  apply   Aplica fixes interativamente (default) ou automático (--auto-approve)
 
 Requer um 'terraview scan' anterior neste diretório do projeto.`
-	fixCmd.Example = `  terraview fix
-  terraview fix --max-fix 10
-  terraview fix --all
-  terraview fix --provider claude --model claude-haiku-4-5`
-	translateFlags(fixCmd, map[string]string{
-		"max-fix":  "Número máximo de findings para gerar correções",
-		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
-		"provider": "Override do provider de IA (padrão: do último scan ou config)",
-		"model":    "Override do modelo de IA",
+	fixCmd.Example = `  terraview fix plan
+  terraview fix apply
+  terraview fix apply --auto-approve
+  terraview fix apply CKV_AWS_18
+  terraview fix apply --severity CRITICAL --file vpc.tf`
+
+	fixPlanCmd.Short = "Dry-run: gerar correções e exibir diff sem aplicar"
+	fixPlanCmd.Long = `Gera sugestões de correção via IA para findings CRITICAL/HIGH do último
+scan e exibe diffs coloridos de cada uma. Nenhum arquivo é modificado.
+
+Execute 'terraview fix apply' para aplicar essas correções.`
+
+	fixApplyCmd.Short = "Aplicar correções geradas por IA (interativo por padrão)"
+	fixApplyCmd.Long = `Gera sugestões de correção via IA e aplica nos arquivos .tf.
+
+Modo padrão é interativo: cada fix é mostrado com diff, você aprova ou rejeita.
+Use --auto-approve para aplicar tudo sem prompts (CI/scripts).
+
+Filtros:
+  [finding-id]      arg posicional — aplicar apenas findings com este rule ID
+  --severity LEVEL  apenas CRITICAL ou HIGH
+  --file PATH       apenas fixes que alteram este arquivo
+  --max N           limitar número de fixes (0 = ilimitado)`
+
+	for _, c := range []*cobra.Command{fixPlanCmd, fixApplyCmd} {
+		translateFlags(c, map[string]string{
+			"provider": "Override do provider de IA (padrão: do último scan ou config)",
+			"model":    "Override do modelo de IA",
+			"max":      "Número máximo de fixes a gerar (0 = ilimitado)",
+			"severity": "Filtrar por severidade: CRITICAL ou HIGH",
+			"file":     "Filtrar por arquivo .tf",
+		})
+	}
+	translateFlags(fixApplyCmd, map[string]string{
+		"auto-approve": "Aplicar todos os fixes sem confirmação interativa",
 	})
 
 	// diagram
@@ -479,12 +512,6 @@ Exemplos:
 	// Translate local flags for commands whose init() runs BEFORE root.go
 	// (alphabetical: ai.go → mcp.go). Commands after root.go (scan.go, scanners.go,
 	// status.go) translate their own flags in their init() functions.
-	translateFlags(fixCmd, map[string]string{
-		"max-fix":  "Número máximo de findings para gerar correções",
-		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
-		"provider": "Override do provider de IA (padrão: do último scan ou config)",
-		"model":    "Override do modelo de IA",
-	})
 	translateFlags(diagramCmd, map[string]string{
 		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
 	})

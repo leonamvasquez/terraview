@@ -194,7 +194,7 @@ func printStatusFooter(ls *history.LastScan) {
 	actionable := counts["CRITICAL"] + counts["HIGH"]
 
 	if actionable > 0 {
-		fmt.Printf("  Run %sterraview fix%s to interactively patch these findings.\n\n", bold, reset)
+		fmt.Printf("  Run %sterraview fix apply%s to interactively patch these findings.\n\n", bold, reset)
 	} else {
 		fmt.Printf("  %sNo CRITICAL/HIGH findings — run terraview scan to re-check.%s\n\n", dim, reset)
 	}
