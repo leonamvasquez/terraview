@@ -12,7 +12,7 @@
                                         │
 ┌───────────────────────────────────────┼───────────────────────────────────────────┐
 │                                 terraview CLI                                     │
-│  scan | apply | diagram | explain | drift | modules | history | provider | ...    │
+│  scan | status | fix | diagram | explain | history | provider | scanners | mcp    │
 └───────────────────────────────────────┬───────────────────────────────────────────┘
                                         │
                ┌────────────────────────┼────────────────────────┐
@@ -38,10 +38,10 @@
             │  └─────────┬───────────┘        │
             │            │                    │
             ▼            ▼                    ▼
-   ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-   │   Modules    │  │   Feature    │  │    Sanitizer     │
-   │   Analyzer   │  │   Extractor  │  │  Plan (redacted) │
-   └──────────────┘  └──────────────┘  └────────┬─────────┘
+                     ┌──────────────┐  ┌──────────────────┐
+                     │   Feature    │  │    Sanitizer     │
+                     │   Extractor  │  │  Plan (redacted) │
+                     └──────────────┘  └────────┬─────────┘
                                                 │
                                        ┌────────┴────────┐
                                        │    AI Cache     │
@@ -150,7 +150,7 @@
 - Calcula scores 0–10 por categoria (Segurança, Compliance, Manutenibilidade)
 - Risk Vectors: 5 eixos por recurso (network, encryption, identity, governance, observability) — 0–3 cada
 - Pisos de proteção por severidade (MEDIUM não abaixa de 5.0, HIGH não abaixa de 2.0 sem CRITICAL)
-- `--explain-scores` decompõe scores mostrando contribuição de cada finding
+- `terraview status --explain-scores` decompõe scores do último scan mostrando contribuição de cada finding
 - Veredito e exit code
 
 ### Meta-analysis
@@ -159,13 +159,6 @@
 - Recursos flagados por 2+ fontes recebem confiança elevada
 - Detecção de gaps de cobertura (categorias sem findings, avisos de fonte única)
 - Score unificado com penalidades por severidade + bônus por correlação
-
-### Modules Analyzer
-
-- Analisa chamadas de módulos no plan para versionamento, higiene de source e nesting
-- 6 regras determinísticas (MOD_001 a MOD_006)
-- Verificação opcional de versões no Terraform Registry (`--check-registry`)
-- Não requer IA
 
 ### History Store
 
@@ -178,7 +171,7 @@
 
 - Servidor Model Context Protocol sobre stdio (JSON-RPC 2.0)
 - Permite que agentes AI (Claude Code, Cursor, Windsurf) chamem tools do terraview
-- 11 tools expostas: scan, explain, diagram, drift, history, history_trend, history_compare, impact, cache, scanners, version
+- Tools expostas: scan, explain, diagram, history, history_trend, history_compare, impact, cache, scanners, version
 - Métodos: `initialize`, `tools/list`, `tools/call`
 
 ## Desenvolvimento
@@ -214,16 +207,15 @@ internal/
   contextanalysis/    # Análise contextual de recursos
   diagram/            # Diagrama ASCII da infraestrutura (AWS)
   downloader/         # Download de releases GitHub
-  drift/              # Detecção e classificação de drift
   explain/            # Explicação em linguagem natural
   feature/            # Extração semântica de features por recurso
+  fix/                # Geração e aplicação de fixes HCL via IA
   history/            # Histórico de scans em SQLite (trends, compare, export)
   i18n/               # Internacionalização (en/pt-BR)
   importer/           # Importação de findings externos
-  installer/          # Instalação de scanners
+  installer/          # Instalação do runtime Ollama (usado por bininstaller)
   mcp/                # Servidor MCP (JSON-RPC 2.0 stdio) para agentes AI
   meta/               # Meta-análise cross-tool
-  modules/            # Análise de módulos Terraform (versão, source, nesting)
   normalizer/         # Deduplicação e normalização
   output/             # Formatadores de saída (pretty, json, sarif, md)
   parser/             # Parser de planos Terraform

@@ -55,10 +55,6 @@ terraview scan checkov                      # scan com Checkov (+ IA se provider
 terraview scan tfsec                        # scan com tfsec
 terraview scan terrascan                    # scan com Terrascan
 terraview scan checkov --static             # apenas scanner, desabilitar IA
-terraview scan checkov --all                # habilitar explain + diagram + impact
-terraview scan checkov --explain            # scanner + IA + explicação em linguagem natural
-terraview scan checkov --diagram            # scanner + IA + diagrama ASCII da infraestrutura
-terraview scan checkov --impact             # scanner + IA + análise de raio de impacto
 terraview scan checkov --plan plan.json     # usar plan JSON existente
 terraview scan checkov -f sarif             # saída SARIF para CI
 terraview scan checkov --strict             # HIGH também retorna exit code 2
@@ -97,16 +93,33 @@ terraview scan checkov --provider claude-code --model claude-sonnet-4-5
 
 ---
 
-## Apply
+## Status
 
-Roda scan + aplica o plano condicionalmente. Bloqueia se houver findings CRITICAL. Exibe o resumo do scan e pede confirmação no modo interativo.
+Exibe os findings de segurança do scan mais recente para o projeto atual. Mostra delta contra o scan anterior e lista todos os findings CRITICAL/HIGH abertos.
 
 ```bash
-terraview apply checkov                     # interativo
-terraview apply checkov --non-interactive   # modo CI (bloqueia CRITICAL, auto-aprova caso contrário)
-terraview apply checkov --static            # apenas scanner + apply
-terraview apply checkov --all               # tudo habilitado + apply
+terraview status                            # findings CRITICAL/HIGH do último scan
+terraview status --all                      # incluir também MEDIUM/LOW/INFO
+terraview status --explain-scores           # decomposição detalhada dos scores
 ```
+
+---
+
+## Fix
+
+Gera correções HCL via IA para os findings do último scan. Subcomando pai — use `fix plan` (dry-run) ou `fix apply` (interativo/automático).
+
+```bash
+terraview fix plan                                  # dry-run: mostra diff colorido, não escreve
+terraview fix apply                                 # interativo (y/n por fix)
+terraview fix apply --auto-approve                  # aplica tudo sem prompt (CI/scripts)
+terraview fix apply CKV_AWS_18                      # apenas findings deste rule ID
+terraview fix apply --severity CRITICAL             # apenas CRITICAL
+terraview fix apply --file vpc.tf                   # apenas fixes que alteram este arquivo
+terraview fix apply --severity HIGH --max 5         # combinar filtros
+```
+
+Requer um `terraview scan` anterior no mesmo diretório do projeto.
 
 ---
 
@@ -179,34 +192,6 @@ terraview scanners install --all --force    # forçar reinstalação de todos
 terraview scanners default checkov          # definir scanner padrão
 terraview scanners default                  # exibir scanner padrão atual
 ```
-
----
-
-## Modules
-
-Analisa módulos Terraform no plan para versionamento, higiene de source e profundidade de nesting. Determinístico, não requer IA.
-
-```bash
-terraview modules                           # analisar módulos do diretório atual
-terraview modules --plan plan.json          # analisar de plan existente
-terraview modules --check-registry          # verificar versões no Terraform Registry (requer rede)
-terraview modules --format json             # saída JSON
-terraview modules --terragrunt              # suporte a Terragrunt
-terraview modules --terragrunt -d modules/vpc
-```
-
-### Regras verificadas
-
-| Regra | Descrição |
-|-------|-----------|
-| `MOD_001` | Módulo do Registry sem constraint de versão |
-| `MOD_002` | Source Git fixado em branch em vez de tag |
-| `MOD_003` | Source Git sem nenhum ref |
-| `MOD_004` | Nesting de módulo excede profundidade recomendada |
-| `MOD_005` | Source de módulo usa HTTP em vez de HTTPS |
-| `MOD_006` | Módulo do Registry tem versão mais nova disponível (requer `--check-registry`) |
-
-Exit codes: `0` = sem issues, `1` = findings HIGH, `2` = findings CRITICAL.
 
 ---
 
@@ -333,6 +318,6 @@ Todos os scans geram `review.json` e `review.md`. A saída SARIF é gerada quand
 |--------|-------------|
 | `0`    | Sem issues ou apenas MEDIUM/LOW/INFO |
 | `1`    | Findings de severidade HIGH |
-| `2`    | Findings CRITICAL (bloqueia apply) |
+| `2`    | Findings CRITICAL |
 
 Modo estrito (`--strict`): promove findings HIGH para exit code 2.
