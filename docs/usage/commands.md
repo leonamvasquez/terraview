@@ -7,17 +7,15 @@ $ terraview
 
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
-  apply       Scan and conditionally apply the plan
+  status      Show findings from last scan with delta vs previous
+  fix         Generate (plan) and apply AI-suggested HCL fixes
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
-  drift       Detect and classify infrastructure drift
-  modules     Analyze Terraform module usage and health
   history     View scan history and trends
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
-              provider install | uninstall
 
 Scanner Management:
   scanners    Manage security scanners
@@ -25,7 +23,7 @@ Scanner Management:
 
 Integration:
   mcp         Model Context Protocol server for AI agents
-              mcp serve
+              mcp server
 
 Utilities:
   cache       Manage the AI response cache
@@ -57,10 +55,6 @@ terraview scan checkov                      # scan com Checkov (+ IA se provider
 terraview scan tfsec                        # scan com tfsec
 terraview scan terrascan                    # scan com Terrascan
 terraview scan checkov --static             # apenas scanner, desabilitar IA
-terraview scan checkov --all                # habilitar explain + diagram + impact
-terraview scan checkov --explain            # scanner + IA + explicação em linguagem natural
-terraview scan checkov --diagram            # scanner + IA + diagrama ASCII da infraestrutura
-terraview scan checkov --impact             # scanner + IA + análise de raio de impacto
 terraview scan checkov --plan plan.json     # usar plan JSON existente
 terraview scan checkov -f sarif             # saída SARIF para CI
 terraview scan checkov --strict             # HIGH também retorna exit code 2
@@ -99,16 +93,33 @@ terraview scan checkov --provider claude-code --model claude-sonnet-4-5
 
 ---
 
-## Apply
+## Status
 
-Roda scan + aplica o plano condicionalmente. Bloqueia se houver findings CRITICAL. Exibe o resumo do scan e pede confirmação no modo interativo.
+Exibe os findings de segurança do scan mais recente para o projeto atual. Mostra delta contra o scan anterior e lista todos os findings CRITICAL/HIGH abertos.
 
 ```bash
-terraview apply checkov                     # interativo
-terraview apply checkov --non-interactive   # modo CI (bloqueia CRITICAL, auto-aprova caso contrário)
-terraview apply checkov --static            # apenas scanner + apply
-terraview apply checkov --all               # tudo habilitado + apply
+terraview status                            # findings CRITICAL/HIGH do último scan
+terraview status --all                      # incluir também MEDIUM/LOW/INFO
+terraview status --explain-scores           # decomposição detalhada dos scores
 ```
+
+---
+
+## Fix
+
+Gera correções HCL via IA para os findings do último scan. Subcomando pai — use `fix plan` (dry-run) ou `fix apply` (interativo/automático).
+
+```bash
+terraview fix plan                                  # dry-run: mostra diff colorido, não escreve
+terraview fix apply                                 # interativo (y/n por fix)
+terraview fix apply --auto-approve                  # aplica tudo sem prompt (CI/scripts)
+terraview fix apply CKV_AWS_18                      # apenas findings deste rule ID
+terraview fix apply --severity CRITICAL             # apenas CRITICAL
+terraview fix apply --file vpc.tf                   # apenas fixes que alteram este arquivo
+terraview fix apply --severity HIGH --max 5         # combinar filtros
+```
+
+Requer um `terraview scan` anterior no mesmo diretório do projeto.
 
 ---
 
@@ -143,22 +154,6 @@ terraview explain --format json             # saída JSON estruturada
 
 ---
 
-## Drift
-
-Detecta e classifica drift de infraestrutura rodando `terraform plan` e analisando mudanças.
-
-```bash
-terraview drift                             # detecção básica de drift
-terraview drift --plan plan.json            # de plan existente
-terraview drift --intelligence              # avançado: classifica intencional vs suspeito
-terraview drift --format compact            # resumo em uma linha
-terraview drift --format json               # saída JSON
-```
-
-Exit codes: `0` = sem drift ou apenas baixo risco, `1` = risco HIGH, `2` = risco CRITICAL.
-
----
-
 ## Gerenciamento de providers
 
 ```bash
@@ -167,8 +162,6 @@ terraview provider use gemini gemini-2.5-pro  # definir provider via CLI (não-i
 terraview provider use ollama llama3.1:8b   # definir provider local
 terraview provider current                  # exibir configuração atual
 terraview provider test                     # testar conectividade do provider configurado
-terraview provider install ollama           # instalar runtime Ollama + pull do modelo
-terraview provider install ollama --model codellama:13b  # instalar com modelo específico
 ```
 
 O comando `provider list` executa um **teste de integração automático**. Se o teste falhar, uma mensagem de diagnóstico é exibida:
@@ -199,34 +192,6 @@ terraview scanners install --all --force    # forçar reinstalação de todos
 terraview scanners default checkov          # definir scanner padrão
 terraview scanners default                  # exibir scanner padrão atual
 ```
-
----
-
-## Modules
-
-Analisa módulos Terraform no plan para versionamento, higiene de source e profundidade de nesting. Determinístico, não requer IA.
-
-```bash
-terraview modules                           # analisar módulos do diretório atual
-terraview modules --plan plan.json          # analisar de plan existente
-terraview modules --check-registry          # verificar versões no Terraform Registry (requer rede)
-terraview modules --format json             # saída JSON
-terraview modules --terragrunt              # suporte a Terragrunt
-terraview modules --terragrunt -d modules/vpc
-```
-
-### Regras verificadas
-
-| Regra | Descrição |
-|-------|-----------|
-| `MOD_001` | Módulo do Registry sem constraint de versão |
-| `MOD_002` | Source Git fixado em branch em vez de tag |
-| `MOD_003` | Source Git sem nenhum ref |
-| `MOD_004` | Nesting de módulo excede profundidade recomendada |
-| `MOD_005` | Source de módulo usa HTTP em vez de HTTPS |
-| `MOD_006` | Módulo do Registry tem versão mais nova disponível (requer `--check-registry`) |
-
-Exit codes: `0` = sem issues, `1` = findings HIGH, `2` = findings CRITICAL.
 
 ---
 
@@ -280,15 +245,17 @@ history:
 Servidor MCP para integração com agentes AI. Expõe funcionalidades do terraview via JSON-RPC 2.0 sobre stdio, permitindo que Claude Code, Cursor e Windsurf chamem tools programaticamente.
 
 ```bash
-terraview mcp serve                         # iniciar servidor MCP
+terraview mcp server                        # iniciar servidor MCP
 ```
+
+O alias `terraview mcp serve` continua funcionando para compatibilidade.
 
 ### Registro com agentes
 
 **Claude Code:**
 
 ```bash
-claude mcp add terraview -- terraview mcp serve
+claude mcp add terraview -- terraview mcp server
 ```
 
 **Cursor** (`.cursor/mcp.json`):
@@ -298,7 +265,7 @@ claude mcp add terraview -- terraview mcp serve
   "mcpServers": {
     "terraview": {
       "command": "terraview",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "server"]
     }
   }
 }
@@ -311,13 +278,13 @@ claude mcp add terraview -- terraview mcp serve
 | `terraview_scan` | Security scan com scorecard |
 | `terraview_explain` | Explicação da infraestrutura por IA |
 | `terraview_diagram` | Diagrama ASCII da infraestrutura |
-| `terraview_drift` | Detecção e classificação de drift |
 | `terraview_history` | Consultar histórico de scans |
 | `terraview_history_trend` | Tendências de scores ao longo do tempo |
 | `terraview_history_compare` | Comparar dois scans lado a lado |
 | `terraview_impact` | Blast radius / análise de impacto |
 | `terraview_cache` | Status e gerenciamento do cache de IA |
 | `terraview_scanners` | Listar scanners disponíveis |
+| `terraview_fix_suggest` | Sugestões de correção geradas por IA |
 | `terraview_version` | Versão e informações do ambiente |
 
 ---
@@ -351,6 +318,6 @@ Todos os scans geram `review.json` e `review.md`. A saída SARIF é gerada quand
 |--------|-------------|
 | `0`    | Sem issues ou apenas MEDIUM/LOW/INFO |
 | `1`    | Findings de severidade HIGH |
-| `2`    | Findings CRITICAL (bloqueia apply) |
+| `2`    | Findings CRITICAL |
 
 Modo estrito (`--strict`): promove findings HIGH para exit code 2.

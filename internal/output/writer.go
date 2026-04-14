@@ -247,7 +247,7 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 
 	// Score Decomposition (--explain-scores)
 	if w.config.ExplainScores && result.ScoreDecomposition != nil {
-		w.printScoreDecomposition(result.ScoreDecomposition, br)
+		PrintScoreDecomposition(result.ScoreDecomposition, br)
 	}
 
 	fmt.Println(ScanStatusLine(result.ExitCode, br))
@@ -255,7 +255,10 @@ func (w *Writer) printFull(result aggregator.ReviewResult) {
 	fmt.Println(Bar())
 }
 
-func (w *Writer) printScoreDecomposition(d *scoring.ScoreDecomposition, br bool) {
+// PrintScoreDecomposition prints the full score decomposition to stdout.
+// Exposed so commands like `terraview status --explain-scores` can reuse the
+// same rendering used by `terraview scan`.
+func PrintScoreDecomposition(d *scoring.ScoreDecomposition, br bool) {
 	if br {
 		fmt.Printf("  %s\n", Header("Decomposição do Score"))
 	} else {

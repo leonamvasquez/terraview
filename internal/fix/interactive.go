@@ -39,6 +39,26 @@ type ApplySession struct {
 	NoColor bool   // suppress ANSI codes when true
 }
 
+// Preview prints the diff for every pending fix without applying anything.
+// Used by `terraview fix plan` as a dry-run.
+func (s *ApplySession) Preview(pending []PendingFix) {
+	total := len(pending)
+	if total == 0 {
+		return
+	}
+	fmt.Printf("\n  Preview of %d fix(es) — nothing will be written.\n", total)
+
+	for i, pf := range pending {
+		s.printFindingHeader(i+1, total, pf)
+		s.printDiff(pf)
+		s.printWarnings(pf.Warnings)
+	}
+
+	fmt.Printf("\n%s%s%s\n", s.col(ansiDim), strings.Repeat("━", 50), s.col(ansiReset))
+	fmt.Printf("  %sRun %sterraview fix apply%s to apply these changes interactively.%s\n\n",
+		s.col(ansiDim), s.col(ansiBold), s.col(ansiReset+ansiDim), s.col(ansiReset))
+}
+
 // ApplyAll applies every pending fix without prompting.
 // Fixes with no file location are skipped and reported.
 // Returns the count of applied and failed fixes.

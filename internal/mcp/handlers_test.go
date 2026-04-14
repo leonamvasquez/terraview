@@ -55,67 +55,6 @@ func TestHandleDiagram_NilArgs(t *testing.T) {
 	}
 }
 
-// --- Drift handler tests ---
-
-func TestHandleDrift_NonexistentDir(t *testing.T) {
-	args := json.RawMessage(`{"dir":"/nonexistent-dir-xyz"}`)
-	_, err := handleDrift(args, testLogger())
-	if err == nil {
-		t.Error("expected error for nonexistent dir")
-	}
-}
-
-func TestHandleDrift_WithPlanFile(t *testing.T) {
-	planDir := createTestPlan(t)
-	planPath := filepath.Join(planDir, "plan.json")
-
-	args, _ := json.Marshal(map[string]interface{}{
-		"dir":  planDir,
-		"plan": planPath,
-	})
-
-	result, err := handleDrift(args, testLogger())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Content) == 0 {
-		t.Error("expected content")
-	}
-	if result.IsError {
-		t.Error("expected no error")
-	}
-
-	// Verify it's valid JSON
-	var driftResp driftResponse
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &driftResp); err != nil {
-		t.Fatalf("result should be valid JSON: %v", err)
-	}
-}
-
-func TestHandleDrift_WithIntelligence(t *testing.T) {
-	planDir := createTestPlan(t)
-	planPath := filepath.Join(planDir, "plan.json")
-
-	args, _ := json.Marshal(map[string]interface{}{
-		"dir":          planDir,
-		"plan":         planPath,
-		"intelligence": true,
-	})
-
-	result, err := handleDrift(args, testLogger())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var driftResp driftResponse
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &driftResp); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if driftResp.Intelligence == nil {
-		t.Error("expected intelligence result when flag is set")
-	}
-}
-
 // --- Scan handler tests ---
 
 func TestHandleScan_NonexistentDir(t *testing.T) {
@@ -586,7 +525,7 @@ func TestHandleHistoryCompare_NotEnoughRecords(t *testing.T) {
 
 func TestAllTools_Count(t *testing.T) {
 	tools := AllTools()
-	expected := 12 // 4 original + 7 existing + 1 fix_suggest
+	expected := 11
 	if len(tools) != expected {
 		t.Errorf("AllTools() returned %d tools, want %d", len(tools), expected)
 	}

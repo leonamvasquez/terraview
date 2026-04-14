@@ -43,10 +43,10 @@ Scanner and AI run in parallel by default.
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
   status      Show open findings from the last scan
-  fix         AI-generated fixes for open findings (interactive)
+  fix         AI-generated fixes for open findings
+              fix plan | fix apply
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
-  drift       Detect and classify infrastructure drift
 
 History & Cache:
   history     View scan history, trends, and comparisons
@@ -55,7 +55,6 @@ History & Cache:
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
-              provider install | uninstall
 
 Scanner Management:
   scanners    Manage security scanners
@@ -72,13 +71,11 @@ Get started:
   cd my-terraform-project
   terraview scan checkov                    # scanner + AI (default)
   terraview scan checkov --static           # scanner only, no AI
-  terraview scan checkov --all              # everything enabled
-  terraview scan checkov --fix              # scan + AI fix suggestions
   terraview status                          # show open findings
-  terraview fix                             # apply AI fixes interactively
+  terraview fix plan                        # dry-run: preview AI fixes
+  terraview fix apply                       # apply AI fixes interactively
   terraview diagram                         # infrastructure diagram
   terraview explain                         # AI explanation
-  terraview drift                           # detect drift
   terraview history                         # scan history
   terraview provider list                   # manage AI providers
 
@@ -105,12 +102,10 @@ func init() {
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(fixCmd)
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
-	rootCmd.AddCommand(driftCmd)
 
-	// Provider management (includes install/uninstall as subcommands)
+	// Provider management
 	rootCmd.AddCommand(providerCmd)
 
 	// Utilities
@@ -154,10 +149,10 @@ Scanner e IA rodam em paralelo por padrão.
 Comandos Principais:
   scan        Escaneamento de segurança + análise IA (paralelo)
   status      Exibir findings abertos do último scan
-  fix         Correções geradas por IA para findings abertos (interativo)
+  fix         Correções geradas por IA para findings abertos
+              fix plan | fix apply
   diagram     Gerar diagrama ASCII de infraestrutura
   explain     Explicação de infraestrutura com IA
-  drift       Detectar e classificar drift de infraestrutura
 
 Histórico & Cache:
   history     Visualizar histórico de scans, tendências e comparações
@@ -166,7 +161,6 @@ Histórico & Cache:
 Gerenciamento de Providers:
   provider    Gerenciar providers de IA e runtimes LLM
               provider list | use | current | test
-              provider install | uninstall
 
 Gerenciamento de Scanners:
   scanners    Gerenciar scanners de segurança
@@ -183,13 +177,11 @@ Primeiros passos:
   cd meu-projeto-terraform
   terraview scan checkov                    # scanner + IA (padrão)
   terraview scan checkov --static           # apenas scanner, sem IA
-  terraview scan checkov --all              # tudo habilitado
-  terraview scan checkov --fix              # scan + sugestões de fix IA
   terraview status                          # exibir findings abertos
-  terraview fix                             # aplicar fixes IA interativamente
+  terraview fix plan                        # dry-run: preview dos fixes IA
+  terraview fix apply                       # aplicar fixes IA interativamente
   terraview diagram                         # diagrama de infraestrutura
   terraview explain                         # explicação com IA
-  terraview drift                           # detectar drift
   terraview history                         # histórico de scans
   terraview provider list                   # gerenciar providers de IA
 
@@ -218,17 +210,16 @@ Se --plan não for especificado, o terraview executará automaticamente:
 Exemplos:
   terraview scan checkov                       # scanner + IA (padrão)
   terraview scan checkov --static              # apenas scanner, sem IA
-  terraview scan checkov --all                 # tudo habilitado
   terraview scan checkov --provider gemini     # usar provider IA específico
-  terraview scan checkov --explain             # scanner + IA + explicação
-  terraview scan checkov --diagram             # scanner + IA + diagrama
-  terraview scan checkov --impact              # scanner + IA + análise de impacto
   terraview scan checkov --format compact      # saída mínima
   terraview scan checkov --format sarif        # SARIF para CI
   terraview scan checkov --strict              # HIGH retorna código de saída 2
   terraview scan checkov --findings ext.json   # importar achados externos
-  terraview scan checkov --fix                 # sugestões de fix IA (top 5)
-  terraview scan checkov --fix --max-fix 10    # sugestões de fix IA (até 10)
+
+Comandos relacionados:
+  terraview explain                            # explicação de infra com IA
+  terraview diagram                            # diagrama ASCII da infra
+  terraview fix apply                          # gerar/aplicar fixes por IA
 
 Terragrunt:
   terraview scan checkov --terragrunt                    # auto-detectar config terragrunt
@@ -240,26 +231,56 @@ Terragrunt:
 	statusCmd.Long = `Exibe os findings de segurança do scan mais recente para este projeto.
 Mostra um delta contra o scan anterior e lista todos os findings CRITICAL/HIGH abertos.
 
-Execute 'terraview fix' para corrigir estes findings interativamente.`
+Execute 'terraview fix apply' para corrigir estes findings interativamente.`
 	translateFlags(statusCmd, map[string]string{
 		"all": "Exibir todas as severidades, não apenas CRITICAL/HIGH",
 	})
 
-	// fix
-	fixCmd.Short = "Revisar e aplicar interativamente correções geradas por IA"
-	fixCmd.Long = `Lê os findings do último scan e gera correções HCL com IA.
-Cada correção é apresentada para aprovação antes de ser aplicada ao arquivo .tf.
+	// fix (parent + subcommands plan / apply)
+	fixCmd.Short = "Pré-visualizar e aplicar correções geradas por IA"
+	fixCmd.Long = `Comando pai para fluxos de correção. Lê findings do último scan e gera
+correções HCL via IA.
+
+Subcomandos:
+  plan    Dry-run — gera fixes e mostra diff colorido sem gravar
+  apply   Aplica fixes interativamente (default) ou automático (--auto-approve)
 
 Requer um 'terraview scan' anterior neste diretório do projeto.`
-	fixCmd.Example = `  terraview fix
-  terraview fix --max-fix 10
-  terraview fix --all
-  terraview fix --provider claude --model claude-haiku-4-5`
-	translateFlags(fixCmd, map[string]string{
-		"max-fix":  "Número máximo de findings para gerar correções",
-		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
-		"provider": "Override do provider de IA (padrão: do último scan ou config)",
-		"model":    "Override do modelo de IA",
+	fixCmd.Example = `  terraview fix plan
+  terraview fix apply
+  terraview fix apply --auto-approve
+  terraview fix apply CKV_AWS_18
+  terraview fix apply --severity CRITICAL --file vpc.tf`
+
+	fixPlanCmd.Short = "Dry-run: gerar correções e exibir diff sem aplicar"
+	fixPlanCmd.Long = `Gera sugestões de correção via IA para findings CRITICAL/HIGH do último
+scan e exibe diffs coloridos de cada uma. Nenhum arquivo é modificado.
+
+Execute 'terraview fix apply' para aplicar essas correções.`
+
+	fixApplyCmd.Short = "Aplicar correções geradas por IA (interativo por padrão)"
+	fixApplyCmd.Long = `Gera sugestões de correção via IA e aplica nos arquivos .tf.
+
+Modo padrão é interativo: cada fix é mostrado com diff, você aprova ou rejeita.
+Use --auto-approve para aplicar tudo sem prompts (CI/scripts).
+
+Filtros:
+  [finding-id]      arg posicional — aplicar apenas findings com este rule ID
+  --severity LEVEL  apenas CRITICAL ou HIGH
+  --file PATH       apenas fixes que alteram este arquivo
+  --max N           limitar número de fixes (0 = ilimitado)`
+
+	for _, c := range []*cobra.Command{fixPlanCmd, fixApplyCmd} {
+		translateFlags(c, map[string]string{
+			"provider": "Override do provider de IA (padrão: do último scan ou config)",
+			"model":    "Override do modelo de IA",
+			"max":      "Número máximo de fixes a gerar (0 = ilimitado)",
+			"severity": "Filtrar por severidade: CRITICAL ou HIGH",
+			"file":     "Filtrar por arquivo .tf",
+		})
+	}
+	translateFlags(fixApplyCmd, map[string]string{
+		"auto-approve": "Aplicar todos os fixes sem confirmação interativa",
 	})
 
 	// diagram
@@ -286,25 +307,6 @@ Terragrunt:
 	translateFlags(diagramCmd, map[string]string{
 		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
 	})
-
-	// drift
-	driftCmd.Short = "Detectar e classificar drift de infraestrutura"
-	driftCmd.Long = `Executa terraform plan para detectar drift entre estado e infraestrutura.
-
-Classifica cada mudança por nível de risco e gera um relatório de drift.
-Use --intelligence para classificação avançada (intencional vs suspeito).
-
-Códigos de saída:
-  0 — sem drift ou apenas mudanças de baixo risco
-  1 — drift de risco ALTO detectado
-  2 — drift de risco CRÍTICO detectado
-
-Exemplos:
-  terraview drift
-  terraview drift --plan plan.json
-  terraview drift --intelligence          # classificar + score de risco
-  terraview drift --format compact
-  terraview drift --format json`
 
 	// explain
 	explainCmd.Short = "Explicação em linguagem natural da infraestrutura com IA"
@@ -401,9 +403,7 @@ Subcomandos:
   list        Listar providers disponíveis e escolher o padrão interativamente
   use         Definir provider padrão sem interação (para scripts)
   current     Exibir o provider atualmente configurado
-  test        Testar conectividade com o provider configurado
-  install     Instalar runtime LLM (Ollama)
-  uninstall   Remover runtime LLM`
+  test        Testar conectividade com o provider configurado`
 
 	// provider subcommands
 	aiListCmd.Short = "Listar providers disponíveis e escolher o padrão interativamente"
@@ -417,32 +417,6 @@ Exemplos:
 	aiCurrentCmd.Short = "Exibir o provider de IA atualmente configurado"
 	aiTestCmd.Short = "Testar conectividade com o provider de IA configurado"
 
-	// install / uninstall
-	installCmd.Short = "Instalar dependências do terraview"
-	installCmd.Long = "Instala e configura dependências externas necessárias pelo terraview."
-	installLLMCmd.Short = "Instalar Ollama e baixar o modelo LLM padrão"
-	installLLMCmd.Long = `Instala automaticamente o runtime Ollama para inferência LLM local,
-baixa o modelo configurado e valida a instalação.
-
-Este comando é idempotente: executá-lo várias vezes não
-reinstalará — apenas validará a instalação existente.
-
-Exemplos:
-  terraview provider install ollama
-  terraview provider install ollama --model codellama:13b`
-
-	uninstallCmd.Short = "Desinstalar dependências gerenciadas pelo terraview"
-	uninstallCmd.Long = "Remove dependências externas que foram instaladas pelo terraview."
-	uninstallLLMCmd.Short = "Desinstalar Ollama e remover todos os modelos"
-	uninstallLLMCmd.Long = `Remove o binário do Ollama, para qualquer serviço em execução
-e deleta dados de modelos baixados.
-
-Este comando é idempotente: executá-lo quando o Ollama não está
-instalado simplesmente confirmará que não há nada a remover.
-
-Exemplos:
-  terraview uninstall llm`
-
 	// mcp
 	mcpCmd.Short = "Servidor Model Context Protocol (MCP)"
 	mcpCmd.Long = `Servidor MCP para integração com agentes IA.
@@ -452,7 +426,7 @@ permitindo que agentes IA (Claude Code, Cursor, Windsurf) chamem
 ferramentas do terraview programaticamente via stdio.
 
 Uso:
-  terraview mcp serve`
+  terraview mcp server`
 
 	mcpServeCmd.Short = "Iniciar o servidor MCP via stdio"
 	mcpServeCmd.Long = `Inicia um servidor Model Context Protocol que lê mensagens JSON-RPC 2.0
@@ -461,14 +435,14 @@ do stdin e escreve respostas no stdout.
 Logs vão para stderr. Apenas JSON-RPC válido aparece no stdout.
 
 Registrar no Claude Code:
-  claude mcp add terraview -- terraview mcp serve
+  claude mcp add terraview -- terraview mcp server
 
 Registrar no Cursor (.cursor/mcp.json):
   {
     "mcpServers": {
       "terraview": {
         "command": "terraview",
-        "args": ["mcp", "serve"]
+        "args": ["mcp", "server"]
       }
     }
   }
@@ -477,7 +451,6 @@ Ferramentas expostas:
   terraview_scan             Scan de segurança com scorecard
   terraview_explain          Explicação de infraestrutura com IA
   terraview_diagram          Diagrama ASCII de infraestrutura
-  terraview_drift            Detecção e classificação de drift
   terraview_history          Consultar histórico de scans
   terraview_history_trend    Tendências de score ao longo do tempo
   terraview_history_compare  Comparar dois scans lado a lado
@@ -537,17 +510,8 @@ Exemplos:
 	// Translate local flags for commands whose init() runs BEFORE root.go
 	// (alphabetical: ai.go → mcp.go). Commands after root.go (scan.go, scanners.go,
 	// status.go) translate their own flags in their init() functions.
-	translateFlags(fixCmd, map[string]string{
-		"max-fix":  "Número máximo de findings para gerar correções",
-		"all":      "Corrigir todos os findings CRITICAL/HIGH sem prompts interativos",
-		"provider": "Override do provider de IA (padrão: do último scan ou config)",
-		"model":    "Override do modelo de IA",
-	})
 	translateFlags(diagramCmd, map[string]string{
 		"diagram-mode": "Modo de diagrama: topo (topológico) ou flat (camadas)",
-	})
-	translateFlags(driftCmd, map[string]string{
-		"intelligence": "Classificação avançada de drift e scoring de risco",
 	})
 	translateFlags(historyCmd, map[string]string{
 		"all":     "Exibir todos os projetos",
@@ -572,10 +536,6 @@ Exemplos:
 		"format": "Formato de exportação: json, csv",
 		"output": "Caminho do arquivo de saída (obrigatório)",
 	})
-	translateFlags(installLLMCmd, map[string]string{
-		"model": "Modelo a baixar (padrão da config ou llama3.1:8b)",
-	})
-
 	// Translate Cobra built-in template labels
 	brUsageTemplate := `Uso:{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
@@ -675,7 +635,7 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 }
 
 // generatePlan creates the appropriate executor (terraform or terragrunt) and generates
-// the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
+// the plan JSON. This extracts the common pattern used by scan, explain, and diagram.
 // If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
 func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unparam // PlanExecutor intentionally kept for future use by callers that may need it
 	var executor terraformexec.PlanExecutor
