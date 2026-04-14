@@ -17,11 +17,8 @@ import (
 	"github.com/leonamvasquez/terraview/internal/ai"
 	_ "github.com/leonamvasquez/terraview/internal/ai/providers"
 	"github.com/leonamvasquez/terraview/internal/aicache"
-	"github.com/leonamvasquez/terraview/internal/blast"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/contextanalysis"
-	"github.com/leonamvasquez/terraview/internal/diagram"
-	"github.com/leonamvasquez/terraview/internal/fix"
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/importer"
@@ -42,19 +39,12 @@ import (
 
 var (
 	// Scan-local flags
-	staticOnly        bool // --static: disable AI contextual analysis
-	strict            bool
-	explainFlag       bool
-	diagramFlag       bool
-	impactFlag        bool
-	explainScoresFlag bool // --explain-scores: show scoring decomposition
-	findingsFile      string
-	allFlag           bool
-	noRedactFlag      bool   // --no-redact: disable sensitive data redaction
-	maxResourcesFlag  int    // --max-resources: override AI prompt resource limit (0=auto)
-	fixFlag           bool   // --fix: generate AI-powered HCL fix suggestions for CRITICAL/HIGH findings
-	maxFixFlag        int    // --max-fix: max number of findings to generate fixes for (default 5)
-	ignoreFile        string // --ignore-file: path to .terraview-ignore suppression file
+	staticOnly       bool // --static: disable AI contextual analysis
+	strict           bool
+	findingsFile     string
+	noRedactFlag     bool   // --no-redact: disable sensitive data redaction
+	maxResourcesFlag int    // --max-resources: override AI prompt resource limit (0=auto)
+	ignoreFile       string // --ignore-file: path to .terraview-ignore suppression file
 )
 
 var scanCmd = &cobra.Command{
@@ -80,53 +70,71 @@ If --plan is not specified, terraview will automatically run:
 Examples:
   terraview scan checkov                       # scanner + AI (default)
   terraview scan checkov --static              # scanner only, no AI
-  terraview scan checkov --all                 # everything enabled
   terraview scan checkov --provider gemini     # use specific AI provider
-  terraview scan checkov --explain             # scanner + AI + explanation
-  terraview scan checkov --diagram             # scanner + AI + diagram
-  terraview scan checkov --impact              # scanner + AI + impact analysis
   terraview scan checkov --format compact      # minimal output
   terraview scan checkov --format sarif        # SARIF for CI
   terraview scan checkov --strict              # HIGH returns exit code 2
   terraview scan checkov --findings ext.json   # import external findings
-  terraview scan checkov --fix                 # AI fix suggestions (top 5 findings)
-  terraview scan checkov --fix --max-fix 10   # AI fix suggestions (up to 10 findings)
+
+Related commands:
+  terraview explain    # AI natural-language explanation of the infrastructure
+  terraview diagram    # ASCII diagram of the topology
+  terraview fix        # apply AI-generated fixes to findings
+  terraview status     # show findings from the last scan
 
 Terragrunt:
-  terraview scan checkov --terragrunt           # use terragrunt for plan
-  terraview scan tfsec --terragrunt -d modules/vpc`,
-	Args: cobra.MaximumNArgs(1),
+  terraview scan checkov --terragrunt                    # auto-detect terragrunt config
+  terraview scan checkov --terragrunt dev.hcl            # use specific config file
+  terraview scan checkov --terragrunt terragrunt/prd.hcl # path to config file`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		// Allow 2 positional args when --terragrunt is "auto" and the extra arg
+		// is the config path (NoOptDefVal splits "--terragrunt dev.hcl" into
+		// flag="auto" + positional arg "dev.hcl").
+		max := 1
+		if terragruntFlag == "auto" && len(args) == 2 {
+			max = 2
+		}
+		if len(args) > max {
+			return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args))
+		}
+		return nil
+	},
 	RunE: runScan,
 }
 
 func init() {
 	scanCmd.Flags().BoolVar(&staticOnly, "static", false, "Static analysis only: disable AI contextual analysis")
 	scanCmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: HIGH findings also return exit code 2")
-	scanCmd.Flags().BoolVar(&explainFlag, "explain", false, "Generate AI-powered natural language explanation")
-	scanCmd.Flags().BoolVar(&diagramFlag, "diagram", false, "Show ASCII infrastructure diagram")
-	scanCmd.Flags().BoolVar(&impactFlag, "impact", false, "Analyze dependency impact of changes")
 	scanCmd.Flags().StringVar(&findingsFile, "findings", "", "Import external findings from Checkov/tfsec/Trivy JSON")
-	scanCmd.Flags().BoolVar(&explainScoresFlag, "explain-scores", false, "Show detailed score decomposition for audit")
-	scanCmd.Flags().BoolVar(&allFlag, "all", false, "Enable all features: explain + diagram + impact")
 	scanCmd.Flags().BoolVar(&noRedactFlag, "no-redact", false, "Skip sensitive data redaction (use only with local providers)")
 	scanCmd.Flags().IntVar(&maxResourcesFlag, "max-resources", 0, "Max resources included in AI prompt context (0=auto by model)")
-	scanCmd.Flags().BoolVar(&fixFlag, "fix", false, "Generate AI-powered HCL fix suggestions for CRITICAL and HIGH findings")
-	scanCmd.Flags().IntVar(&maxFixFlag, "max-fix", 5, "Maximum number of findings to generate AI fixes for (used with --fix)")
 	scanCmd.Flags().StringVar(&ignoreFile, "ignore-file", "", "Path to suppression file (default: .terraview-ignore in project dir)")
+
+	// pt-BR flag translations (brFlag is set in root.go init which runs before scan.go init)
+	if brFlag {
+		translateFlags(scanCmd, map[string]string{
+			"static":        "Apenas análise estática: desabilitar análise contextual IA",
+			"strict":        "Modo estrito: achados HIGH também retornam código de saída 2",
+			"findings":      "Importar achados externos de Checkov/tfsec/Trivy JSON",
+			"no-redact":     "Desabilitar redação de dados sensíveis (usar apenas com providers locais)",
+			"max-resources": "Máximo de recursos incluídos no contexto do prompt IA (0=auto por modelo)",
+			"ignore-file":   "Caminho para arquivo de supressão (padrão: .terraview-ignore no diretório do projeto)",
+		})
+	}
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	// Handle --terragrunt <file> parsed as extra positional arg due to NoOptDefVal.
+	// "--terragrunt dev.hcl" → terragruntFlag="auto", args=["checkov","dev.hcl"]
+	if terragruntFlag == "auto" && len(args) > 1 {
+		terragruntFlag = args[len(args)-1]
+		args = args[:len(args)-1]
+	}
+
 	// Resolve scanner from positional arg
 	scannerName := ""
 	if len(args) > 0 {
 		scannerName = args[0]
-	}
-
-	// --all enables all features
-	if allFlag {
-		explainFlag = true
-		diagramFlag = true
-		impactFlag = true
 	}
 
 	// If no scanner specified, try auto-select.
@@ -170,7 +178,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if !providerAvailable {
 			avail := scanner.DefaultManager.Available()
 			if len(avail) == 0 {
-				return fmt.Errorf("no scanners installed and no AI provider configured.\n\nGet started:\n  terraview scanners install checkov    # install a scanner\n  terraview provider install ollama     # install local AI\n\nOr configure an AI provider in .terraview.yaml")
+				return fmt.Errorf("no scanners installed and no AI provider configured.\n\nGet started:\n  terraview scanners install checkov    # install a scanner\n  terraview provider list               # configure an AI provider\n\nOr edit .terraview.yaml directly")
 			}
 			names := make([]string, 0, len(avail))
 			for _, s := range avail {
@@ -239,7 +247,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 		return "", 0, err
 	}
 
-	rawPlan, resources, topoGraph, err := parsePlan(rc.resolvedPlan)
+	_, resources, topoGraph, err := parsePlan(rc.resolvedPlan)
 	if err != nil {
 		return rc.resolvedPlan, 0, err
 	}
@@ -259,152 +267,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 		return rc.resolvedPlan, 0, err
 	}
 
-	if fixFlag && len(result.Findings) > 0 {
-		generateFixes(rc, result.Findings, resources, rawPlan, maxFixFlag)
-	}
-
 	return rc.resolvedPlan, exitCode, nil
-}
-
-// generateFixes produces AI-powered HCL fix suggestions for CRITICAL and HIGH findings.
-// Capped at 5 fixes per run. Fails gracefully — never blocks the scan exit code.
-func generateFixes(rc reviewConfig, findings []rules.Finding, resources []parser.NormalizedResource, rawPlan *parser.TerraformPlan, maxFix int) {
-	if maxFix <= 0 {
-		maxFix = 5
-	}
-	// Filter to CRITICAL and HIGH only, deduplicate by rule+resource, deterministic order.
-	targets := make([]rules.Finding, 0, len(findings))
-	seen := map[string]bool{}
-	for _, f := range findings {
-		if f.Severity != "CRITICAL" && f.Severity != "HIGH" {
-			continue
-		}
-		key := f.RuleID + "|" + f.Resource
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		targets = append(targets, f)
-		if len(targets) == maxFix {
-			break
-		}
-	}
-	if len(targets) == 0 {
-		return
-	}
-
-	// Build resource lookup map and plan index for fix context.
-	resourceMap := make(map[string]parser.NormalizedResource, len(resources))
-	for _, r := range resources {
-		resourceMap[r.Address] = r
-	}
-	planIndex := fix.BuildIndex(rawPlan, resources)
-
-	// Require an AI provider.
-	providerName := rc.aiProvider
-	if providerName == "" {
-		fmt.Printf("\n%s --fix requires an AI provider. Configure one with: terraview provider list\n", output.Prefix())
-		return
-	}
-
-	const perFindingTimeout = 45 // seconds per individual fix call
-
-	providerCfg := ai.ProviderConfig{
-		Model:       rc.aiModel,
-		APIKey:      rc.aiAPIKey,
-		BaseURL:     rc.aiURL,
-		Temperature: 0.1,
-		MaxTokens:   1024,
-		MaxRetries:  1,
-		TimeoutSecs: perFindingTimeout,
-	}
-	if rc.aiURL != "" && providerName != "ollama" {
-		providerCfg.BaseURL = ""
-	}
-
-	// Global context covers all findings; each finding also has its own timeout.
-	globalCtx, cancel := context.WithTimeout(context.Background(), time.Duration(perFindingTimeout*len(targets)+30)*time.Second)
-	defer cancel()
-
-	provider, err := ai.NewProvider(globalCtx, providerName, providerCfg)
-	if err != nil {
-		fmt.Printf("\n%s fix: AI provider unavailable: %v\n", output.Prefix(), err)
-		return
-	}
-
-	suggester := fix.NewSuggester(provider)
-
-	fmt.Printf("\n%s Generating fix suggestions for %d finding(s)...\n", output.Prefix(), len(targets))
-
-	for _, f := range targets {
-		res, ok := resourceMap[f.Resource]
-		resourceType := f.Resource
-		if idx := strings.Index(f.Resource, "."); idx >= 0 {
-			resourceType = f.Resource[:idx]
-		}
-		var resourceConfig map[string]interface{}
-		if ok {
-			resourceType = res.Type
-			resourceConfig = res.Values
-		}
-
-		// Per-finding timeout — prevents one slow finding from starving others.
-		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingTimeout)*time.Second)
-
-		req := fix.FixRequest{
-			Finding: fix.FixFinding{
-				RuleID:   f.RuleID,
-				Severity: f.Severity,
-				Message:  f.Message,
-				Category: f.Category,
-			},
-			ResourceAddr:   f.Resource,
-			ResourceType:   resourceType,
-			ResourceConfig: resourceConfig,
-			PlanIndex:      planIndex,
-		}
-
-		suggestion, err := suggester.Suggest(findingCtx, req)
-		findingCancel()
-		if err != nil {
-			fmt.Printf("  %s %s — could not generate fix: %v\n", f.RuleID, f.Resource, err)
-			continue
-		}
-
-		warnings := fix.ValidateFix(suggestion)
-		printFixSuggestion(suggestion, f.Severity, warnings)
-	}
-}
-
-// printFixSuggestion renders a single fix suggestion to stdout, including any
-// validation warnings that indicate the fix may need manual review.
-func printFixSuggestion(s *fix.FixSuggestion, severity string, warnings []fix.ValidationWarning) {
-	fmt.Printf("\n  ▸ %s on %s [%s]\n", s.RuleID, s.Resource, severity)
-	if s.Explanation != "" {
-		fmt.Printf("    %s\n", s.Explanation)
-	}
-	fmt.Printf("    Effort: %s\n", s.Effort)
-
-	if len(warnings) > 0 {
-		fmt.Println()
-		for _, w := range warnings {
-			fmt.Printf("    ⚠  %s\n", w.Message)
-		}
-	}
-
-	if s.HCL != "" {
-		fmt.Println()
-		for _, line := range strings.Split(s.HCL, "\n") {
-			fmt.Printf("    %s\n", line)
-		}
-	}
-	if len(s.Prerequisites) > 0 {
-		fmt.Println()
-		fmt.Println("    Prerequisites:")
-		for _, p := range s.Prerequisites {
-			fmt.Printf("      • %s\n", p)
-		}
-	}
 }
 
 // resolveReviewConfig loads config, resolves the plan file, and determines effective settings.
@@ -446,9 +309,6 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 			logVerbose("No AI provider configured — running in static mode (scanner only)")
 			effectiveAI = false
 		}
-	}
-	if explainFlag {
-		effectiveAI = true
 	}
 
 	// Resolve output format: CLI flag > config > default
@@ -722,22 +582,17 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		valid, discarded, report := validator.ValidateAIFindings(sr.contextFindings, topoGraph)
 		validatedAIFindings = valid
 
+		// Always build report for quality metrics (not only when discards > 0)
+		aiReport := &aggregator.AIValidationReport{
+			TotalReceived: report.TotalReceived,
+			TotalValid:    report.TotalValid,
+			TotalDiscard:  report.TotalDiscard,
+		}
 		if report.TotalDiscard > 0 {
 			fmt.Fprintf(os.Stderr, "%s ⚠ Discarded %d AI findings (hallucinated/invalid)\n",
 				output.Prefix(), report.TotalDiscard)
-
-			// In verbose mode, log each discarded finding with reason
 			for _, d := range discarded {
 				logVerbose("  ✗ [%s] %s: %s — %s", d.Reason, d.Finding.Resource, d.Finding.Message, d.Detail)
-			}
-
-			// Build report for JSON output
-			aiReport := &aggregator.AIValidationReport{
-				TotalReceived: report.TotalReceived,
-				TotalValid:    report.TotalValid,
-				TotalDiscard:  report.TotalDiscard,
-			}
-			for _, d := range discarded {
 				aiReport.Discarded = append(aiReport.Discarded, aggregator.AIDiscardedFinding{
 					Resource: d.Finding.Resource,
 					Message:  d.Finding.Message,
@@ -745,8 +600,8 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 					Detail:   d.Detail,
 				})
 			}
-			aiValidationReport = aiReport
 		}
+		aiValidationReport = aiReport
 
 		logVerbose("AI validation: %d received, %d valid, %d discarded",
 			report.TotalReceived, report.TotalValid, report.TotalDiscard)
@@ -757,6 +612,12 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		dr := normalizer.Deduplicate(hardFindings, validatedAIFindings)
 		hardFindings = dr.Findings
 		logVerbose("Dedup: %s", dr.Summary)
+
+		// Attach incremental-value metrics to AI report
+		if aiValidationReport != nil {
+			aiValidationReport.AIUniqueKept = dr.AIUniqueKept
+			aiValidationReport.AIEnriched = dr.AIEnriched
+		}
 	}
 
 	// Aggregate (with configurable scoring weights)
@@ -770,13 +631,6 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 
 	// Attach AI validation report (findings discarded due to hallucination/invalidity)
 	result.AIValidation = aiValidationReport
-
-	// Score decomposition for audit (--explain-scores)
-	if explainScoresFlag {
-		decomp := scorer.Decompose(result.Findings, len(resources))
-		result.ScoreDecomposition = &decomp
-		logVerbose("Score decomposition computed for %d findings", len(result.Findings))
-	}
 
 	// Apply rule filtering from config
 	if len(rc.cfg.Rules.DisabledRules) > 0 {
@@ -811,21 +665,6 @@ func mergeAndScore(rc reviewConfig, resources []parser.NormalizedResource, topoG
 		logVerbose("Meta-analysis: %s", metaResult.Summary)
 	}
 
-	// Generate diagram if requested (deterministic, no AI)
-	if diagramFlag {
-		gen := diagram.NewGenerator()
-		result.Diagram = gen.GenerateWithGraph(resources, topoGraph)
-		logVerbose("Infrastructure diagram generated")
-	}
-
-	// Analyze impact if requested (deterministic, no AI)
-	if impactFlag {
-		analyzer := blast.NewAnalyzer()
-		blastResult := analyzer.AnalyzeWithGraph(resources, topoGraph)
-		result.BlastRadius = blastResult
-		logVerbose("Impact analysis: %s", blastResult.Summary)
-	}
-
 	return result
 }
 
@@ -836,10 +675,9 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		langCode = "pt-BR"
 	}
 	writer := output.NewWriterWithConfig(output.WriterConfig{
-		Format:        rc.effectiveFormat,
-		Lang:          langCode,
-		Version:       Version,
-		ExplainScores: explainScoresFlag,
+		Format:  rc.effectiveFormat,
+		Lang:    langCode,
+		Version: Version,
 	})
 
 	switch rc.effectiveFormat {
@@ -895,12 +733,6 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		} else {
 			fmt.Print(scanner.FormatScannerHeader(*scannerResult))
 		}
-	}
-
-	// Print impact analysis if generated
-	if impactFlag && result.BlastRadius != nil {
-		fmt.Println()
-		fmt.Print(result.BlastRadius.FormatPretty())
 	}
 
 	// Apply strict mode: HIGH becomes exit code 2
@@ -1199,6 +1031,22 @@ func recordToHistory(rc reviewConfig, result aggregator.ReviewResult) {
 	if _, err := store.Insert(rec); err != nil {
 		fmt.Fprintf(os.Stderr, "[history] %v\n", err)
 		return
+	}
+
+	// Always persist full findings for `terraview status` / `terraview fix`.
+	ls := history.LastScan{
+		Timestamp:          rec.Timestamp,
+		ProjectDir:         resolveProjectDir(),
+		PlanFile:           rc.resolvedPlan,
+		Scanner:            rc.scannerName,
+		Provider:           rc.aiProvider,
+		Model:              rc.aiModel,
+		TotalResources:     result.TotalResources,
+		Findings:           result.Findings,
+		ScoreDecomposition: result.ScoreDecomposition,
+	}
+	if err := history.SaveLastScan(ls); err != nil {
+		fmt.Fprintf(os.Stderr, "[history] last-scan: %v\n", err)
 	}
 
 	// Auto-cleanup if enabled

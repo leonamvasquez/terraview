@@ -92,34 +92,6 @@ Use when asked to: visualize what infrastructure will be created, show the netwo
 			},
 		},
 		{
-			Name: "terraview_drift",
-			Description: `Detect and classify infrastructure drift — differences between Terraform state and actual cloud resources. Classifies each change by risk level.
-
-Prerequisites: Valid Terraform workspace with initialized state (terraform init must have been run). If passing plan, it must be a pre-generated plan JSON (not a binary planfile).
-
-Output: JSON with drift items, each with:
-  - resource: the drifted resource address
-  - risk: CRITICAL / HIGH / MEDIUM / LOW
-  - change_type: created / updated / deleted outside Terraform
-  - detail: what changed
-
-With intelligence: true, also classifies each drift item as "intentional" (matches recent apply patterns) or "suspicious" (unexpected).
-
-Use when asked to: check if infrastructure was modified outside Terraform, detect configuration drift before a release, or audit unplanned changes.`,
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"dir":          { "type": "string", "description": "Terraform workspace directory.", "default": "." },
-					"plan":         { "type": "string", "description": "Path to a pre-generated plan JSON." },
-					"intelligence": { "type": "boolean", "default": false, "description": "Enable advanced drift classification: intentional vs suspicious changes, risk scoring." }
-				}
-			}`),
-			Annotations: &ToolAnnotations{
-				ReadOnlyHint:  true,
-				OpenWorldHint: true, // runs terraform plan which contacts cloud provider
-			},
-		},
-		{
 			Name: "terraview_history",
 			Description: `Query the local SQLite scan history for a Terraform project. Every terraview_scan call stores results automatically — no extra configuration needed.
 

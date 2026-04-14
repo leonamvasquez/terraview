@@ -97,8 +97,9 @@ func (e *Extractor) scoreNetwork(resType string, vals map[string]interface{}) in
 
 	if hasTruthyKey(vals, "publicly_accessible") ||
 		hasTruthyKey(vals, "public_access") ||
-		hasTruthyKey(vals, "public_network_access_enabled") ||
-		hasTruthyKey(vals, "associate_public_ip_address") {
+		hasTruthyKey(vals, "public_network_access_enabled") || // Azure
+		hasTruthyKey(vals, "associate_public_ip_address") ||
+		hasTruthyKey(vals, "enable_public_ip") { // GCP
 		score = maxInt(score, 2)
 	}
 
@@ -122,20 +123,26 @@ func (e *Extractor) scoreEncryption(resType string, vals map[string]interface{})
 
 		if hasFalsyKey(vals, "encrypted") ||
 			hasFalsyKey(vals, "encryption_at_rest") ||
-			hasFalsyKey(vals, "storage_encrypted") {
+			hasFalsyKey(vals, "storage_encrypted") ||
+			hasFalsyKey(vals, "infrastructure_encryption_enabled") || // Azure
+			hasFalsyKey(vals, "enable_https_traffic_only") { // Azure storage
 			score = 3
 		}
 
 		if !hasNonEmptyKey(vals, "kms_key_id") &&
 			!hasNonEmptyKey(vals, "kms_key_arn") &&
-			!hasNonEmptyKey(vals, "customer_managed_key_id") &&
-			!hasNonEmptyKey(vals, "cmk_key_vault_key_id") {
+			!hasNonEmptyKey(vals, "customer_managed_key_id") && // Azure
+			!hasNonEmptyKey(vals, "cmk_key_vault_key_id") && // Azure
+			!hasNonEmptyKey(vals, "encryption_key") && // GCP
+			!hasNonEmptyKey(vals, "customer_encryption_key") { // GCP
 			score = maxInt(score, 2)
 		}
 
 		if hasTruthyKey(vals, "encrypted") ||
 			hasTruthyKey(vals, "storage_encrypted") ||
-			hasTruthyKey(vals, "encryption_at_rest") {
+			hasTruthyKey(vals, "encryption_at_rest") ||
+			hasTruthyKey(vals, "infrastructure_encryption_enabled") || // Azure
+			hasTruthyKey(vals, "enable_https_traffic_only") { // Azure
 			score = maxInt(score-1, 0)
 		}
 	}
@@ -227,7 +234,10 @@ func (e *Extractor) extractFlags(resType string, vals map[string]interface{}) []
 	if needsEncryption(rt) && hasFalsyKey(vals, "encrypted") {
 		flags = append(flags, "unencrypted")
 	}
-	if needsEncryption(rt) && !hasNonEmptyKey(vals, "kms_key_id") && !hasNonEmptyKey(vals, "kms_key_arn") {
+	if needsEncryption(rt) &&
+		!hasNonEmptyKey(vals, "kms_key_id") && !hasNonEmptyKey(vals, "kms_key_arn") &&
+		!hasNonEmptyKey(vals, "encryption_key") && !hasNonEmptyKey(vals, "customer_encryption_key") &&
+		!hasNonEmptyKey(vals, "cmk_key_vault_key_id") && !hasNonEmptyKey(vals, "customer_managed_key_id") {
 		flags = append(flags, "no-kms")
 	}
 	if hasTruthyKey(vals, "associate_public_ip_address") {
@@ -261,7 +271,8 @@ func isNetworkResource(rt string) bool {
 func needsEncryption(rt string) bool {
 	keywords := []string{"db", "database", "rds", "storage", "disk", "volume",
 		"bucket", "blob", "s3", "ebs", "snapshot", "backup", "kms",
-		"secret", "sql", "cosmos", "dynamo", "bigtable", "spanner"}
+		"secret", "sql", "cosmos", "dynamo", "bigtable", "spanner",
+		"managed_disk", "storage_account", "key_vault"}
 	for _, kw := range keywords {
 		if strings.Contains(rt, kw) {
 			return true
@@ -305,7 +316,8 @@ func isLoggingResource(rt string) bool {
 
 func isDatabaseResource(rt string) bool {
 	keywords := []string{"db_instance", "rds", "sql", "database", "cosmos",
-		"dynamo", "bigtable", "spanner", "cloudsql"}
+		"dynamo", "bigtable", "spanner", "cloudsql",
+		"mssql", "mysql", "postgresql", "mariadb", "redis"}
 	for _, kw := range keywords {
 		if strings.Contains(rt, kw) {
 			return true
