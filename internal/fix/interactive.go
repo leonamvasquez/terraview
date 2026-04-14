@@ -13,7 +13,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
-// ANSI colour helpers — reset automatically on each call.
+// ANSI color helpers — reset automatically on each call.
 const (
 	ansiReset  = "\033[0m"
 	ansiRed    = "\033[31m"
@@ -300,7 +300,7 @@ func readKey() string {
 	}
 	// Non-TTY fallback: read a line, use first character.
 	var line string
-	fmt.Scanln(&line)
+	_, _ = fmt.Scanln(&line)
 	if len(line) > 0 {
 		return string(line[0])
 	}
@@ -419,7 +419,7 @@ func (s *ApplySession) printSummary(applied, rejected, total int) {
 	}
 }
 
-// col returns the ANSI code or empty string when colour is disabled.
+// col returns the ANSI code or empty string when color is disabled.
 func (s *ApplySession) col(code string) string {
 	if s.NoColor {
 		return ""

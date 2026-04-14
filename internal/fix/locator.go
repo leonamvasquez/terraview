@@ -144,7 +144,7 @@ func findInFile(path, rType, rName string) (*Location, error) {
 	}
 	defer f.Close()
 
-	needle := fmt.Sprintf(`resource "%s" "%s"`, rType, rName)
+	needle := fmt.Sprintf(`resource %q %q`, rType, rName)
 	sc := bufio.NewScanner(f)
 	lineNum := 0
 	depth := 0
@@ -163,10 +163,7 @@ func findInFile(path, rType, rName string) (*Location, error) {
 			if strings.TrimSpace(line) == heredocMarker {
 				heredocMarker = ""
 			}
-			// Still count towards loc tracking but no brace changes.
-			if loc != nil {
-				// depth unchanged — heredoc content doesn't affect structure
-			}
+			// Heredoc content doesn't affect brace depth — skip line entirely.
 			continue
 		}
 		if loc != nil || strings.Contains(line, needle) {
