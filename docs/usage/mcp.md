@@ -5,17 +5,20 @@ O terraview inclui um servidor [Model Context Protocol (MCP)](https://modelconte
 ## Iniciar o servidor
 
 ```bash
-terraview mcp serve
+terraview mcp server
 ```
 
 O servidor lê mensagens JSON-RPC de stdin e escreve respostas em stdout. Logs vão para stderr.
+
+!!! note
+    O alias `terraview mcp serve` continua funcionando para compatibilidade com integrações existentes.
 
 ## Registro com agentes AI
 
 ### Claude Code
 
 ```bash
-claude mcp add terraview -- terraview mcp serve
+claude mcp add terraview -- terraview mcp server
 ```
 
 ### Cursor
@@ -27,7 +30,7 @@ Crie ou edite `.cursor/mcp.json`:
   "mcpServers": {
     "terraview": {
       "command": "terraview",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "server"]
     }
   }
 }
@@ -46,13 +49,13 @@ O servidor MCP expõe 11 tools:
 | `terraview_scan` | Security scan com scorecard (0-10) e findings | Opcional |
 | `terraview_explain` | Explicação da infraestrutura em linguagem natural | Sim |
 | `terraview_diagram` | Diagrama ASCII da infraestrutura | Nao |
-| `terraview_drift` | Detecção e classificação de drift | Nao |
 | `terraview_history` | Consultar histórico de scans | Nao |
 | `terraview_history_trend` | Tendências de scores ao longo do tempo | Nao |
 | `terraview_history_compare` | Comparar dois scans lado a lado | Nao |
 | `terraview_impact` | Blast radius / análise de impacto de dependências | Nao |
 | `terraview_cache` | Status e gerenciamento do cache de IA | Nao |
 | `terraview_scanners` | Listar scanners disponíveis e status de instalação | Nao |
+| `terraview_fix_suggest` | Sugestões de correção geradas por IA | Sim |
 | `terraview_version` | Versão e informações do ambiente | Nao |
 
 ## Parâmetros das tools

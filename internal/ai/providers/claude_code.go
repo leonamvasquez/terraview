@@ -120,6 +120,7 @@ func (c *claudeCodeProvider) Complete(ctx context.Context, system, user string) 
 	}
 
 	cmd := exec.CommandContext(execCtx, "claude", args...)
+	setProcessGroup(cmd)
 	cmd.Stdin = strings.NewReader(fullPrompt)
 
 	var stdout, stderr bytes.Buffer
@@ -154,6 +155,7 @@ func (c *claudeCodeProvider) doExec(ctx context.Context, prompt string) ([]rules
 	}
 
 	cmd := exec.CommandContext(execCtx, "claude", args...)
+	setProcessGroup(cmd)
 	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr bytes.Buffer

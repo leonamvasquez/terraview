@@ -31,11 +31,10 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 - [Shell Completions](#shell-completions)
 - [Usage](#usage)
 - [Scan](#scan)
-- [Apply](#apply)
+- [Status](#status)
+- [Fix](#fix)
 - [Diagram](#diagram)
 - [Explain](#explain)
-- [Drift](#drift)
-- [Modules](#modules)
 - [History](#history)
 - [MCP Server](#mcp-server)
 - [Provider Management](#provider-management)
@@ -64,19 +63,17 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
   - **CLI (subscription)**: Gemini CLI and Claude Code — use your personal subscription, no API key required
   - **Custom**: any OpenAI-compatible API (Grok/xAI, Groq, Mistral, Together AI, Fireworks, etc.)
 - **Finding Suppression** — `.terraview-ignore` file to permanently suppress accepted risks and false positives, with AND-logic scoping by rule, resource, or source (`--ignore-file`)
-- **AI Fix suggestions** — `--fix` generates corrected HCL for CRITICAL/HIGH findings with validation and diff preview
+- **AI Fix suggestions** — `terraview fix plan` (dry-run) / `terraview fix apply` (interactive or `--auto-approve`) generate and apply corrected HCL for CRITICAL/HIGH findings with validation, backup, and diff preview
 - **Automatic integration test** — when selecting a provider via `provider list`, terraview tests connectivity and returns type-specific feedback (CLI installed, API key valid, service reachable)
 - **Conflict Resolution** — scanner × AI: scanner wins on disagreement (confidence 0.80); agreement boosts confidence to 1.00
 - **Unified Scorecard** with Security, Compliance, Maintainability scores (0–10)
 - **Risk vectors** — per-resource risk extraction across 5 axes: network exposure, encryption, identity, governance, observability
 - **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal with VPC nesting, subnet tiers, connection arrows, and resource aggregation
-- **Impact Analysis** — dependency blast radius of changes via `--impact`
+- **Blast radius via MCP** — dependency impact analysis exposed to AI agents through the `terraview_impact` MCP tool
 - **AI Explanation** — natural language explanation of your infrastructure via `explain`
 - **Zero Configuration** — detects Terraform projects and runs `init + plan + show` automatically
-- **Drift Detection** — detects and classifies infrastructure drift with optional `--intelligence` for advanced risk scoring
-- **Module Analysis** — version pinning, source hygiene, and nesting depth checks via `terraview modules`
 - **Scan History** — SQLite-backed tracking with sparkline trends, side-by-side comparison, and CSV/JSON export
-- **MCP Server** — Model Context Protocol integration for AI agents (Claude Code, Cursor, Windsurf) via `terraview mcp serve`
+- **MCP Server** — Model Context Protocol integration for AI agents (Claude Code, Cursor, Windsurf) via `terraview mcp server`
 - **Native CI/CD** — semantic exit codes (0/1/2) + SARIF, JSON, Markdown output for GitHub Actions, GitLab CI and Azure DevOps
 - **Supply chain hardening** — SBOM (CycloneDX), cosign signatures, SLSA Build Provenance Level 3 on every release
 - **Bilingual (en/pt-BR)** — `--br` flag available on all commands
@@ -164,7 +161,7 @@ terraview provider list                     # interactive picker + connectivity 
 cd my-terraform-project
 terraview scan checkov                      # scanner + AI (default when provider configured)
 terraview scan checkov --static             # scanner only, no AI
-terraview scan checkov --all                # everything: explain + diagram + impact
+terraview status                            # findings from last scan with delta
 ```
 
 ## Installation
@@ -290,15 +287,14 @@ $ terraview
 
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
-  apply       Scan and conditionally apply the plan
+  status      Show open findings from the last scan
+  fix         AI-generated fixes (fix plan | fix apply)
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
-  drift       Detect and classify infrastructure drift
 
 Provider Management:
   provider    Manage AI providers & LLM runtimes
               provider list | use | current | test
-              provider install | uninstall
 
 Scanner Management:
   scanners    Manage security scanners
@@ -332,10 +328,6 @@ terraview scan checkov                      # scan with Checkov (+ AI if provide
 terraview scan tfsec                        # scan with tfsec
 terraview scan terrascan                    # scan with Terrascan
 terraview scan checkov --static             # scanner only, disable AI
-terraview scan checkov --all                # enable explain + diagram + impact
-terraview scan checkov --explain            # scanner + AI + natural language explanation
-terraview scan checkov --diagram            # scanner + AI + ASCII infrastructure diagram
-terraview scan checkov --impact             # scanner + AI + blast radius analysis
 terraview scan checkov --plan plan.json     # use existing plan JSON
 terraview scan checkov -f sarif             # SARIF output for CI
 terraview scan checkov --strict             # HIGH findings also return exit code 2
@@ -372,16 +364,31 @@ terraview scan checkov --provider gemini-cli --model gemini-3
 terraview scan checkov --provider claude-code --model claude-sonnet-4-5
 ```
 
-### Apply
+### Status
 
-Runs scan + conditionally applies the plan. Blocks if any CRITICAL findings are detected. Shows the scan summary and asks for confirmation in interactive mode.
+Shows open findings from the last scan with a delta against the previous scan. Reads from the persisted `LastScan` so it does not re-run the scanner.
 
 ```bash
-terraview apply checkov                     # interactive
-terraview apply checkov --non-interactive   # CI mode (blocks on CRITICAL, auto-approves otherwise)
-terraview apply checkov --static            # scanner only + apply
-terraview apply checkov --all               # everything enabled + apply
+terraview status                            # CRITICAL/HIGH + delta vs previous scan
+terraview status --all                      # include MEDIUM/LOW/INFO
+terraview status --explain-scores           # detailed score decomposition
 ```
+
+### Fix
+
+Parent command for AI-generated fixes. Reads findings from the last scan and generates corrected HCL. `fix plan` is dry-run (diff only); `fix apply` is interactive by default (y/n per fix).
+
+```bash
+terraview fix plan                          # dry-run: preview diffs, write nothing
+terraview fix apply                         # interactive: y/n per fix
+terraview fix apply --auto-approve          # apply all without prompts (CI/scripts)
+terraview fix apply CKV_AWS_18              # only findings with this rule ID
+terraview fix apply --severity CRITICAL     # filter by severity
+terraview fix apply --file vpc.tf           # filter by .tf file
+terraview fix apply --max 5                 # cap number of fixes generated
+```
+
+Safeguards: brace-balance pre-flight, `.tvfix.bak` backup per file, `terraform validate` after apply, automatic rollback on validation failure.
 
 ### Diagram
 
@@ -409,36 +416,6 @@ terraview explain --plan plan.json          # explain from existing plan
 terraview explain --provider gemini         # use a specific provider
 terraview explain --format json             # structured JSON output
 ```
-
-### Drift
-
-Detects and classifies infrastructure drift by running `terraform plan` and analyzing changes.
-
-```bash
-terraview drift                             # basic drift detection
-terraview drift --plan plan.json            # from existing plan
-terraview drift --intelligence              # advanced: classify intentional vs suspicious
-terraview drift --format compact            # one-line summary
-terraview drift --format json               # JSON output
-```
-
-Exit codes: `0` = no drift or low-risk only, `1` = HIGH risk, `2` = CRITICAL risk.
-
-### Modules
-
-Analyzes Terraform module calls for version pinning, source hygiene, and nesting depth. Deterministic, no AI required.
-
-```bash
-terraview modules                           # analyze modules in current directory
-terraview modules --plan plan.json          # analyze from existing plan
-terraview modules --check-registry          # check Terraform Registry for latest versions (requires network)
-terraview modules --format json             # JSON output
-terraview modules --terragrunt              # Terragrunt support
-```
-
-Rules checked: `MOD_001` (no version constraint), `MOD_002` (branch instead of tag), `MOD_003` (no ref), `MOD_004` (excessive nesting), `MOD_005` (HTTP source), `MOD_006` (newer version available).
-
-Exit codes: `0` = no issues, `1` = HIGH findings, `2` = CRITICAL findings.
 
 ### History
 
@@ -475,13 +452,15 @@ history:
 Model Context Protocol server for AI agent integration. Exposes terraview tools via JSON-RPC 2.0 over stdio.
 
 ```bash
-terraview mcp serve
+terraview mcp server
 ```
+
+> The alias `terraview mcp serve` still works for backward compatibility.
 
 Register with Claude Code:
 
 ```bash
-claude mcp add terraview -- terraview mcp serve
+claude mcp add terraview -- terraview mcp server
 ```
 
 Register with Cursor (`.cursor/mcp.json`):
@@ -491,13 +470,13 @@ Register with Cursor (`.cursor/mcp.json`):
   "mcpServers": {
     "terraview": {
       "command": "terraview",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "server"]
     }
   }
 }
 ```
 
-Exposes 11 tools: `terraview_scan`, `terraview_explain`, `terraview_diagram`, `terraview_drift`, `terraview_history`, `terraview_history_trend`, `terraview_history_compare`, `terraview_impact`, `terraview_cache`, `terraview_scanners`, `terraview_version`.
+Exposes 11 tools: `terraview_scan`, `terraview_explain`, `terraview_diagram`, `terraview_history`, `terraview_history_trend`, `terraview_history_compare`, `terraview_impact`, `terraview_cache`, `terraview_scanners`, `terraview_fix_suggest`, `terraview_version`.
 
 ### Provider Management
 
@@ -507,8 +486,6 @@ terraview provider use gemini gemini-2.5-pro  # set provider via CLI (non-intera
 terraview provider use ollama llama3.1:8b   # set local provider
 terraview provider current                  # show current configuration
 terraview provider test                     # test configured provider connectivity
-terraview provider install ollama           # install Ollama runtime + pull model
-terraview provider install ollama --model codellama:13b  # install with specific model
 ```
 
 The `provider list` command runs an **automatic integration test**. If the test fails, a diagnostic message is shown:
@@ -694,9 +671,10 @@ These providers use your **personal subscription** (Google/Anthropic) for billin
 |----------|-------------|---------------|
 | **ollama** | Ollama running locally | llama3.1:8b |
 
+Install Ollama from [ollama.com](https://ollama.com) and pull a model (e.g. `ollama pull llama3.1:8b`), then:
+
 ```bash
-terraview provider install ollama           # install Ollama + pull default model
-terraview provider install ollama --model codellama:13b  # custom model
+terraview provider use ollama llama3.1:8b
 ```
 
 ### Custom provider (OpenAI-compatible)
@@ -755,9 +733,6 @@ terraview scan checkov --provider claude-code --model claude-opus-4-6
 
 # Infrastructure explanation with CLI provider
 terraview explain --provider claude-code
-
-# Drift analysis with subscription AI
-terraview drift --intelligence --provider gemini-cli
 ```
 
 ### API vs CLI (subscription) — when to use each
@@ -849,7 +824,7 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
                                         │
 ┌───────────────────────────────────────┼───────────────────────────────────────────┐
 │                                 terraview CLI                                      │
-│  scan | apply | diagram | explain | drift | modules | history | provider | ...     │
+│  scan | status | fix | diagram | explain | history | provider | scanners | mcp     │
 └───────────────────────────────────────┬───────────────────────────────────────────┘
                                         │
                ┌────────────────────────┼────────────────────────┐
@@ -984,559 +959,6 @@ Terraview is maintained as an open source project under the MIT license.
 ### Supported Go version
 
 We follow the official Go support cycle with automated tests. Currently supporting **Go 1.26+**. If you encounter issues with any non-EOL version, open an [Issue](https://github.com/leonamvasquez/terraview/issues).
-
-## License
-
-Distributed under the [MIT](LICENSE) License.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.26+-blue.svg)](https://golang.org)
-[![GitHub release](https://img.shields.io/github/v/release/leonamvasquez/terraview)](https://github.com/leonamvasquez/terraview/releases/latest)
-[![CI](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml/badge.svg)](https://github.com/leonamvasquez/terraview/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/leonamvasquez/terraview)](https://goreportcard.com/report/github.com/leonamvasquez/terraview)
-[![codecov](https://codecov.io/gh/leonamvasquez/terraview/branch/main/graph/badge.svg)](https://codecov.io/gh/leonamvasquez/terraview)
-[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
-
-Security analysis for Terraform plans combining static scanners (Checkov, tfsec, Terrascan) with AI contextual analysis running **in parallel**. Single binary, zero dependencies, multiple AI providers supported.
-
----
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Features](#features)
-- [Installation](#installation)
-- [Commands](#commands)
-- [AI Providers](#ai-providers)
-- [Configuration](#configuration)
-- [CI/CD Integration](#cicd-integration)
-- [Exit Codes](#exit-codes)
-- [Output Formats](#output-formats)
-- [Disclaimer](#disclaimer)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Quick Start
-
-```bash
-# Install
-curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-
-# Check environment
-terraview setup
-
-# First scan
-cd my-terraform-project
-terraview scan checkov
-```
-
----
-
-## Features
-
-- **Security Scanners** — Checkov, tfsec, Terrascan automatically integrated
-- **Parallel AI analysis** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code
-- **Unified Scorecard** — Security, Compliance, Maintainability scores (0–10)
-- **Risk vectors** — 5 axes per resource (network, encryption, identity, governance, observability)
-- **ASCII Diagram (AWS)** — topological infrastructure visualization in the terminal
-- **Impact Analysis** — `--impact` for dependency blast radius
-- **Drift Detection** — detection and classification with `--intelligence`
-- **Native CI/CD** — semantic exit codes + SARIF, JSON, Markdown output
-- **Persistent Cache** — reruns with the same plan skip redundant API calls
-- **Supply Chain** — SBOM, cosign, SLSA Build Provenance Level 3
-- **Zero configuration** — auto-detects Terraform projects and runs automatically
-
-## Example
-
-```
-  terraview scan checkov
-  ══════════════════════
-
-  ┌──────────────────────────────────────────────────────┐
-  │  Scorecard                                           │
-  │  Security:       7.2 / 10                            │
-  │  Compliance:     8.5 / 10                            │
-  │  Maintainability: 9.0 / 10                           │
-
-  └──────────────────────────────────────────────────────┘
-
-  Findings: 3 CRITICAL, 5 HIGH, 12 MEDIUM, 4 LOW
-```
-
----
-
-## Installation
-
-### Script (Linux, macOS, Windows WSL) — recommended
-
-```bash
-curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-```
-
-Auto-detects OS and architecture, downloads the correct binary from GitHub Releases and creates the `tv` alias.
-
-### Homebrew (macOS / Linux)
-
-```bash
-brew install leonamvasquez/terraview/terraview
-```
-
-### Scoop (Windows)
-
-```powershell
-scoop bucket add terraview https://github.com/leonamvasquez/scoop-terraview.git
-scoop install terraview
-```
-
-### APT — Debian / Ubuntu
-
-```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.deb.sh' | sudo bash
-sudo apt update && sudo apt install terraview
-```
-
-### DNF / YUM — Fedora / RHEL / Amazon Linux
-
-```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/workspace-for-leonam/terraview/setup.rpm.sh' | sudo bash
-sudo dnf install terraview
-```
-
-### Docker
-
-```bash
-docker pull leonamvasquez/terraview:latest
-docker run --rm -v $(pwd):/workspace leonamvasquez/terraview scan checkov
-```
-
-### Windows — PowerShell
-
-```powershell
-irm https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.ps1 | iex
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/leonamvasquez/terraview.git
-cd terraview
-make install
-```
-
-Builds the binary, installs to `~/.local/bin/terraview`, creates the `tv` symlink and copies prompts to `~/.terraview/prompts/`.
-
-### Shell autocompletion
-
-```bash
-# Bash
-terraview completion bash | sudo tee /etc/bash_completion.d/terraview > /dev/null
-
-# Zsh (add to ~/.zshrc)
-terraview completion zsh | sudo tee "${fpath[1]}/_terraview" > /dev/null
-
-# Fish
-terraview completion fish | source
-
-# PowerShell (add to your $PROFILE)
-terraview completion powershell | Out-File $PROFILE -Append
-```
-
-### Requirements
-
-- Terraform >= 0.12
-- One or more scanners installed (Checkov, tfsec, Terrascan) — terraview can install them for you via `terraview scanners install --all`
-
----
-
-## Commands
-
-### scan
-
-By default, terraview runs **both** the security scanner and AI contextual analysis **in parallel**. AI activates automatically when a provider is configured. If no provider is configured, only the scanner runs.
-
-```bash
-terraview scan                              # auto-select default scanner
-terraview scan checkov                      # scan with Checkov (+ AI if provider configured)
-terraview scan tfsec                        # scan with tfsec
-terraview scan terrascan                    # scan with Terrascan
-terraview scan checkov --static             # scanner only, disable AI
-terraview scan checkov --all                # enable explain + diagram + impact
-terraview scan checkov --explain            # scanner + AI + natural language explanation
-terraview scan checkov --diagram            # scanner + AI + ASCII infrastructure diagram
-terraview scan checkov --impact             # scanner + AI + blast radius analysis
-terraview scan checkov --plan plan.json     # use existing plan JSON
-terraview scan checkov -f sarif             # SARIF output for CI
-terraview scan checkov --strict             # HIGH also returns exit code 2
-terraview scan checkov --findings ext.json  # import external Checkov/tfsec/Trivy findings
-```
-
-### apply
-
-Runs scan + conditionally applies the plan. Blocks on CRITICAL findings. Displays scan summary and prompts for confirmation in interactive mode.
-
-```bash
-terraview apply checkov                     # interactive
-terraview apply checkov --non-interactive   # CI mode (blocks CRITICAL, auto-approves otherwise)
-terraview apply checkov --static            # scanner only + apply
-```
-
-### diagram
-
-Generates a deterministic ASCII infrastructure diagram from a Terraform plan. Does not require AI. Currently supports **AWS only**.
-
-```bash
-terraview diagram                           # diagram from current directory (topo mode)
-terraview diagram --plan plan.json          # diagram from existing plan
-terraview diagram --diagram-mode flat       # flat layer-based view
-terraview diagram --output ./reports        # save diagram.txt to directory
-```
-
-### explain
-
-Generates a natural language explanation of your Terraform infrastructure using AI. Requires a configured provider.
-
-```bash
-terraview explain                           # explain current project
-terraview explain --plan plan.json          # explain from existing plan
-terraview explain --provider gemini         # use specific provider
-terraview explain --format json             # structured JSON output
-```
-
-### drift
-
-Detects and classifies infrastructure drift by running `terraform plan` and analyzing changes.
-
-```bash
-terraview drift                             # basic drift detection
-terraview drift --plan plan.json            # from existing plan
-terraview drift --intelligence              # advanced: classifies intentional vs suspicious
-terraview drift --format json               # JSON output
-```
-
-### modules
-
-Analyzes Terraform module calls for version pinning, source hygiene, and nesting depth.
-
-```bash
-terraview modules                           # analyze current directory
-terraview modules --plan plan.json          # from existing plan
-terraview modules --check-registry          # check latest versions on Registry
-terraview modules --format json             # JSON output
-```
-
-### history
-
-View scan history stored locally in SQLite.
-
-```bash
-terraview history                           # last 20 scans
-terraview history trend                     # sparkline trends
-terraview history compare                   # latest vs previous
-terraview history export -f csv -o out.csv  # export
-terraview history clear                     # clear current project
-```
-
-### mcp
-
-Model Context Protocol server for AI agent integration.
-
-```bash
-terraview mcp serve                         # start MCP server over stdio
-```
-
-### Provider management
-
-```bash
-terraview provider list                     # interactive selector (provider + model + connectivity test)
-terraview provider use gemini gemini-2.5-pro  # set provider via CLI (non-interactive)
-terraview provider use ollama llama3.1:8b   # set local provider
-terraview provider current                  # show current configuration
-terraview provider test                     # test configured provider connectivity
-terraview provider install ollama           # install Ollama runtime + pull model
-```
-
-### Scanner management
-
-```bash
-terraview scanners list                     # list scanners with installation status
-terraview scanners install checkov          # install specific scanner
-terraview scanners install --all            # install all missing scanners
-terraview scanners default checkov          # set default scanner
-```
-
-### Other commands
-
-```bash
-terraview setup                             # environment diagnostics
-terraview version                           # version, Go runtime, OS/arch
-terraview cache status                      # show cache usage
-terraview cache clear                       # clear AI response cache
-```
-
-### Global flags
-
-```
--d, --dir string        Terraform workspace directory (default ".")
--p, --plan string       Path to terraform plan JSON (auto-generates if omitted)
--f, --format string     Output format: pretty, compact, json, sarif
--o, --output string     Output directory for generated files
-    --provider string   AI provider override
-    --model string      AI model override
-    --br                Output in Brazilian Portuguese (pt-BR)
-    --no-color          Disable colored output
--v, --verbose           Enable verbose output
-```
-
----
-
-## AI Providers
-
-Terraview supports **multiple AI providers** in four categories. With OpenRouter and Custom, you can connect to virtually any AI model available:
-
-### API providers (require API key)
-
-| Provider | Environment variable | Default model | Example models |
-|----------|---------------------|---------------|----------------|
-| **gemini** | `GEMINI_API_KEY` | gemini-2.5-flash | gemini-2.5-flash, gemini-2.5-pro |
-| **claude** | `ANTHROPIC_API_KEY` | claude-haiku-4-5 | claude-haiku-4-5, claude-sonnet-4-6 |
-| **openai** | `OPENAI_API_KEY` | gpt-4o-mini | gpt-4o-mini, gpt-4o, o3-mini |
-| **deepseek** | `DEEPSEEK_API_KEY` | deepseek-v3.2 | deepseek-chat, deepseek-reasoner |
-| **openrouter** | `OPENROUTER_API_KEY` | google/gemini-2.5-flash | Any model on OpenRouter |
-
-### CLI providers (subscription — no API key needed)
-
-| Provider | Required CLI | Install | Default model |
-|----------|-------------|---------|---------------|
-| **gemini-cli** | `gemini` | `npm install -g @google/gemini-cli` | gemini-2.5-flash |
-| **claude-code** | `claude` | `npm install -g @anthropic-ai/claude-code` | claude-haiku-4-5 |
-
-These providers use your **personal subscription** (Google/Anthropic) for billing. No API key required — just have the CLI installed and authenticated.
-
-```bash
-# Set up Gemini CLI (requires Google One AI Premium or Google AI Studio login)
-npm install -g @google/gemini-cli
-gemini                                      # authenticate on first run
-terraview provider use gemini-cli
-
-# Set up Claude Code (requires Anthropic Max, Pro or Team)
-npm install -g @anthropic-ai/claude-code
-claude                                      # authenticate on first run
-terraview provider use claude-code
-```
-
-### Local provider (no internet)
-
-| Provider | Requirement | Default model |
-|----------|-------------|---------------|
-| **ollama** | Ollama running locally | llama3.1:8b |
-
-```bash
-terraview provider install ollama           # install Ollama + pull default model
-terraview provider install ollama --model codellama:13b
-```
-
-### Custom provider (OpenAI-compatible)
-
-| Provider | Environment variable | URL required | Default model |
-|----------|---------------------|-------------|---------------|
-| **custom** | `CUSTOM_LLM_API_KEY` | Yes (`url` in config) | gpt-4o-mini |
-
-Works with any `/v1/chat/completions` compatible API: Grok (xAI), Groq, Mistral, Together AI, Fireworks, Perplexity, LM Studio, vLLM, etc.
-
-```yaml
-llm:
-  provider: custom
-  model: grok-3-mini
-  url: https://api.x.ai
-```
-
-### API vs CLI — when to use each
-
-| Aspect | API (key) | CLI (subscription) |
-|--------|-----------|-------------------|
-| **Setup** | Create account + generate API key | Install CLI + login |
-| **Billing** | Pay-per-token (credits) | Fixed monthly plan |
-| **Best for** | CI/CD, automated pipelines | Local development, personal use |
-| **Offline** | No | No (but Ollama yes) |
-
-> **Tip:** For day-to-day local use, subscription providers are the most practical — zero key configuration, simple billing. For CI/CD, prefer API providers (or Ollama for air-gapped environments).
-
----
-
-## Configuration
-
-Terraview looks for `.terraview.yaml` in the following locations (in order of precedence):
-
-1. Project directory (passed via `--dir`)
-2. Current working directory
-3. User home (`~/.terraview/.terraview.yaml`)
-
-> **Warning:** Never commit `api_key` directly in `.terraview.yaml`. Prefer environment variables (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.) or add `.terraview.yaml` to your `.gitignore`.
-
-```yaml
-llm:
-  enabled: true
-  provider: ollama              # ollama, gemini, claude, openai, deepseek, openrouter, gemini-cli, claude-code
-  model: llama3.1:8b
-  url: http://localhost:11434   # custom URL (Ollama only)
-  # api_key: ""                 # prefer environment variables
-  timeout_seconds: 120
-  temperature: 0.2              # 0.0–1.0 (lower = more deterministic)
-  max_resources: 30             # max resources in AI prompt
-  cache: false                  # enable persistent response cache
-  cache_ttl_hours: 24
-  ollama:
-    num_ctx: 4096               # model context window
-    max_threads: 0              # 0 = use all CPUs
-    max_memory_mb: 0            # 0 = no limit
-    min_free_memory_mb: 1024
-
-scanner:
-  default: checkov
-
-scoring:
-  severity_weights:
-    critical: 5.0
-    high: 3.0
-    medium: 1.0
-    low: 0.5
-
-rules:
-  required_tags:                # tags required on all resources
-    - Environment
-    - Owner
-    - CostCenter
-  disabled_rules:               # silence specific rule IDs
-    - CKV_AWS_79
-
-output:
-  format: pretty                # pretty, compact, json, sarif
-```
-
-See [`examples/.terraview.yaml`](https://github.com/leonamvasquez/terraview/blob/main/examples/.terraview.yaml) for a fully annotated reference file.
-
----
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-name: Terraform Security Scan
-on:
-  pull_request:
-    paths: ['**.tf']
-
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-
-      - name: Install terraview
-        run: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-
-      - name: Security scan
-        run: terraview scan checkov -f sarif -o ./reports
-
-      - name: Upload SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: reports/review.sarif.json
-
-      - name: Comment on PR
-        if: always()
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          path: reports/review.md
-```
-
-**With AI in the pipeline:**
-
-```yaml
-      - name: Security scan with AI
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: terraview scan checkov --provider gemini -f sarif -o ./reports
-```
-
-### GitLab CI
-
-```yaml
-terraform-scan:
-  stage: validate
-  script:
-    - curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-    - terraview scan checkov -f json -o ./reports
-  artifacts:
-    paths: [reports/review.json, reports/review.md]
-    when: always
-```
-
-### Azure DevOps
-
-```yaml
-- task: Bash@3
-  displayName: 'Install terraview'
-  inputs:
-    targetType: 'inline'
-    script: curl -sSL https://raw.githubusercontent.com/leonamvasquez/terraview/main/install.sh | bash
-
-- task: Bash@3
-  displayName: 'Security scan'
-  inputs:
-    targetType: 'inline'
-    script: terraview scan checkov -f sarif -o $(Build.ArtifactStagingDirectory)/reports
-```
-
----
-
-## Exit Codes
-
-| Code | Meaning | Recommended action |
-|------|---------|-------------------|
-| `0`  | No issues or only MEDIUM/LOW/INFO | Allow merge |
-| `1`  | HIGH severity findings | Warning, consider review |
-| `2`  | CRITICAL findings (or HIGH with `--strict`) | Block merge |
-
-Use `--strict` to block PRs with HIGH or CRITICAL findings. Without `--strict`, only CRITICAL returns exit code 2.
-
----
-
-## Output Formats
-
-```bash
-terraview scan checkov                      # pretty (default)
-terraview scan checkov -f compact           # single-line summary
-terraview scan checkov -f json              # JSON (review.json)
-terraview scan checkov -f sarif             # SARIF (review.sarif.json) for GitHub Security tab
-terraview scan checkov -o ./reports         # write review.json + review.md to ./reports
-```
-
-All scans generate `review.json` and `review.md`. SARIF output is generated when `-f sarif` is used.
-
----
-
-## Disclaimer
-
-Terraview **does not save, publish or share** any user information. When AI is active, plan content is sent to the configured provider. For 100% local analysis, use Ollama.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for instructions. Vulnerabilities: [SECURITY.md](SECURITY.md).
-
-**Support:**
-- [GitHub Issues](https://github.com/leonamvasquez/terraview/issues)
-- [GitHub Discussions](https://github.com/leonamvasquez/terraview/discussions)
-
----
 
 ## License
 

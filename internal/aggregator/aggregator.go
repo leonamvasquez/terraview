@@ -61,11 +61,13 @@ type ReviewResult struct {
 }
 
 // AIValidationReport contains the validation statistics for AI findings
-// against the topology graph. Included in JSON output when findings are discarded.
+// against the topology graph. Included in JSON output when AI was used.
 type AIValidationReport struct {
 	TotalReceived int                  `json:"total_received"`
 	TotalValid    int                  `json:"total_valid"`
 	TotalDiscard  int                  `json:"total_discarded"`
+	AIUniqueKept  int                  `json:"ai_unique_kept"` // findings only AI found (not caught by scanner)
+	AIEnriched    int                  `json:"ai_enriched"`    // scanner findings enriched with AI remediation
 	Discarded     []AIDiscardedFinding `json:"discarded,omitempty"`
 }
 

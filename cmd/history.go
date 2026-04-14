@@ -144,22 +144,9 @@ func runHistoryList(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	filter := history.ListFilter{Limit: historyLimit}
-
-	if !historyAll {
-		projectDir := resolveProjectDir()
-		if historyProject != "" {
-			projectDir = historyProject
-		}
-		filter.ProjectHash = history.ProjectHash(projectDir)
-	}
-
-	if historySince != "" {
-		since, err := parseSince(historySince)
-		if err != nil {
-			return err
-		}
-		filter.Since = since
+	filter, err := buildListFilter(historyAll, historyProject, historySince, historyLimit, workDir)
+	if err != nil {
+		return err
 	}
 
 	records, err := store.List(filter)
@@ -173,6 +160,34 @@ func runHistoryList(cmd *cobra.Command, args []string) error {
 	}
 
 	return history.FormatList(os.Stdout, records, historyFormat, projectName)
+}
+
+// buildListFilter constructs a ListFilter from CLI flags. Pure function, no I/O.
+func buildListFilter(all bool, project, since string, limit int, wd string) (history.ListFilter, error) {
+	filter := history.ListFilter{Limit: limit}
+
+	if !all {
+		projectDir := wd
+		if projectDir == "" || projectDir == "." {
+			if d, err := os.Getwd(); err == nil {
+				projectDir = d
+			}
+		}
+		if project != "" {
+			projectDir = project
+		}
+		filter.ProjectHash = history.ProjectHash(projectDir)
+	}
+
+	if since != "" {
+		t, err := parseSince(since)
+		if err != nil {
+			return filter, err
+		}
+		filter.Since = t
+	}
+
+	return filter, nil
 }
 
 func runHistoryTrend(cmd *cobra.Command, args []string) error {
@@ -312,9 +327,22 @@ func runHistoryClear(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runHistoryExport(cmd *cobra.Command, args []string) error {
-	if historyOutFile == "" {
+// validateExportParams checks export parameters before I/O. Pure function.
+func validateExportParams(outFile, format string) error {
+	if outFile == "" {
 		return fmt.Errorf("especifique o arquivo de saída com -o/--output")
+	}
+	switch format {
+	case "json", "csv":
+		return nil
+	default:
+		return fmt.Errorf("formato de exportação inválido: %q (use json ou csv)", format)
+	}
+}
+
+func runHistoryExport(cmd *cobra.Command, args []string) error {
+	if err := validateExportParams(historyOutFile, historyExportFmt); err != nil {
+		return err
 	}
 
 	store, err := history.NewStore(history.DefaultDBPath())
