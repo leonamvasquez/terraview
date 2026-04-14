@@ -8,20 +8,22 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/scoring"
 )
 
 // LastScan holds the full findings from the most recent scan for a project.
 // It is persisted to disk so that `terraview status` and `terraview fix` can
 // operate without re-running the scanner.
 type LastScan struct {
-	Timestamp      time.Time       `json:"timestamp"`
-	ProjectDir     string          `json:"project_dir"`
-	PlanFile       string          `json:"plan_file"`
-	Scanner        string          `json:"scanner"`
-	Provider       string          `json:"provider,omitempty"`
-	Model          string          `json:"model,omitempty"`
-	TotalResources int             `json:"total_resources"`
-	Findings       []rules.Finding `json:"findings"`
+	Timestamp          time.Time                   `json:"timestamp"`
+	ProjectDir         string                      `json:"project_dir"`
+	PlanFile           string                      `json:"plan_file"`
+	Scanner            string                      `json:"scanner"`
+	Provider           string                      `json:"provider,omitempty"`
+	Model              string                      `json:"model,omitempty"`
+	TotalResources     int                         `json:"total_resources"`
+	Findings           []rules.Finding             `json:"findings"`
+	ScoreDecomposition *scoring.ScoreDecomposition `json:"score_decomposition,omitempty"`
 }
 
 // SaveLastScan writes ls to ~/.terraview/<project_hash>-last.json.

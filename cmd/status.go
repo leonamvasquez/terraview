@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var statusAllFlag bool
+var (
+	statusAllFlag           bool
+	statusExplainScoresFlag bool
+)
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -19,17 +22,21 @@ var statusCmd = &cobra.Command{
 	Long: `Show the security findings from the most recent scan for this project.
 Displays a delta against the previous scan and lists all open CRITICAL/HIGH findings.
 
-Run 'terraview fix' to interactively patch these findings.`,
+Use --explain-scores to see the detailed score decomposition from the last scan.
+
+Run 'terraview fix apply' to interactively patch these findings.`,
 	RunE: runStatus,
 }
 
 func init() {
 	statusCmd.Flags().BoolVar(&statusAllFlag, "all", false, "Show all severities, not just CRITICAL/HIGH")
+	statusCmd.Flags().BoolVar(&statusExplainScoresFlag, "explain-scores", false, "Show detailed score decomposition from the last scan")
 
 	// pt-BR flag translations (brFlag set in root.go init which runs before status.go init)
 	if brFlag {
 		translateFlags(statusCmd, map[string]string{
-			"all": "Exibir todas as severidades, não apenas CRITICAL/HIGH",
+			"all":            "Exibir todas as severidades, não apenas CRITICAL/HIGH",
+			"explain-scores": "Exibir decomposição detalhada dos scores do último scan",
 		})
 	}
 }
@@ -55,6 +62,16 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	printStatusHeader(ls, projectDir)
 	printSeverityTable(ls, store)
 	printOpenFindings(ls)
+
+	if statusExplainScoresFlag {
+		if ls.ScoreDecomposition != nil {
+			fmt.Println()
+			output.PrintScoreDecomposition(ls.ScoreDecomposition, brFlag)
+		} else {
+			fmt.Printf("  %s⚠ No score decomposition available — re-run 'terraview scan' to populate it.%s\n\n", yellow, reset)
+		}
+	}
+
 	printStatusFooter(ls)
 
 	return nil
