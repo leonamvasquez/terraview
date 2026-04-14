@@ -33,9 +33,12 @@ Estes providers usam sua **assinatura pessoal** (Google/Anthropic) para billing.
 |----------|-----------|---------------|
 | **ollama** | Ollama rodando localmente | llama3.1:8b |
 
+Instale o Ollama manualmente (ver [ollama.com/download](https://ollama.com/download)) e faça pull do modelo desejado:
+
 ```bash
-terraview provider install ollama           # instalar Ollama + pull do modelo padrão
-terraview provider install ollama --model codellama:13b  # modelo personalizado
+ollama pull llama3.1:8b                     # modelo padrão
+ollama pull codellama:13b                   # modelo alternativo
+terraview provider use ollama llama3.1:8b   # selecionar no terraview
 ```
 
 ---
@@ -81,8 +84,8 @@ terraview scan checkov --provider claude-code --model claude-opus-4-6
 # Explicação de infraestrutura com provider CLI
 terraview explain --provider claude-code
 
-# Drift analysis com IA por assinatura
-terraview drift --intelligence --provider gemini-cli
+# Fix interativo com IA por assinatura
+terraview fix apply --provider gemini-cli
 ```
 
 ---

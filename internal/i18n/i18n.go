@@ -45,6 +45,7 @@ type Messages struct {
 	LblFindings      string // used in "(%d findings)" / "(%d achados)"
 	LblResources     string // "Resources analyzed" / "Recursos analisados"
 	LblTotalFindings string // "Total findings" / "Total de achados"
+	LblAIQuality     string // "AI analysis" / "Análise IA"
 }
 
 // active holds the currently selected language. 0 = EN, 1 = BR.
@@ -83,6 +84,7 @@ var en = Messages{
 	LblFindings:      "findings",
 	LblResources:     "Resources analyzed",
 	LblTotalFindings: "Total findings",
+	LblAIQuality:     "AI analysis",
 }
 
 var br = Messages{
@@ -118,6 +120,7 @@ var br = Messages{
 	LblFindings:      "achados",
 	LblResources:     "Recursos analisados",
 	LblTotalFindings: "Total de achados",
+	LblAIQuality:     "Análise IA",
 }
 
 // SetLang selects the active language. Use "pt-BR" for Portuguese.

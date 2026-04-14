@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestAllTools_Returns12(t *testing.T) {
+func TestAllTools_Returns11(t *testing.T) {
 	tools := AllTools()
-	if len(tools) != 12 {
-		t.Fatalf("len(AllTools()) = %d, want 12", len(tools))
+	if len(tools) != 11 {
+		t.Fatalf("len(AllTools()) = %d, want 11", len(tools))
 	}
 }
 
@@ -28,7 +28,6 @@ func TestAllTools_ExpectedNames(t *testing.T) {
 		"terraview_scan":            false,
 		"terraview_explain":         false,
 		"terraview_diagram":         false,
-		"terraview_drift":           false,
 		"terraview_history":         false,
 		"terraview_history_trend":   false,
 		"terraview_history_compare": false,
@@ -135,22 +134,5 @@ func TestAllTools_ScanHasScannerEnum(t *testing.T) {
 	enumList := enumRaw.([]interface{})
 	if len(enumList) < 2 {
 		t.Errorf("scanner enum has %d values, want at least 2", len(enumList))
-	}
-}
-
-func TestAllTools_DriftHasIntelligence(t *testing.T) {
-	tool := LookupTool("terraview_drift")
-	if tool == nil {
-		t.Fatal("terraview_drift not found")
-	}
-
-	var schema map[string]interface{}
-	if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
-		t.Fatalf("invalid schema: %v", err)
-	}
-
-	props := schema["properties"].(map[string]interface{})
-	if _, ok := props["intelligence"]; !ok {
-		t.Error("drift tool should have 'intelligence' property")
 	}
 }

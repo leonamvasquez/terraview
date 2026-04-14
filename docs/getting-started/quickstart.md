@@ -74,9 +74,6 @@ terraview scan checkov
 
 # Apenas scanner, sem IA
 terraview scan checkov --static
-
-# Tudo habilitado: explain + diagram + impact
-terraview scan checkov --all
 ```
 
 ## 6. Explorar os resultados
