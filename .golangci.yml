@@ -60,6 +60,9 @@ linters-settings:
       - persistente
       - correspondente
       - analyses
+      - individuais
+      - rela
+      - supress
   prealloc:
     simple: true
 
