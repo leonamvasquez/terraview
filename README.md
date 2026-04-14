@@ -35,12 +35,11 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 - **Scanners de segurança** — Checkov, tfsec, Terrascan integrados automaticamente
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **Supressão de findings** — arquivo `.terraview-ignore` para suprimir falsos positivos e riscos aceitos, com escopo por regra, recurso ou fonte (`--ignore-file`)
-- **Correção automática (AI Fix)** — `--fix` gera sugestões de HCL corrigido para findings CRITICAL/HIGH com validação e diff
+- **Correção automática (AI Fix)** — `terraview fix plan` / `terraview fix apply` geram e aplicam HCL corrigido para findings CRITICAL/HIGH com validação e diff
 - **Scorecard unificado** — Segurança, Compliance, Manutenibilidade (0–10)
 - **Vetores de risco** — 5 eixos por recurso (rede, criptografia, identidade, governança, observabilidade)
-- **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal.
-- **Análise de impacto** — `--impact` para blast radius
-- **Drift detection** — detecção e classificação com `--intelligence`
+- **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal
+- **Blast radius via MCP** — análise de impacto exposta como tool `terraview_impact` para agentes AI
 - **Histórico de scans** — tracking em SQLite com trends, comparação e exportação
 - **MCP Server** — integração com agentes AI (Claude Code, Cursor, Windsurf)
 - **CI/CD nativo** — exit codes semânticos + SARIF, JSON, Markdown
@@ -69,7 +68,7 @@ Outros métodos: `brew install leonamvasquez/terraview/terraview` · `scoop inst
 
 - [Instalação](https://leonamvasquez.github.io/terraview/getting-started/installation/) — todos os métodos
 - [Configuração Rápida](https://leonamvasquez.github.io/terraview/getting-started/quickstart/) — primeiro scan passo a passo
-- [Comandos](https://leonamvasquez.github.io/terraview/usage/commands/) — scan, apply, diagram, explain, drift
+- [Comandos](https://leonamvasquez.github.io/terraview/usage/commands/) — scan, status, fix, diagram, explain
 - [AI Providers](https://leonamvasquez.github.io/terraview/usage/ai-providers/) — API, CLI, Custom e local
 - [Configuração](https://leonamvasquez.github.io/terraview/usage/configuration/) — `.terraview.yaml`
 - [CI/CD](https://leonamvasquez.github.io/terraview/integration/cicd/) — GitHub Actions, GitLab CI, Azure DevOps

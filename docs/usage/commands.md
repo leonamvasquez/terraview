@@ -7,11 +7,10 @@ $ terraview
 
 Core Commands:
   scan        Security scan + AI contextual analysis (parallel)
-  apply       Scan and conditionally apply the plan
+  status      Show findings from last scan with delta vs previous
+  fix         Generate (plan) and apply AI-suggested HCL fixes
   diagram     Generate ASCII infrastructure diagram
   explain     AI-powered infrastructure explanation
-  drift       Detect and classify infrastructure drift
-  modules     Analyze Terraform module usage and health
   history     View scan history and trends
 
 Provider Management:
@@ -142,22 +141,6 @@ terraview explain --format json             # saída JSON estruturada
 
 ---
 
-## Drift
-
-Detecta e classifica drift de infraestrutura rodando `terraform plan` e analisando mudanças.
-
-```bash
-terraview drift                             # detecção básica de drift
-terraview drift --plan plan.json            # de plan existente
-terraview drift --intelligence              # avançado: classifica intencional vs suspeito
-terraview drift --format compact            # resumo em uma linha
-terraview drift --format json               # saída JSON
-```
-
-Exit codes: `0` = sem drift ou apenas baixo risco, `1` = risco HIGH, `2` = risco CRITICAL.
-
----
-
 ## Gerenciamento de providers
 
 ```bash
@@ -166,8 +149,6 @@ terraview provider use gemini gemini-2.5-pro  # definir provider via CLI (não-i
 terraview provider use ollama llama3.1:8b   # definir provider local
 terraview provider current                  # exibir configuração atual
 terraview provider test                     # testar conectividade do provider configurado
-terraview provider install ollama           # instalar runtime Ollama + pull do modelo
-terraview provider install ollama --model codellama:13b  # instalar com modelo específico
 ```
 
 O comando `provider list` executa um **teste de integração automático**. Se o teste falhar, uma mensagem de diagnóstico é exibida:

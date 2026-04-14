@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/output"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -239,23 +238,3 @@ const (
 	green  = "\033[32m"
 	yellow = "\033[33m"
 )
-
-// relPath returns path relative to base, falling back to path on error.
-func relPath(base, path string) string {
-	if path == "" {
-		return ""
-	}
-	rel, err := os.Getwd()
-	if err != nil {
-		return path
-	}
-	_ = rel
-	return path
-}
-
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}

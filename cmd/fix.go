@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/fix"
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/rules"
-	"github.com/spf13/cobra"
 )
 
 // ── flags ───────────────────────────────────────────────────────────────────
@@ -113,19 +114,19 @@ type fixFilter struct {
 	max       int
 }
 
-func runFixPlan(cmd *cobra.Command, args []string) error {
+func runFixPlan(_ *cobra.Command, _ []string) error {
 	filter := fixFilter{
 		findingID: "",
 		severity:  strings.ToUpper(fixSeverityFlag),
 		file:      fixFileFlag,
 		max:       fixMaxFlag,
 	}
-	return generateAndHandleFixes(cmd, filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
+	return generateAndHandleFixes(filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
 		session.Preview(pending)
 	})
 }
 
-func runFixApply(cmd *cobra.Command, args []string) error {
+func runFixApply(_ *cobra.Command, args []string) error {
 	filter := fixFilter{
 		severity: strings.ToUpper(fixSeverityFlag),
 		file:     fixFileFlag,
@@ -135,7 +136,7 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 		filter.findingID = args[0]
 	}
 
-	return generateAndHandleFixes(cmd, filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
+	return generateAndHandleFixes(filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
 		if fixAutoApproveFlag {
 			session.ApplyAll(pending)
 		} else {
@@ -146,7 +147,7 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 
 // ── core generator ──────────────────────────────────────────────────────────
 
-func generateAndHandleFixes(cmd *cobra.Command, filter fixFilter, handler func(*fix.ApplySession, []fix.PendingFix)) error {
+func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []fix.PendingFix)) error {
 	projectDir := resolveProjectDir()
 
 	ls, err := history.LoadLastScan(projectDir)

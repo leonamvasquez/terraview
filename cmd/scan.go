@@ -178,7 +178,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if !providerAvailable {
 			avail := scanner.DefaultManager.Available()
 			if len(avail) == 0 {
-				return fmt.Errorf("no scanners installed and no AI provider configured.\n\nGet started:\n  terraview scanners install checkov    # install a scanner\n  terraview provider install ollama     # install local AI\n\nOr configure an AI provider in .terraview.yaml")
+				return fmt.Errorf("no scanners installed and no AI provider configured.\n\nGet started:\n  terraview scanners install checkov    # install a scanner\n  terraview provider list               # configure an AI provider\n\nOr edit .terraview.yaml directly")
 			}
 			names := make([]string, 0, len(avail))
 			for _, s := range avail {

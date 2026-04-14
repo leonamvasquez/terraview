@@ -35,9 +35,7 @@ Subcommands:
   list        List available providers and choose the default interactively
   use         Set default provider non-interactively (for scripts)
   current     Show the currently configured provider
-  test        Test connectivity with the configured provider
-  install     Install LLM runtime (ollama)
-  uninstall   Remove LLM runtime`,
+  test        Test connectivity with the configured provider`,
 }
 
 var aiListCmd = &cobra.Command{

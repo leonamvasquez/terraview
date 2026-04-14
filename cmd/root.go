@@ -105,7 +105,7 @@ func init() {
 	rootCmd.AddCommand(diagramCmd)
 	rootCmd.AddCommand(explainCmd)
 
-	// Provider management (includes install/uninstall as subcommands)
+	// Provider management
 	rootCmd.AddCommand(providerCmd)
 
 	// Utilities
@@ -403,9 +403,7 @@ Subcomandos:
   list        Listar providers disponíveis e escolher o padrão interativamente
   use         Definir provider padrão sem interação (para scripts)
   current     Exibir o provider atualmente configurado
-  test        Testar conectividade com o provider configurado
-  install     Instalar runtime LLM (Ollama)
-  uninstall   Remover runtime LLM`
+  test        Testar conectividade com o provider configurado`
 
 	// provider subcommands
 	aiListCmd.Short = "Listar providers disponíveis e escolher o padrão interativamente"
@@ -637,7 +635,7 @@ func translateFlags(cmd *cobra.Command, translations map[string]string) {
 }
 
 // generatePlan creates the appropriate executor (terraform or terragrunt) and generates
-// the plan JSON. This extracts the common pattern used by scan, explain, diagram, and drift.
+// the plan JSON. This extracts the common pattern used by scan, explain, and diagram.
 // If terragruntFlag is set, it uses Terragrunt; otherwise, it uses Terraform.
 func generatePlan() (string, terraformexec.PlanExecutor, error) { //nolint:unparam // PlanExecutor intentionally kept for future use by callers that may need it
 	var executor terraformexec.PlanExecutor
