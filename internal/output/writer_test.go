@@ -1133,10 +1133,10 @@ func TestPrintScoreDecomposition_EN(t *testing.T) {
 	defer func() { ColorEnabled = true }()
 	i18n.SetLang("en")
 
-	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	_ = NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
 	d := makeDecomp(true, false, false)
 
-	out := captureStdout(t, func() { w.printScoreDecomposition(d, false) })
+	out := captureStdout(t, func() { PrintScoreDecomposition(d, false) })
 
 	for _, want := range []string{
 		"Score Decomposition",
@@ -1167,10 +1167,10 @@ func TestPrintScoreDecomposition_BR(t *testing.T) {
 	i18n.SetLang("pt-BR")
 	defer i18n.SetLang("en")
 
-	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, Lang: "pt-BR", ExplainScores: true})
+	_ = NewWriterWithConfig(WriterConfig{Format: FormatPretty, Lang: "pt-BR", ExplainScores: true})
 	d := makeDecomp(true, true, true)
 
-	out := captureStdout(t, func() { w.printScoreDecomposition(d, true) })
+	out := captureStdout(t, func() { PrintScoreDecomposition(d, true) })
 
 	for _, want := range []string{
 		"Decomposição do Score",
@@ -1196,10 +1196,10 @@ func TestPrintScoreDecomposition_EmptyFindings(t *testing.T) {
 	defer func() { ColorEnabled = true }()
 	i18n.SetLang("en")
 
-	w := NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
+	_ = NewWriterWithConfig(WriterConfig{Format: FormatPretty, ExplainScores: true})
 	d := makeDecomp(false, false, false)
 
-	out := captureStdout(t, func() { w.printScoreDecomposition(d, false) })
+	out := captureStdout(t, func() { PrintScoreDecomposition(d, false) })
 
 	// Categories present
 	for _, want := range []string{"Security", "Compliance", "Overall Score"} {
