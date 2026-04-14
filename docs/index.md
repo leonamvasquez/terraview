@@ -31,9 +31,7 @@ terraview scan checkov
 - **Scorecard unificado** — scores de Segurança, Compliance, Manutenibilidade e Overall (0–10)
 - **Vetores de risco** — análise em 5 eixos por recurso: rede, criptografia, identidade, governança, observabilidade
 - **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal com aninhamento VPC, tiers de subnet e setas de conexão
-- **Análise de impacto** — raio de dependências das mudanças
-- **Drift detection** — detecção e classificação de drift com scoring avançado
-- **Análise de módulos** — versionamento, higiene de source, profundidade de nesting
+- **Blast radius via MCP** — análise de raio de dependências exposta a agentes IA pela tool `terraview_impact`
 - **Histórico de scans** — tracking em SQLite com trends (sparklines), comparação e exportação
 - **MCP Server** — integração com agentes AI (Claude Code, Cursor, Windsurf) via Model Context Protocol
 - **CI/CD nativo** — exit codes semânticos + saída SARIF, JSON, Markdown

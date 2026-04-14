@@ -19,12 +19,12 @@ allowing AI agents (Claude Code, Cursor, Windsurf) to call
 terraview tools programmatically over stdio.
 
 Usage:
-  terraview mcp serve`,
+  terraview mcp server`,
 }
 
 var mcpServeCmd = &cobra.Command{
-	Use:     "serve",
-	Aliases: []string{"server"},
+	Use:     "server",
+	Aliases: []string{"serve"},
 	Short:   "Start the MCP server over stdio",
 	Long: `Starts a Model Context Protocol server that reads JSON-RPC 2.0
 messages from stdin and writes responses to stdout.
@@ -32,14 +32,14 @@ messages from stdin and writes responses to stdout.
 Logs go to stderr. Only valid JSON-RPC appears on stdout.
 
 Register with Claude Code:
-  claude mcp add terraview -- terraview mcp serve
+  claude mcp add terraview -- terraview mcp server
 
 Register with Cursor (.cursor/mcp.json):
   {
     "mcpServers": {
       "terraview": {
         "command": "terraview",
-        "args": ["mcp", "serve"]
+        "args": ["mcp", "server"]
       }
     }
   }
@@ -48,7 +48,6 @@ Tools exposed:
   terraview_scan             Security scan with scorecard
   terraview_explain          AI infrastructure explanation
   terraview_diagram          ASCII infrastructure diagram
-  terraview_drift            Drift detection and classification
   terraview_history          Query scan history
   terraview_history_trend    Score trends over time
   terraview_history_compare  Compare two scans side by side
