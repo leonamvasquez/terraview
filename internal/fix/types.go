@@ -7,6 +7,17 @@ type FixRequest struct {
 	ResourceType   string                 `json:"resource_type"`
 	ResourceConfig map[string]interface{} `json:"resource_config,omitempty"`
 
+	// CurrentHCL is the actual HCL source of the resource block as it appears in
+	// the .tf file (variables, locals, and references preserved). When set, the AI
+	// uses this as the authoritative baseline and makes the minimal change to it
+	// instead of reconstructing the block from scratch using plan-JSON values.
+	CurrentHCL string `json:"current_hcl,omitempty"`
+
+	// FileContext contains the HCL of up to fileContextMaxLines surrounding lines
+	// from the same .tf file. Used to understand naming conventions, existing
+	// references, and avoid generating duplicate resources.
+	FileContext string `json:"file_context,omitempty"`
+
 	// PlanIndex provides the full resource index of the Terraform plan.
 	// When set, the suggester uses it to resolve real resource references
 	// and generate canonical names instead of inventing placeholders.

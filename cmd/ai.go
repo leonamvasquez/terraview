@@ -35,9 +35,7 @@ Subcommands:
   list        List available providers and choose the default interactively
   use         Set default provider non-interactively (for scripts)
   current     Show the currently configured provider
-  test        Test connectivity with the configured provider
-  install     Install LLM runtime (ollama)
-  uninstall   Remove LLM runtime`,
+  test        Test connectivity with the configured provider`,
 }
 
 var aiListCmd = &cobra.Command{
@@ -76,8 +74,6 @@ func init() {
 	providerCmd.AddCommand(aiUseCmd)
 	providerCmd.AddCommand(aiCurrentCmd)
 	providerCmd.AddCommand(aiTestCmd)
-	providerCmd.AddCommand(installCmd)
-	providerCmd.AddCommand(uninstallCmd)
 }
 
 // runAIList shows an interactive provider picker, then a model picker, tests

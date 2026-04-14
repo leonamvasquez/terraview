@@ -136,8 +136,6 @@ func (s *Server) handleToolsCall(req *Request) Response {
 		result, err = handleExplain(params.Arguments, s.logger)
 	case "terraview_diagram":
 		result, err = handleDiagram(params.Arguments, s.logger)
-	case "terraview_drift":
-		result, err = handleDrift(params.Arguments, s.logger)
 	case "terraview_history":
 		result, err = handleHistory(params.Arguments, s.logger)
 	case "terraview_history_trend":

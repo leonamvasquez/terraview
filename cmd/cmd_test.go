@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leonamvasquez/terraview/internal/config"
-	"github.com/leonamvasquez/terraview/internal/drift"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/scanner"
@@ -425,100 +424,6 @@ func TestSortedScannerNames_Single(t *testing.T) {
 	got := sortedScannerNames(m)
 	if len(got) != 1 || got[0] != "checkov" {
 		t.Errorf("expected [checkov], got %v", got)
-	}
-}
-
-func TestPrintDriftSummary_Compact_NoChanges(t *testing.T) {
-	result := drift.DriftResult{TotalChanges: 0}
-	out := captureStdout(func() { printDriftSummary(result, "compact") })
-	if !strings.Contains(out, "no changes detected") {
-		t.Errorf("expected 'no changes detected', got %q", out)
-	}
-}
-
-func TestPrintDriftSummary_Compact_WithChanges(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 3,
-		MaxSeverity:  "HIGH",
-		ExitCode:     2,
-		Findings: []rules.Finding{
-			{Severity: "HIGH", Message: "sg drift"},
-		},
-	}
-	out := captureStdout(func() { printDriftSummary(result, "compact") })
-	if !strings.Contains(out, "3 changes") {
-		t.Errorf("expected '3 changes', got %q", out)
-	}
-	if !strings.Contains(out, "findings=1") {
-		t.Errorf("expected 'findings=1', got %q", out)
-	}
-	if !strings.Contains(out, "max=HIGH") {
-		t.Errorf("expected 'max=HIGH', got %q", out)
-	}
-}
-
-func TestPrintDriftSummary_Full_NoChanges(t *testing.T) {
-	result := drift.DriftResult{TotalChanges: 0}
-	out := captureStdout(func() { printDriftSummary(result, "full") })
-	if !strings.Contains(out, "No infrastructure drift detected") {
-		t.Errorf("expected 'No infrastructure drift detected', got %q", out)
-	}
-	if !strings.Contains(out, "Drift Analysis") {
-		t.Errorf("expected 'Drift Analysis' header, got %q", out)
-	}
-}
-
-func TestPrintDriftSummary_Full_WithAllChangeTypes(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 10,
-		Creates:      2,
-		Updates:      3,
-		Deletes:      4,
-		Replaces:     1,
-		MaxSeverity:  "CRITICAL",
-		ExitCode:     3,
-		Summary:      "Significant drift detected",
-		Findings: []rules.Finding{
-			{Severity: "CRITICAL", Message: "IAM policy changed"},
-			{Severity: "HIGH", Message: "Security group modified"},
-		},
-	}
-	out := captureStdout(func() { printDriftSummary(result, "full") })
-
-	checks := []string{
-		"Total changes:  10",
-		"Creates:      2",
-		"Updates:      3",
-		"Deletes:      4",
-		"Replaces:     1",
-		"Drift findings: 2",
-		"[CRITICAL] IAM policy changed",
-		"[HIGH] Security group modified",
-		"Max severity:   CRITICAL",
-		"Exit code:      3",
-		"Significant drift detected",
-	}
-	for _, c := range checks {
-		if !strings.Contains(out, c) {
-			t.Errorf("expected %q in output, got %q", c, out)
-		}
-	}
-}
-
-func TestPrintDriftSummary_Full_NoFindings(t *testing.T) {
-	result := drift.DriftResult{
-		TotalChanges: 1,
-		Updates:      1,
-		MaxSeverity:  "LOW",
-		ExitCode:     1,
-		Summary:      "Minor update",
-	}
-	out := captureStdout(func() { printDriftSummary(result, "full") })
-	if strings.Contains(out, "Drift findings") {
-		t.Errorf("should not print 'Drift findings' with 0 findings")
-	}
-	if !strings.Contains(out, "Updates:") {
-		t.Errorf("expected Updates line in output")
 	}
 }
 

@@ -225,6 +225,14 @@ func init() {
 	scannersCmd.AddCommand(scannersListCmd)
 	scannersCmd.AddCommand(scannersInstallCmd)
 	scannersCmd.AddCommand(scannersDefaultCmd)
+
+	// pt-BR flag translations (brFlag set in root.go init which runs before scanners.go init)
+	if brFlag {
+		translateFlags(scannersInstallCmd, map[string]string{
+			"force": "Forçar reinstalação mesmo se já instalado",
+			"all":   "Instalar todos os scanners faltantes",
+		})
+	}
 }
 
 var scannersDefaultCmd = &cobra.Command{
