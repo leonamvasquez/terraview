@@ -48,7 +48,8 @@ LABEL org.opencontainers.image.title="terraview" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk --no-cache upgrade \
+    && apk add --no-cache ca-certificates tzdata \
     && addgroup -g 1000 terraview \
     && adduser -u 1000 -G terraview -s /bin/sh -D terraview \
     && mkdir -p /home/terraview/.terraview/prompts /workspace \
