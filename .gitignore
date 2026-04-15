@@ -26,6 +26,7 @@ plan.json
 tfplan
 !examples/plan.json
 !examples/github-action.yaml
+!internal/ai/eval/testdata/**/plan.json
 
 # Terraform
 .terraform/
