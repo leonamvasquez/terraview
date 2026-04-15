@@ -7,6 +7,58 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.7.0] — 2026-04-14
+
+Release marca a conclusão do **Decommission Plan** (Sprints 1–4): remoção de escopo desnecessário, refactor do `fix` como parent command com subcommands, limpeza completa de código morto e paridade de documentação pt-BR/EN. Core loop final: **scan → diagram → explain → fix**.
+
+### Removed
+
+- `scan --explain` — use `terraview explain` standalone
+- `scan --diagram` — use `terraview diagram` standalone
+- `scan --impact` — blast radius via MCP tool `terraview_impact`
+- `scan --all`, `scan --fix`, `scan --fix --apply` — substituídos pelos comandos standalone
+- `scan --explain-scores` — migrado para `terraview status --explain-scores`
+- `drift` command inteiro + `internal/drift/` — fora do core loop (cloud state unreliable sem acesso a infra viva)
+- `provider install` / `provider uninstall` subcommands — usuário instala Ollama/LLMs de forma independente
+- Código morto: `signalsToNotify`, `relPath()`, `padRight()`, parâmetro `cmd` não usado em `generateAndHandleFixes`, ~900 LOC em `cmd/scan.go` + `cmd/coverage_test.go`
+- MCP tool `terraview_drift` + `handler_drift.go` (11 tools no total, antes 12)
+
+### Changed
+
+- **`fix` agora é parent command** com subcommands:
+  - `terraview fix plan` — dry-run com diff colorido, não escreve nada
+  - `terraview fix apply` — modo interativo (y/n por fix) por default
+  - `terraview fix apply --auto-approve` — aplica sem prompts (CI/scripts)
+  - `terraview fix apply <finding-id>` — aplica apenas findings com rule ID específico
+  - `terraview fix apply --severity CRITICAL|HIGH` — filtro por severidade
+  - `terraview fix apply --file <path>` — filtro por arquivo .tf
+  - `terraview fix apply --max N` — limite de fixes gerados
+- `mcp serve` renomeado para `mcp server` (alias `serve` mantido para backward compat)
+- `--explain-scores` movido de `scan` para `status` (transparência do scoring pertence ao status)
+- `README.md` reescrito e expandido (~1000 linhas) com paridade completa ao `README.en.md` em pt-BR
+- Help text EN/pt-BR sincronizado e limpo de referências a comandos removidos
+- Imports reordenados com goimports (`cmd/fix.go`, `cmd/status.go`)
+
+### Fixed
+
+- Referências stale a `provider install/uninstall` no help EN (`ai.go`) e pt-BR (`root.go`)
+- Mensagem de erro em `scan.go` sem menção a flags removidas
+- Comentário drift em `root.go`
+- `go build`, `go vet` e `go test ./...` limpos sem warnings
+
+### Dependencies
+
+- Bumps via dependabot: `golang.org/x/sys`, `golang.org/x/term`, `modernc.org/sqlite`, `actions/github-script`, `actions/upload-pages-artifact`, `docker/scout-action`, `docker/build-push-action`, `docker/login-action`, `golang` base image
+- Runtime: Go 1.26+
+
+### Notas
+
+- Branch `chore/decommission-sprint-1` fundida via `--no-ff` (commit `e5aa984`)
+- Sprints 1–4 concluídas entre 2026-04-13 e 2026-04-14
+- Safeguards do fix preservados: brace-balance pre-flight, backup `.tvfix.bak`, `terraform validate` após apply, rollback automático em falha
+
+---
+
 ## [0.6.0] — 2026-03-27
 
 ### Added
