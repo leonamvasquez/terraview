@@ -46,10 +46,26 @@ Release marca a conclusão do **Decommission Plan** (Sprints 1–4): remoção d
 - Comentário drift em `root.go`
 - `go build`, `go vet` e `go test ./...` limpos sem warnings
 
+### Security
+
+- **Go 1.26.1 → 1.26.2**: corrige 6 CVEs na stdlib detectadas pelo govulncheck
+  - `GO-2026-4947` / `GO-2026-4946` / `GO-2026-4866` — `crypto/x509` (chain building, policy validation, name constraints)
+  - `GO-2026-4870` — `crypto/tls` (TLS 1.3 KeyUpdate DoS)
+  - `GO-2026-4869` — `archive/tar` (unbounded allocation GNU sparse)
+  - `GO-2026-4865` — `html/template` (XSS via JsBraceDepth context tracking)
+- `govulncheck ./...`: **No vulnerabilities found** após bump
+
 ### Dependencies
 
-- Bumps via dependabot: `golang.org/x/sys`, `golang.org/x/term`, `modernc.org/sqlite`, `actions/github-script`, `actions/upload-pages-artifact`, `docker/scout-action`, `docker/build-push-action`, `docker/login-action`, `golang` base image
-- Runtime: Go 1.26+
+- Go stdlib: 1.26.1 → 1.26.2
+- `golang.org/x/sys` 0.42.0 → 0.43.0
+- `golang.org/x/term` 0.41.0 → 0.42.0
+- `modernc.org/sqlite` 1.48.0 → 1.48.2
+- `actions/github-script` 8.0.0 → 9.0.0
+- `actions/upload-pages-artifact` 4.0.0 → 5.0.0
+- `docker/build-push-action` v6 → v7.1.0
+- `docker/scout-action` 1.20.3 → 1.20.4
+- Docker base image `golang:1.26-alpine` → `golang:1.26.2-alpine`
 
 ### Notas
 
