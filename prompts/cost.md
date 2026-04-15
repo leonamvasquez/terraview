@@ -44,3 +44,18 @@ Focus on waste that can be quantified and actioned — not theoretical savings.
 - **MEDIUM**: Moderate waste (>$100/month), missing lifecycle policies on growing storage
 - **LOW**: Minor optimization opportunities, GP2→GP3 migration, spot instance candidates
 - **INFO**: Cost-aware positive patterns worth maintaining
+
+## Example
+
+Input context: `aws_db_instance.analytics_dev` with `instance_class = "db.r6g.4xlarge"`, `multi_az = true`, `deletion_protection = true`, tagged `Environment = "dev"`.
+
+```json
+{
+  "severity": "HIGH",
+  "category": "cost",
+  "resource": "aws_db_instance.analytics_dev",
+  "message": "Development database aws_db_instance.analytics_dev is sized as db.r6g.4xlarge with multi_az = true and deletion_protection = true — the Environment tag says 'dev' but the configuration is production-grade. On-demand pricing for this class multi-AZ is roughly $1,500/month; a dev database on db.t4g.medium single-AZ would be under $50/month.",
+  "remediation": "Downgrade to db.t4g.medium (or smallest class passing the workload), set multi_az = false and deletion_protection = false for dev, and consider a scheduled stop/start outside of business hours.",
+  "references": []
+}
+```

@@ -50,3 +50,18 @@ Only flag findings where the Terraform plan ACTIVELY creates a compliance gap â€
 - **HIGH**: Missing required control for production workloads (no backup, no log integrity, no encryption)
 - **MEDIUM**: Incomplete compliance posture (partial logging, weak but present access controls)
 - **LOW**: Best-practice gaps that improve audit readiness but aren't strict violations
+
+## Example
+
+Input context: `aws_cloudtrail.audit` with `is_multi_region_trail = false`, `enable_log_file_validation = false`, account has production S3 buckets and RDS databases under `Environment = "prod"`, no other trails defined.
+
+```json
+{
+  "severity": "HIGH",
+  "category": "compliance",
+  "resource": "aws_cloudtrail.audit",
+  "message": "The only CloudTrail in the plan (aws_cloudtrail.audit) is single-region with log file validation disabled, while production RDS and S3 resources exist in multiple regions. SOC2 CC7.2 and PCI-DSS Req 10 require a tamper-evident audit trail covering every region where regulated data lives.",
+  "remediation": "Set is_multi_region_trail = true and enable_log_file_validation = true on aws_cloudtrail.audit; ship logs to an S3 bucket with Object Lock (retention >= 365 days) and a KMS CMK whose policy denies deletion.",
+  "references": ["SOC2 CC7.2", "PCI-DSS 10.5.2"]
+}
+```

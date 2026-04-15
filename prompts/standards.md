@@ -45,3 +45,18 @@ Focus on patterns that cause REAL operational problems — not cosmetic preferen
 - **MEDIUM**: Inconsistent naming causing operational confusion, unpinned versions
 - **LOW**: Missing descriptions, minor naming deviations, cosmetic hygiene
 - **INFO**: Positive patterns worth noting, documentation suggestions
+
+## Example
+
+Input context: `aws_vpc.main` tagged `Environment = "prod"`, `Team = "platform"`, while the subnets `aws_subnet.app_a`, `aws_subnet.app_b` inherit no tags and are created without a `tags` block.
+
+```json
+{
+  "severity": "MEDIUM",
+  "category": "maintainability",
+  "resource": "aws_subnet.app_a",
+  "message": "Child subnets aws_subnet.app_a and aws_subnet.app_b inherit no tags from aws_vpc.main — cost allocation and incident routing reports will show VPC-level totals but orphan the subnet-level spend and ownership. This breaks the 'prod' cost split for the platform team.",
+  "remediation": "Add an aws_default_tags block to the AWS provider (Environment, Team, ManagedBy = \"terraform\") so every resource inherits by default, and remove any stray tags that conflict with the inherited keys.",
+  "references": ["AWS Well-Architected OPS 4"]
+}
+```

@@ -64,3 +64,18 @@ Think through each of these dimensions systematically:
 - **HIGH**: Missing redundancy for stateful resources, shared IAM across trust boundaries, apply-ordering data loss
 - **MEDIUM**: Architectural anti-patterns increasing blast radius, missing observability for critical dependency chains
 - **LOW**: Configuration hygiene, drift-prone patterns, minor topology gaps
+
+## Example
+
+Input context: `aws_lambda_function.public_api` sits in `aws_subnet.public`, assumes `aws_iam_role.app_exec`, which also attaches to `aws_lambda_function.internal_jobs` that has access to `aws_secretsmanager_secret.db_credentials`. Topology edge: `aws_lambda_function.public_api --[iam_role]--> aws_iam_role.app_exec --[iam_role]--> aws_lambda_function.internal_jobs`.
+
+```json
+{
+  "severity": "CRITICAL",
+  "category": "security",
+  "resource": "aws_iam_role.app_exec",
+  "message": "Cross-resource lateral movement: aws_lambda_function.public_api (internet-facing via API Gateway) and aws_lambda_function.internal_jobs share aws_iam_role.app_exec, which grants secretsmanager:GetSecretValue on aws_secretsmanager_secret.db_credentials. A compromise of the public API function therefore exposes the production database credentials even though the public lambda has no direct dependency on the secret. No static scanner catches this because each individual resource is policy-compliant — the risk emerges from the role-sharing relationship.",
+  "remediation": "Split aws_iam_role.app_exec into two roles: aws_iam_role.public_api_exec (no secretsmanager access) and aws_iam_role.internal_jobs_exec (scoped to the specific secret ARN). Update each aws_lambda_function to reference its dedicated role.",
+  "references": ["NIST AC-6", "MITRE ATT&CK T1078.004"]
+}
+```
