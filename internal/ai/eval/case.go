@@ -82,7 +82,7 @@ func LoadCases(root string) ([]Case, error) {
 		return nil, fmt.Errorf("read eval root %s: %w", root, err)
 	}
 
-	var cases []Case
+	cases := make([]Case, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
