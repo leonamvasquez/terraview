@@ -494,9 +494,3 @@ func buildResourceLimits(cfg config.Config, safe bool) runtime.ResourceLimits {
 func filterDisabledRules(findings []rules.Finding, disabled []string) []rules.Finding {
 	return pipeline.FilterDisabledRules(findings, disabled)
 }
-
-// recordToHistory stores the scan result in the local history database.
-// Wrapper retained for existing cmd-level tests; delegates to pipeline.
-func recordToHistory(rc reviewConfig, result aggregator.ReviewResult) {
-	pipeline.RecordToHistory(rc.toPipeline(), result)
-}
