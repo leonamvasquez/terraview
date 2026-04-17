@@ -42,3 +42,18 @@ Focus on security risks that require CONTEXTUAL REASONING — not simple attribu
 - **HIGH**: Significant attack surface expansion (SSH to internet, missing encryption on PII, shared IAM across trust boundaries)
 - **MEDIUM**: Defense-in-depth gap (missing flow logs, no WAF, default encryption instead of CMK)
 - **LOW**: Hardening opportunity (minor port exposure, overly broad but scoped policy)
+
+## Example
+
+Input context: `aws_iam_role.lambda_exec` with `assume_role_policy` trusting `lambda.amazonaws.com`, attached to an inline policy granting `s3:*` on `*`, used by three unrelated lambdas (public API, batch worker, admin tool).
+
+```json
+{
+  "severity": "HIGH",
+  "category": "security",
+  "resource": "aws_iam_role.lambda_exec",
+  "message": "Shared execution role grants s3:* on all buckets and is attached to the public-facing aws_lambda_function.api, the aws_lambda_function.worker and aws_lambda_function.admin. A compromise of the public API lambda grants read/write to every bucket, including buckets that only the admin tool should touch.",
+  "remediation": "Split into per-function roles scoped to the buckets each lambda actually needs; use aws_iam_role_policy_attachment with tightly scoped aws_iam_policy resources (e.g. arn:aws:s3:::app-public/* for the API role).",
+  "references": ["CIS AWS 1.16", "NIST AC-6"]
+}
+```

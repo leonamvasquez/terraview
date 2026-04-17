@@ -52,3 +52,18 @@ Focus on patterns that require REASONING about the overall design — not single
 - **HIGH**: Missing HA for databases, no auto-scaling on production compute, flat network
 - **MEDIUM**: Over-provisioned resources, missing observability, suboptimal scaling strategy
 - **LOW**: Minor topology improvements, cost-related architecture changes
+
+## Example
+
+Input context: `aws_ecs_service.api` with `desired_count = 6` and a tightly coupled `aws_db_instance.main` (`multi_az = false`, single writer, no read replica), both tagged `Environment = "prod"`.
+
+```json
+{
+  "severity": "HIGH",
+  "category": "architecture",
+  "resource": "aws_db_instance.main",
+  "message": "HA asymmetry: aws_ecs_service.api runs 6 tasks across multiple AZs while the production aws_db_instance.main is single-AZ (multi_az = false) with no read replica. An AZ failure or maintenance window takes the whole API down even though the compute tier is redundant.",
+  "remediation": "Set multi_az = true on aws_db_instance.main (writes failover automatically) and add an aws_db_instance read replica for the read-heavy API paths; route reads through the replica endpoint.",
+  "references": ["AWS Well-Architected REL 10"]
+}
+```
