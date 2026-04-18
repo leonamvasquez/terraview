@@ -80,14 +80,19 @@ func NewSuggester(provider ai.Provider) *Suggester {
 func (s *Suggester) Suggest(ctx context.Context, req FixRequest) (*FixSuggestion, error) {
 	user := buildUserMessage(req)
 
-	text, err := s.provider.Complete(ctx, systemPrompt, user)
+	sys := systemPrompt
+	if req.Lang == "pt-BR" {
+		sys += "\n\nIMPORTANT: Respond entirely in Brazilian Portuguese (pt-BR). The \"explanation\" field must be in Portuguese."
+	}
+
+	text, err := s.provider.Complete(ctx, sys, user)
 	if err != nil {
 		// Retry once with truncated config if the error looks like a timeout
 		// or token overflow — smaller payload usually succeeds.
 		if isRetryableError(err) && len(req.ResourceConfig) > 0 {
 			req.ResourceConfig = TruncateConfig(req.ResourceConfig, req.Finding.RuleID)
 			user = buildUserMessage(req)
-			text, err = s.provider.Complete(ctx, systemPrompt, user)
+			text, err = s.provider.Complete(ctx, sys, user)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("fix suggestion failed: %w", err)

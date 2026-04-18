@@ -216,8 +216,14 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 	}
 
 	// Build provider
-	const perCallTimeout = 30
-	const perFindingBudget = perCallTimeout*2 + 5
+	// For CLI-based providers (e.g. gemini-cli) that have higher latency due
+	// to subprocess startup + hook execution, use the config timeout if available.
+	// Minimum is still 60s to allow for CLI startup overhead.
+	perCallTimeout := 60
+	if cfg, cfgErr := config.Load(workDir); cfgErr == nil && cfg.LLM.TimeoutSeconds > perCallTimeout {
+		perCallTimeout = cfg.LLM.TimeoutSeconds
+	}
+	perFindingBudget := perCallTimeout*2 + 5
 
 	providerCfg := ai.ProviderConfig{
 		Model:       modelName,
@@ -282,6 +288,9 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			ResourceType:   resourceType,
 			ResourceConfig: resourceConfig,
 			PlanIndex:      planIndex,
+		}
+		if brFlag {
+			req.Lang = "pt-BR"
 		}
 		if loc != nil {
 			if lines, err := fix.ReadLines(loc); err == nil {

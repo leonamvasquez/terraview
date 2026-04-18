@@ -36,6 +36,8 @@ type Generator struct {
 	ConfigRefs map[string][]string
 	// SGCrossRefs holds security group cross-references extracted from the configuration.
 	SGCrossRefs []SGCrossRef
+	// Lang sets the output language. "pt-BR" switches titles to Brazilian Portuguese.
+	Lang string
 }
 
 // NewGenerator creates a new diagram Generator with the default (flat) mode.
@@ -60,9 +62,7 @@ func (g *Generator) Generate(resources []parser.NormalizedResource) string {
 // In "flat" mode (default), renders the original layer-based diagram.
 func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, graph *topology.Graph) string {
 	if len(resources) == 0 {
-		return "Infrastructure Diagram\n" +
-			"======================\n\n" +
-			"  (no resource changes)\n"
+		return g.emptyDiagram()
 	}
 
 	// Filter out no-op/read resources
@@ -73,15 +73,14 @@ func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, gra
 		}
 	}
 	if len(active) == 0 {
-		return "Infrastructure Diagram\n" +
-			"======================\n\n" +
-			"  (no resource changes)\n"
+		return g.emptyDiagram()
 	}
 
 	// Topological mode: resolve hierarchy, aggregate, render
 	if g.Mode == "topo" {
 		result := ResolveTopology(active, graph, g.ConfigRefs)
 		result.SGCrossRefs = g.SGCrossRefs
+		result.Lang = g.Lang
 		AggregateTopoResult(result)
 		return RenderTopoResult(result)
 	}
@@ -96,6 +95,25 @@ func (g *Generator) GenerateWithGraph(resources []parser.NormalizedResource, gra
 	}
 
 	return g.renderElaborate(layers, edges, provider)
+}
+
+func (g *Generator) emptyDiagram() string {
+	if g.Lang == "pt-BR" {
+		return "Diagrama de Infraestrutura\n" +
+			"==========================\n\n" +
+			"  (sem alterações de recursos)\n"
+	}
+	return "Infrastructure Diagram\n" +
+		"======================\n\n" +
+		"  (no resource changes)\n"
+}
+
+// diagramTitle returns the localized diagram title with the given subtitle.
+func diagramTitle(lang, subtitle string) string {
+	if lang == "pt-BR" {
+		return fmt.Sprintf("Diagrama de Infraestrutura — %s", subtitle)
+	}
+	return fmt.Sprintf("Infrastructure Diagram — %s", subtitle)
 }
 
 type layerDef struct {
@@ -765,7 +783,7 @@ const (
 func (g *Generator) renderElaborate(layers []Layer, edges map[string][]string, provider string) string {
 	var sb strings.Builder
 
-	title := fmt.Sprintf("Infrastructure Diagram — %s", providerTitle(provider))
+	title := diagramTitle(g.Lang, providerTitle(provider))
 	sb.WriteString(fmt.Sprintf("\n%s\n", centerText(title, diagramWidth)))
 	sb.WriteString(fmt.Sprintf("%s\n\n", centerText(strings.Repeat("═", len(title)), diagramWidth)))
 

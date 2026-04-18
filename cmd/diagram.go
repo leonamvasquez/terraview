@@ -43,6 +43,17 @@ func init() {
 	diagramCmd.Flags().StringVar(&diagramMode, "diagram-mode", "topo", "Diagram mode: topo (topological) or flat (layer-based)")
 }
 
+func diagramFileExt(format string) string {
+	switch format {
+	case "json":
+		return ".json"
+	case "mermaid":
+		return ".mmd"
+	default:
+		return ".txt"
+	}
+}
+
 func runDiagram(cmd *cobra.Command, args []string) error {
 	resolvedPlan := planFile
 
@@ -76,6 +87,9 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 		gen.ConfigRefs = diagram.ExtractConfigReferences(plan.Configuration)
 		gen.SGCrossRefs = diagram.ExtractSGCrossRefs(plan.Configuration)
 	}
+	if brFlag {
+		gen.Lang = "pt-BR"
+	}
 	result := gen.GenerateWithGraph(resources, topoGraph)
 
 	fmt.Println(result)
@@ -86,7 +100,7 @@ func runDiagram(cmd *cobra.Command, args []string) error {
 		resolvedOutput = workDir
 	}
 
-	diagramPath := filepath.Join(resolvedOutput, "diagram.txt")
+	diagramPath := filepath.Join(resolvedOutput, "diagram"+diagramFileExt(outputFormat))
 	if err := os.WriteFile(diagramPath, []byte(result), 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", diagramPath, err)
 	}
