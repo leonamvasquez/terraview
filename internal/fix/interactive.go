@@ -3,6 +3,7 @@ package fix
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,8 +36,17 @@ type PendingFix struct {
 
 // ApplySession holds configuration for an interactive fix review session.
 type ApplySession struct {
-	WorkDir string // directory to search for .tf files
-	NoColor bool   // suppress ANSI codes when true
+	WorkDir string    // directory to search for .tf files
+	NoColor bool      // suppress ANSI codes when true
+	Out     io.Writer // destination for all printed output; defaults to os.Stdout when nil
+}
+
+// out returns the configured writer or os.Stdout when nil.
+func (s *ApplySession) out() io.Writer {
+	if s.Out != nil {
+		return s.Out
+	}
+	return os.Stdout
 }
 
 // Preview prints the diff for every pending fix without applying anything.
@@ -46,7 +56,7 @@ func (s *ApplySession) Preview(pending []PendingFix) {
 	if total == 0 {
 		return
 	}
-	fmt.Printf("\n  Preview of %d fix(es) — nothing will be written.\n", total)
+	fmt.Fprintf(s.out(), "\n  Preview of %d fix(es) — nothing will be written.\n", total)
 
 	for i, pf := range pending {
 		s.printFindingHeader(i+1, total, pf)
@@ -54,8 +64,8 @@ func (s *ApplySession) Preview(pending []PendingFix) {
 		s.printWarnings(pf.Warnings)
 	}
 
-	fmt.Printf("\n%s%s%s\n", s.col(ansiDim), strings.Repeat("━", 50), s.col(ansiReset))
-	fmt.Printf("  %sRun %sterraview fix apply%s to apply these changes interactively.%s\n\n",
+	fmt.Fprintf(s.out(), "\n%s%s%s\n", s.col(ansiDim), strings.Repeat("━", 50), s.col(ansiReset))
+	fmt.Fprintf(s.out(), "  %sRun %sterraview fix apply%s to apply these changes interactively.%s\n\n",
 		s.col(ansiDim), s.col(ansiBold), s.col(ansiReset+ansiDim), s.col(ansiReset))
 }
 
@@ -64,7 +74,7 @@ func (s *ApplySession) Preview(pending []PendingFix) {
 // Returns the count of applied and failed fixes.
 func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 	total := len(pending)
-	fmt.Printf("\n  Applying %d fix(es) automatically...\n\n", total)
+	fmt.Fprintf(s.out(), "\n  Applying %d fix(es) automatically...\n\n", total)
 
 	for _, pf := range pending {
 		sevColor := ansiYellow
@@ -77,7 +87,7 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 		)
 
 		if pf.Location == nil {
-			fmt.Printf("  %s✗%s %s\n    %s⚠ .tf file not found — skipped%s\n\n",
+			fmt.Fprintf(s.out(), "  %s✗%s %s\n    %s⚠ .tf file not found — skipped%s\n\n",
 				s.col(ansiRed), s.col(ansiReset), label,
 				s.col(ansiYellow), s.col(ansiReset))
 			failed++
@@ -85,7 +95,7 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 		}
 
 		if HasCriticalWarning(pf.Warnings) {
-			fmt.Printf("  %s✗%s %s\n    %s⚠ fix bloqueado por aviso crítico — revise com %sterraview fix%s%s\n\n",
+			fmt.Fprintf(s.out(), "  %s✗%s %s\n    %s⚠ fix bloqueado por aviso crítico — revise com %sterraview fix%s%s\n\n",
 				s.col(ansiRed), s.col(ansiReset), label,
 				s.col(ansiYellow), s.col(ansiBold), s.col(ansiReset+ansiYellow), s.col(ansiReset))
 			failed++
@@ -93,13 +103,13 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 		}
 
 		if err := s.applyFix(pf); err != nil {
-			fmt.Printf("  %s✗%s %s\n    %s%v%s\n\n",
+			fmt.Fprintf(s.out(), "  %s✗%s %s\n    %s%v%s\n\n",
 				s.col(ansiRed), s.col(ansiReset), label,
 				s.col(ansiRed), err, s.col(ansiReset))
 			failed++
 		} else {
 			rel, _ := filepath.Rel(s.WorkDir, pf.Location.File)
-			fmt.Printf("  %s✓%s %s\n    %s→ %s%s\n\n",
+			fmt.Fprintf(s.out(), "  %s✓%s %s\n    %s→ %s%s\n\n",
 				s.col(ansiGreen), s.col(ansiReset), label,
 				s.col(ansiDim), rel, s.col(ansiReset))
 			applied++
@@ -118,7 +128,7 @@ func (s *ApplySession) Review(pending []PendingFix) (applied, rejected int) {
 		return
 	}
 
-	fmt.Println()
+	fmt.Fprintln(s.out())
 
 	for i, pf := range pending {
 		s.printFindingHeader(i+1, total, pf)
@@ -130,30 +140,30 @@ func (s *ApplySession) Review(pending []PendingFix) (applied, rejected int) {
 		switch action {
 		case "a":
 			if pf.Location == nil {
-				fmt.Printf("  %s✗ Não foi possível localizar o arquivo .tf — copie o HCL manualmente.%s\n",
+				fmt.Fprintf(s.out(), "  %s✗ Não foi possível localizar o arquivo .tf — copie o HCL manualmente.%s\n",
 					s.col(ansiRed), s.col(ansiReset))
 				rejected++
 				continue
 			}
 			if err := s.applyFix(pf); err != nil {
-				fmt.Printf("  %s✗ Erro ao aplicar: %v%s\n", s.col(ansiRed), err, s.col(ansiReset))
+				fmt.Fprintf(s.out(), "  %s✗ Erro ao aplicar: %v%s\n", s.col(ansiRed), err, s.col(ansiReset))
 				rejected++
 			} else {
 				rel, _ := filepath.Rel(s.WorkDir, pf.Location.File)
-				fmt.Printf("  %s✓ Aplicado em %s%s\n", s.col(ansiGreen), rel, s.col(ansiReset))
+				fmt.Fprintf(s.out(), "  %s✓ Aplicado em %s%s\n", s.col(ansiGreen), rel, s.col(ansiReset))
 				applied++
 			}
 		case "r":
-			fmt.Printf("  %s— Rejeitado%s\n", s.col(ansiDim), s.col(ansiReset))
+			fmt.Fprintf(s.out(), "  %s— Rejeitado%s\n", s.col(ansiDim), s.col(ansiReset))
 			rejected++
 		default: // s = skip / q = quit handled below
 			if action == "q" {
-				fmt.Printf("\n  %sSessão encerrada.%s\n", s.col(ansiDim), s.col(ansiReset))
+				fmt.Fprintf(s.out(), "\n  %sSessão encerrada.%s\n", s.col(ansiDim), s.col(ansiReset))
 				return
 			}
-			fmt.Printf("  %s— Ignorado%s\n", s.col(ansiDim), s.col(ansiReset))
+			fmt.Fprintf(s.out(), "  %s— Ignorado%s\n", s.col(ansiDim), s.col(ansiReset))
 		}
-		fmt.Println()
+		fmt.Fprintln(s.out())
 	}
 
 	s.printSummary(applied, rejected, total)
@@ -170,8 +180,8 @@ func (s *ApplySession) printFindingHeader(idx, total int, pf PendingFix) {
 		sevColor = ansiRed
 	}
 
-	fmt.Printf("\n%s%s [%d/%d]%s\n", s.col(ansiDim), bar, idx, total, s.col(ansiReset))
-	fmt.Printf("%s%s%s  %s%s%s  %s\n",
+	fmt.Fprintf(s.out(), "\n%s%s [%d/%d]%s\n", s.col(ansiDim), bar, idx, total, s.col(ansiReset))
+	fmt.Fprintf(s.out(), "%s%s%s  %s%s%s  %s\n",
 		s.col(ansiBold+sevColor), sev, s.col(ansiReset),
 		s.col(ansiBold), pf.Finding.RuleID, s.col(ansiReset),
 		pf.Finding.Resource,
@@ -179,26 +189,26 @@ func (s *ApplySession) printFindingHeader(idx, total int, pf PendingFix) {
 
 	if pf.Location != nil {
 		rel, _ := filepath.Rel(s.WorkDir, pf.Location.File)
-		fmt.Printf("%s%s:%d%s\n", s.col(ansiDim), rel, pf.Location.StartLine, s.col(ansiReset))
+		fmt.Fprintf(s.out(), "%s%s:%d%s\n", s.col(ansiDim), rel, pf.Location.StartLine, s.col(ansiReset))
 	} else {
-		fmt.Printf("%s⚠ arquivo .tf não localizado em %s%s\n",
+		fmt.Fprintf(s.out(), "%s⚠ arquivo .tf não localizado em %s%s\n",
 			s.col(ansiYellow), s.WorkDir, s.col(ansiReset))
 	}
 
 	if pf.Finding.Message != "" {
-		fmt.Println()
+		fmt.Fprintln(s.out())
 		for _, line := range strings.Split(pf.Finding.Message, "\n") {
-			fmt.Printf("  %s\n", line)
+			fmt.Fprintf(s.out(), "  %s\n", line)
 		}
 	}
 
 	if pf.Suggestion.Explanation != "" {
-		fmt.Printf("\n  %s%s%s\n", s.col(ansiDim), pf.Suggestion.Explanation, s.col(ansiReset))
+		fmt.Fprintf(s.out(), "\n  %s%s%s\n", s.col(ansiDim), pf.Suggestion.Explanation, s.col(ansiReset))
 	}
 }
 
 func (s *ApplySession) printDiff(pf PendingFix) {
-	fmt.Println()
+	fmt.Fprintln(s.out())
 
 	// BEFORE — existing block from the .tf file
 	if pf.Location != nil {
@@ -208,7 +218,7 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 			s.printDiffHeader(fmt.Sprintf("─ %s", rel))
 			for i, line := range existing {
 				lineNo := pf.Location.StartLine + i
-				fmt.Printf("  %s%4d %s- %s%s\n",
+				fmt.Fprintf(s.out(), "  %s%4d %s- %s%s\n",
 					s.col(ansiRed), lineNo, s.col(ansiReset+ansiRed), line, s.col(ansiReset))
 			}
 		}
@@ -218,32 +228,32 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 	if pf.Suggestion.HCL != "" {
 		newLines := strings.Split(strings.TrimRight(pf.Suggestion.HCL, "\n"), "\n")
 		for _, line := range newLines {
-			fmt.Printf("  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
+			fmt.Fprintf(s.out(), "  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
 		}
 	}
 
 	// Prerequisites (new resources to append)
 	if len(pf.Suggestion.Prerequisites) > 0 {
-		fmt.Printf("\n  %sRecursos a adicionar:%s\n", s.col(ansiBold), s.col(ansiReset))
+		fmt.Fprintf(s.out(), "\n  %sRecursos a adicionar:%s\n", s.col(ansiBold), s.col(ansiReset))
 		for _, prereq := range pf.Suggestion.Prerequisites {
 			for _, line := range strings.Split(strings.TrimRight(prereq, "\n"), "\n") {
-				fmt.Printf("  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
+				fmt.Fprintf(s.out(), "  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
 			}
 		}
 	}
 
 	s.printDiffHeader(strings.Repeat("─", 50))
-	fmt.Printf("  %sEsforço: %s%s\n", s.col(ansiDim), pf.Suggestion.Effort, s.col(ansiReset))
+	fmt.Fprintf(s.out(), "  %sEsforço: %s%s\n", s.col(ansiDim), pf.Suggestion.Effort, s.col(ansiReset))
 }
 
 func (s *ApplySession) printWarnings(warnings []ValidationWarning) {
 	for _, w := range warnings {
-		fmt.Printf("\n  %s⚠  %s%s\n", s.col(ansiYellow), w.Message, s.col(ansiReset))
+		fmt.Fprintf(s.out(), "\n  %s⚠  %s%s\n", s.col(ansiYellow), w.Message, s.col(ansiReset))
 	}
 }
 
 func (s *ApplySession) printDiffHeader(line string) {
-	fmt.Printf("  %s%s%s\n", s.col(ansiDim), line, s.col(ansiReset))
+	fmt.Fprintf(s.out(), "  %s%s%s\n", s.col(ansiDim), line, s.col(ansiReset))
 }
 
 // promptAction reads a single keypress from the user (raw terminal mode).
@@ -251,14 +261,14 @@ func (s *ApplySession) printDiffHeader(line string) {
 // canApply controls whether [a]plicar is offered.
 func (s *ApplySession) promptAction(canApply bool) string {
 	if canApply {
-		fmt.Printf("\n  %s[a]%s Aplicar   %s[r]%s Rejeitar   %s[s]%s Pular   %s[q]%s Sair  ",
+		fmt.Fprintf(s.out(), "\n  %s[a]%s Aplicar   %s[r]%s Rejeitar   %s[s]%s Pular   %s[q]%s Sair  ",
 			s.col(ansiBold+ansiGreen), s.col(ansiReset),
 			s.col(ansiBold+ansiRed), s.col(ansiReset),
 			s.col(ansiBold), s.col(ansiReset),
 			s.col(ansiBold), s.col(ansiReset),
 		)
 	} else {
-		fmt.Printf("\n  %s[r]%s Rejeitar   %s[s]%s Pular   %s[q]%s Sair  ",
+		fmt.Fprintf(s.out(), "\n  %s[r]%s Rejeitar   %s[s]%s Pular   %s[q]%s Sair  ",
 			s.col(ansiBold+ansiRed), s.col(ansiReset),
 			s.col(ansiBold), s.col(ansiReset),
 			s.col(ansiBold), s.col(ansiReset),
@@ -266,7 +276,7 @@ func (s *ApplySession) promptAction(canApply bool) string {
 	}
 
 	key := readKey()
-	fmt.Println() // move past the prompt line
+	fmt.Fprintln(s.out()) // move past the prompt line
 
 	switch strings.ToLower(key) {
 	case "a":
@@ -405,14 +415,14 @@ func terraformValidate(dir string) error {
 
 func (s *ApplySession) printSummary(applied, rejected, total int) {
 	skipped := total - applied - rejected
-	fmt.Printf("\n%s%s%s\n", s.col(ansiDim), strings.Repeat("━", 50), s.col(ansiReset))
-	fmt.Printf("  %s%d aplicado(s)%s  •  %s%d rejeitado(s)%s  •  %s%d ignorado(s)%s\n\n",
+	fmt.Fprintf(s.out(), "\n%s%s%s\n", s.col(ansiDim), strings.Repeat("━", 50), s.col(ansiReset))
+	fmt.Fprintf(s.out(), "  %s%d aplicado(s)%s  •  %s%d rejeitado(s)%s  •  %s%d ignorado(s)%s\n\n",
 		s.col(ansiGreen), applied, s.col(ansiReset),
 		s.col(ansiRed), rejected, s.col(ansiReset),
 		s.col(ansiDim), skipped, s.col(ansiReset),
 	)
 	if applied > 0 {
-		fmt.Printf("  %sDica:%s execute %sterraform validate%s para verificar os arquivos modificados.\n\n",
+		fmt.Fprintf(s.out(), "  %sDica:%s execute %sterraform validate%s para verificar os arquivos modificados.\n\n",
 			s.col(ansiDim), s.col(ansiReset),
 			s.col(ansiBold), s.col(ansiReset),
 		)
