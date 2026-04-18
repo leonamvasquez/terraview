@@ -1,0 +1,18 @@
+description: |
+  ECS cluster with task definition, ALB (HTTP-only), CloudWatch log group
+  without KMS, and ECR repository. The model must flag unencrypted logging,
+  plain-HTTP listener, and missing ECR scan-on-push.
+
+required_topics:
+  - encrypt
+  - http
+
+required_resources:
+  - aws_cloudwatch_log_group.ecs
+  - aws_lb_listener.http
+
+min_severity:
+  HIGH: 1
+
+summary_contains:
+  - encrypt

@@ -118,14 +118,27 @@ func TestRunner_Run_ParseError(t *testing.T) {
 }
 
 func TestRunner_RunAll_AggregatesReports(t *testing.T) {
+	// Findings must satisfy ALL cases under testdata/evals/ simultaneously,
+	// because the same fakeProvider is used for every case in RunAll.
 	p := &fakeProvider{
 		completion: ai.Completion{
 			Findings: []rules.Finding{
-				{Severity: "HIGH", Resource: "aws_s3_bucket.public_data", Message: "public s3 bucket"},
+				// s3-public
+				{Severity: "HIGH", Resource: "aws_s3_bucket.public_data", Message: "public s3 bucket exposed"},
+				// sg-open
 				{Severity: "HIGH", Resource: "aws_security_group.web", Message: "security group 0.0.0.0/0 ingress"},
 				{Severity: "HIGH", Resource: "aws_instance.bastion", Message: "bastion exposed via security group"},
+				// ecs-simple
+				{Severity: "HIGH", Resource: "aws_cloudwatch_log_group.ecs", Message: "log group missing encryption at rest"},
+				{Severity: "MEDIUM", Resource: "aws_lb_listener.http", Message: "listener uses plain HTTP not HTTPS"},
+				// eks-cluster
+				{Severity: "HIGH", Resource: "aws_eks_cluster.main", Message: "public endpoint accessible from 0.0.0.0/0"},
+				{Severity: "HIGH", Resource: "aws_security_group.eks_nodes", Message: "ssh port 22 open to 0.0.0.0/0"},
+				// networking-complex
+				{Severity: "HIGH", Resource: "aws_security_group.bastion", Message: "ssh and rdp open to internet"},
+				{Severity: "MEDIUM", Resource: "aws_lb.external", Message: "load balancer missing access logs and encryption config"},
 			},
-			Summary: "public exposure and wide-open security group",
+			Summary: "public exposure and wide-open security group with missing encryption and ssh access",
 		},
 	}
 	r := NewRunner(p, "en", 0)

@@ -1,0 +1,207 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.14.4",
+  "variables": {},
+  "resource_changes": [
+    {
+      "address": "aws_vpc.main",
+      "type": "aws_vpc",
+      "name": "main",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "cidr_block": "10.0.0.0/16",
+          "enable_dns_hostnames": true,
+          "enable_dns_support": true,
+          "instance_tenancy": "default",
+          "tags": {"Name": "prod-vpc"}
+        }
+      }
+    },
+    {
+      "address": "aws_flow_log.main",
+      "type": "aws_flow_log",
+      "name": "main",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "vpc_id": "vpc-main111",
+          "traffic_type": "REJECT",
+          "log_destination_type": "cloud-watch-logs",
+          "log_group_name": "/aws/vpc/flow-logs",
+          "iam_role_arn": "arn:aws:iam::111111111111:role/vpc-flow-logs",
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_security_group.bastion",
+      "type": "aws_security_group",
+      "name": "bastion",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "bastion-sg",
+          "description": "Bastion host security group",
+          "vpc_id": "vpc-main111",
+          "ingress": [
+            {"from_port": 22, "to_port": 22, "protocol": "tcp", "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": ["::/0"], "prefix_list_ids": [], "security_groups": [], "self": false, "description": "SSH from anywhere"},
+            {"from_port": 3389, "to_port": 3389, "protocol": "tcp", "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": [], "prefix_list_ids": [], "security_groups": [], "self": false, "description": "RDP from anywhere"}
+          ],
+          "egress": [
+            {"from_port": 0, "to_port": 0, "protocol": "-1", "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": [], "prefix_list_ids": [], "security_groups": [], "self": false, "description": ""}
+          ],
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_security_group.database",
+      "type": "aws_security_group",
+      "name": "database",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "database-sg",
+          "description": "Database security group",
+          "vpc_id": "vpc-main111",
+          "ingress": [
+            {"from_port": 5432, "to_port": 5432, "protocol": "tcp", "cidr_blocks": ["10.0.0.0/8"], "ipv6_cidr_blocks": [], "prefix_list_ids": [], "security_groups": [], "self": false, "description": "PostgreSQL from VPC"}
+          ],
+          "egress": [
+            {"from_port": 0, "to_port": 0, "protocol": "-1", "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": [], "prefix_list_ids": [], "security_groups": [], "self": false, "description": ""}
+          ],
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_lb.external",
+      "type": "aws_lb",
+      "name": "external",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "prod-external-alb",
+          "internal": false,
+          "load_balancer_type": "application",
+          "security_groups": ["sg-alb111"],
+          "subnets": ["subnet-pub1", "subnet-pub2"],
+          "enable_deletion_protection": false,
+          "access_logs": [{"bucket": "", "enabled": false, "prefix": ""}],
+          "drop_invalid_header_fields": false,
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_lb_listener.http",
+      "type": "aws_lb_listener",
+      "name": "http",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/prod-external-alb/abc",
+          "port": 80,
+          "protocol": "HTTP",
+          "default_action": [{"type": "forward", "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:targetgroup/prod/abc"}],
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_lb_listener.https",
+      "type": "aws_lb_listener",
+      "name": "https",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/prod-external-alb/abc",
+          "port": 443,
+          "protocol": "HTTPS",
+          "ssl_policy": "ELBSecurityPolicy-2016-08",
+          "certificate_arn": "arn:aws:acm:us-east-1:111111111111:certificate/abc-123",
+          "default_action": [{"type": "forward", "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:targetgroup/prod/abc"}],
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.vpc_flow_logs",
+      "type": "aws_cloudwatch_log_group",
+      "name": "vpc_flow_logs",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "/aws/vpc/flow-logs",
+          "retention_in_days": 7,
+          "kms_key_id": null,
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.alb_access",
+      "type": "aws_cloudwatch_log_group",
+      "name": "alb_access",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "/aws/alb/prod-external",
+          "retention_in_days": 30,
+          "kms_key_id": null,
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "aws_ec2_transit_gateway.main",
+      "type": "aws_ec2_transit_gateway",
+      "name": "main",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "description": "Main transit gateway",
+          "auto_accept_shared_attachments": "enable",
+          "default_route_table_association": "enable",
+          "default_route_table_propagation": "enable",
+          "dns_support": "enable",
+          "vpn_ecmp_support": "enable",
+          "tags": {"Name": "prod-tgw"}
+        }
+      }
+    },
+    {
+      "address": "aws_wafv2_web_acl.external",
+      "type": "aws_wafv2_web_acl",
+      "name": "external",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "prod-waf",
+          "scope": "REGIONAL",
+          "default_action": [{"allow": [{}]}],
+          "visibility_config": [{"cloudwatch_metrics_enabled": false, "metric_name": "prod-waf", "sampled_requests_enabled": false}],
+          "rule": [],
+          "tags": {}
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "root_module": {
+      "resources": []
+    }
+  }
+}
