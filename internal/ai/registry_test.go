@@ -267,6 +267,96 @@ func TestPromptLoader_ReadPrompt_NotFound(t *testing.T) {
 	}
 }
 
+func TestIsSmallModel(t *testing.T) {
+	cases := []struct {
+		provider, model string
+		want            bool
+	}{
+		{"ollama", "llama3", true},
+		{"ollama", "mistral", true},
+		{"openai", "gpt-4o", false},
+		{"openai", "gpt-4o-mini", true},
+		{"openrouter", "meta-llama/llama-3-8b", true},
+		{"openrouter", "google/gemini-2.5-pro", false},
+		{"deepseek", "deepseek-v3.2", false},
+		{"deepseek", "deepseek-7b", true},
+		{"custom", "mistral-7b-instruct", true},
+		{"custom", "mistral-large-latest", false},
+		{"openai", "gpt-5-nano", true},
+		{"anthropic", "claude-opus-4-7", false},
+	}
+	for _, tc := range cases {
+		got := IsSmallModel(tc.provider, tc.model)
+		if got != tc.want {
+			t.Errorf("IsSmallModel(%q, %q) = %v, want %v", tc.provider, tc.model, got, tc.want)
+		}
+	}
+}
+
+func TestPromptLoader_LoadForModel_SmallTierFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Write system.md in standard tier (no small/ subdir)
+	if err := os.WriteFile(filepath.Join(dir, "system.md"), []byte("standard system"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := NewPromptLoader(dir)
+	// Ollama with no small/ dir → should fall back to standard Load()
+	ps, err := pl.LoadForModel("ollama", "llama3")
+	if err != nil {
+		t.Fatalf("LoadForModel fallback failed: %v", err)
+	}
+	if ps.System != "standard system" {
+		t.Errorf("System = %q, want \"standard system\"", ps.System)
+	}
+}
+
+func TestPromptLoader_LoadForModel_SmallTierUsed(t *testing.T) {
+	dir := t.TempDir()
+	smallDir := filepath.Join(dir, "small")
+	if err := os.MkdirAll(smallDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "system.md"), []byte("standard"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(smallDir, "system.md"), []byte("small"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := NewPromptLoader(dir)
+	ps, err := pl.LoadForModel("ollama", "llama3")
+	if err != nil {
+		t.Fatalf("LoadForModel: %v", err)
+	}
+	if ps.System != "small" {
+		t.Errorf("System = %q, want \"small\"", ps.System)
+	}
+}
+
+func TestPromptLoader_LoadForModel_LargeModelUsesStandard(t *testing.T) {
+	dir := t.TempDir()
+	smallDir := filepath.Join(dir, "small")
+	if err := os.MkdirAll(smallDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "system.md"), []byte("standard"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(smallDir, "system.md"), []byte("small"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := NewPromptLoader(dir)
+	ps, err := pl.LoadForModel("openai", "gpt-4o")
+	if err != nil {
+		t.Fatalf("LoadForModel: %v", err)
+	}
+	if ps.System != "standard" {
+		t.Errorf("System = %q, want \"standard\"", ps.System)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // NewProvider (factory.go) — mock-based test
 // ---------------------------------------------------------------------------
