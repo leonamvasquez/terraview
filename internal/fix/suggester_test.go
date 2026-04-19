@@ -1,10 +1,13 @@
 package fix
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
 )
 
@@ -320,5 +323,105 @@ func TestBuildPlanContext_CanonicalNameWhenRequiredTypeAbsent(t *testing.T) {
 
 	if ctx.CanonicalName != "aws_kms_key.ecs" {
 		t.Errorf("CanonicalName = %q, want \"aws_kms_key.ecs\"", ctx.CanonicalName)
+	}
+}
+
+// --- Suggest tests ---
+
+// fakeCompleter implements ai.Provider using only the Complete method.
+type fakeCompleter struct {
+	response       string
+	err            error
+	capturedSystem string // records the system prompt from the last Complete call
+}
+
+func (f *fakeCompleter) Name() string                     { return "fake" }
+func (f *fakeCompleter) Validate(_ context.Context) error { return nil }
+func (f *fakeCompleter) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	return ai.Completion{}, nil
+}
+func (f *fakeCompleter) Complete(_ context.Context, system, _ string) (string, error) {
+	f.capturedSystem = system
+	return f.response, f.err
+}
+
+// suggestReq returns a minimal FixRequest for use in Suggest tests.
+func suggestReq() FixRequest {
+	return FixRequest{
+		Finding: FixFinding{
+			RuleID:   "CKV_AWS_18",
+			Severity: "HIGH",
+			Message:  "S3 bucket logging not enabled",
+		},
+		ResourceAddr: "aws_s3_bucket.data",
+		ResourceType: "aws_s3_bucket",
+	}
+}
+
+// validFixJSON is a canned provider response with valid JSON.
+const validFixJSON = `{"hcl":"resource \"aws_s3_bucket\" \"data\" {\n  logging {\n    target_bucket = \"logs\"\n  }\n}","explanation":"Added logging block","effort":"low"}`
+
+// markdownFixJSON wraps validFixJSON in a markdown code fence.
+const markdownFixJSON = "```json\n" + validFixJSON + "\n```"
+
+func TestSuggest_ValidJSON(t *testing.T) {
+	p := &fakeCompleter{response: validFixJSON}
+	s := NewSuggester(p)
+	got, err := s.Suggest(context.Background(), suggestReq())
+	if err != nil {
+		t.Fatalf("Suggest: %v", err)
+	}
+	if got.RuleID != "CKV_AWS_18" {
+		t.Errorf("RuleID = %q, want CKV_AWS_18", got.RuleID)
+	}
+	if got.Effort != "low" {
+		t.Errorf("Effort = %q, want low", got.Effort)
+	}
+	if got.HCL == "" {
+		t.Error("HCL must not be empty")
+	}
+}
+
+func TestSuggest_MarkdownFence(t *testing.T) {
+	p := &fakeCompleter{response: markdownFixJSON}
+	s := NewSuggester(p)
+	got, err := s.Suggest(context.Background(), suggestReq())
+	if err != nil {
+		t.Fatalf("Suggest with markdown fence: %v", err)
+	}
+	if got.HCL == "" {
+		t.Error("HCL must not be empty when response is wrapped in code fence")
+	}
+}
+
+func TestSuggest_MalformedJSON(t *testing.T) {
+	p := &fakeCompleter{response: "{not valid json"}
+	s := NewSuggester(p)
+	_, err := s.Suggest(context.Background(), suggestReq())
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+func TestSuggest_EmptyResponse(t *testing.T) {
+	p := &fakeCompleter{response: ""}
+	s := NewSuggester(p)
+	_, err := s.Suggest(context.Background(), suggestReq())
+	if err == nil {
+		t.Fatal("expected error for empty response (missing hcl field)")
+	}
+}
+
+func TestSuggest_LangPTBR_InjectsInstruction(t *testing.T) {
+	p := &fakeCompleter{response: validFixJSON}
+	s := NewSuggester(p)
+	req := suggestReq()
+	req.Lang = "pt-BR"
+	_, err := s.Suggest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Suggest with pt-BR: %v", err)
+	}
+	if !strings.Contains(p.capturedSystem, "Brazilian Portuguese") {
+		t.Error("expected system prompt to contain Brazilian Portuguese instruction when Lang=pt-BR")
 	}
 }
