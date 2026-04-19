@@ -37,7 +37,7 @@ type InstallHint struct {
 }
 
 // ValidScanners lists all accepted scanner names.
-var ValidScanners = []string{"checkov", "tfsec", "terrascan"}
+var ValidScanners = []string{"checkov", "tfsec", "terrascan", "builtin"}
 
 // Scanner is the interface each vendor adapter must implement.
 type Scanner interface {
