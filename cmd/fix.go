@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -114,6 +115,19 @@ type fixFilter struct {
 	max       int
 }
 
+// fixPlanRecord is the JSON representation of a single fix suggestion.
+type fixPlanRecord struct {
+	RuleID        string   `json:"rule_id"`
+	Severity      string   `json:"severity"`
+	Resource      string   `json:"resource"`
+	Message       string   `json:"message"`
+	File          string   `json:"file,omitempty"`
+	HCL           string   `json:"hcl"`
+	Explanation   string   `json:"explanation"`
+	Prerequisites []string `json:"prerequisites,omitempty"`
+	Effort        string   `json:"effort"`
+}
+
 func runFixPlan(_ *cobra.Command, _ []string) error {
 	filter := fixFilter{
 		findingID: "",
@@ -121,9 +135,50 @@ func runFixPlan(_ *cobra.Command, _ []string) error {
 		file:      fixFileFlag,
 		max:       fixMaxFlag,
 	}
+	if outputFormat == "json" {
+		return generateAndHandleFixes(filter, func(_ *fix.ApplySession, pending []fix.PendingFix) {
+			writeFixPlanJSON(pending)
+		})
+	}
 	return generateAndHandleFixes(filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
 		session.Preview(pending)
 	})
+}
+
+func writeFixPlanJSON(pending []fix.PendingFix) {
+	records := make([]fixPlanRecord, 0, len(pending))
+	for _, p := range pending {
+		r := fixPlanRecord{
+			RuleID:        p.Finding.RuleID,
+			Severity:      p.Finding.Severity,
+			Resource:      p.Finding.Resource,
+			Message:       p.Finding.Message,
+			HCL:           p.Suggestion.HCL,
+			Explanation:   p.Suggestion.Explanation,
+			Prerequisites: p.Suggestion.Prerequisites,
+			Effort:        p.Suggestion.Effort,
+		}
+		if p.Location != nil {
+			r.File = p.Location.File
+		}
+		records = append(records, r)
+	}
+
+	data, _ := json.MarshalIndent(records, "", "  ")
+
+	if outputDir != "" {
+		outPath := outputDir
+		if !strings.HasSuffix(outPath, ".json") {
+			outPath = filepath.Join(outPath, "fix-plan.json")
+		}
+		if err := os.WriteFile(outPath, data, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing %s: %v\n", outPath, err)
+			return
+		}
+		fmt.Printf("Written: %s\n", outPath)
+		return
+	}
+	fmt.Println(string(data))
 }
 
 func runFixApply(_ *cobra.Command, args []string) error {
