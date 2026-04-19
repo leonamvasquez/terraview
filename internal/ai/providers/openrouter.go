@@ -165,9 +165,10 @@ func (o *openrouterProvider) doRequest(ctx context.Context, systemPrompt, userPr
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
-		Temperature: o.cfg.Temperature,
-		MaxTokens:   o.cfg.MaxTokens,
-		Stream:      false,
+		Temperature:    o.cfg.Temperature,
+		MaxTokens:      o.cfg.MaxTokens,
+		Stream:         false,
+		ResponseFormat: &chatResponseFormat{Type: "json_object"},
 	}
 
 	body, err := json.Marshal(reqBody)
