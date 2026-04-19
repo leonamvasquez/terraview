@@ -7,6 +7,38 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.8.0] — 2026-04-19
+
+Sprint 5: polimento do core loop, qualidade de IA e scanner standalone sem dependências externas. Score geral: 8.1 → **8.8/10**.
+
+### Added
+
+- **Built-in scanner** (`--scanner builtin`) — 20 regras CKV_AWS em Go puro; fallback automático quando nenhum scanner externo está no PATH. Cobre S3, RDS, EC2, Security Groups, Lambda, CloudFront, DynamoDB, ElastiCache e CloudWatch (`internal/builtin/`)
+- **Structured output** — providers OpenAI-compatible (OpenAI, DeepSeek, OpenRouter, Custom) agora usam `response_format: {"type": "json_object"}` na análise; Gemini usa `responseMimeType: application/json`; Ollama usa `format: json`. Elimina falhas de parsing em modelos menores
+- **Prompt tiers** — `prompts/small/` com 7 arquivos simplificados (~150 linhas total). `IsSmallModel()` detecta ollama e modelos ≤14B pelos tokens do nome (7b/8b/13b/mini/nano/lite); `LoadForModel()` seleciona o tier automaticamente
+- **`ARCHITECTURE.md`** — pipeline contract diagram, package map de 30+ pacotes, ADR-001 (pipeline.Runner), ADR-002 (external scanners), ADR-003 (MCP as primary interface); ≤300 linhas
+- **`fix plan -f json`** — output estruturado JSON com `rule_id`, `severity`, `resource`, `hcl`, `explanation`, `prerequisites`, `effort`
+- **`fix plan --br` / `fix apply --br`** — sugestões de fix inteiramente em português brasileiro
+- **`diagram -f json`** corrige extensão de arquivo (`.json` em vez de `.txt`)
+- **`diagram --br`** — título do diagrama em português brasileiro
+- **`history export --limit N`** — limita número de registros exportados
+- **Diff colorido** antes de `fix apply` — unified diff (LCS) com ANSI red/green + trilha no apply audit
+
+### Changed
+
+- `runner.go` usa `LoadForModel(provider, model)` em vez de `Load()` para o prompt de context-analysis
+- `scanner.ValidScanners` inclui `"builtin"`
+
+### Tests
+
+- `internal/fix/suggester_test.go` — 5 novos testes: JSON válido, markdown fence, JSON malformado, resposta vazia, `--br` injeção de instrução pt-BR
+- `internal/fix/diff_test.go` — 5 testes para `unifiedDiff` e `splitLines`
+- `internal/builtin/rules_test.go` — 25 testes (par fire/pass por regra + contagem)
+- `internal/ai/registry_test.go` — 4 testes para `IsSmallModel` e `LoadForModel`
+- Eval framework expandido de 2 para 5 casos (ECS, EKS, networking, S3, security-group)
+
+---
+
 ## [0.7.0] — 2026-04-14
 
 Release marca a conclusão do **Decommission Plan** (Sprints 1–4): remoção de escopo desnecessário, refactor do `fix` como parent command com subcommands, limpeza completa de código morto e paridade de documentação pt-BR/EN. Core loop final: **scan → diagram → explain → fix**.
