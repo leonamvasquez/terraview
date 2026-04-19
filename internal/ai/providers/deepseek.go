@@ -37,12 +37,19 @@ type deepseekProvider struct {
 }
 
 // DeepSeek uses OpenAI-compatible chat completions API
+// chatResponseFormat asks the model to return well-formed JSON.
+// Supported by OpenAI-compatible providers; ignored by others (omitempty).
+type chatResponseFormat struct {
+	Type string `json:"type"` // "json_object"
+}
+
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Stream      bool          `json:"stream"`
+	Model          string              `json:"model"`
+	Messages       []chatMessage       `json:"messages"`
+	Temperature    float64             `json:"temperature,omitempty"`
+	MaxTokens      int                 `json:"max_tokens,omitempty"`
+	Stream         bool                `json:"stream"`
+	ResponseFormat *chatResponseFormat `json:"response_format,omitempty"`
 }
 
 type chatMessage struct {
@@ -139,9 +146,10 @@ func (d *deepseekProvider) doRequest(ctx context.Context, systemPrompt, userProm
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
-		Temperature: d.cfg.Temperature,
-		MaxTokens:   d.cfg.MaxTokens,
-		Stream:      false,
+		Temperature:    d.cfg.Temperature,
+		MaxTokens:      d.cfg.MaxTokens,
+		Stream:         false,
+		ResponseFormat: &chatResponseFormat{Type: "json_object"},
 	}
 
 	body, err := json.Marshal(reqBody)
