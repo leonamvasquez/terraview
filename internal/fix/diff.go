@@ -19,8 +19,9 @@ type diffLine struct {
 
 // unifiedDiff produces a context diff between old and nLines slices of lines.
 // It uses a simple LCS-based algorithm adequate for small Terraform HCL blocks.
-// ctx is the number of unchanged lines to show before and after each hunk.
-func unifiedDiff(old, nLines []string, ctx int) []diffLine {
+// Three unchanged lines are shown before and after each changed hunk.
+func unifiedDiff(old, nLines []string) []diffLine {
+	const ctx = 3
 	lcs := computeLCS(old, nLines)
 	script := buildEditScript(old, nLines, lcs)
 	return addContext(script, old, ctx)

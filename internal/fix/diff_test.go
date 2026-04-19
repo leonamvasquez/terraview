@@ -6,7 +6,7 @@ import (
 
 func TestUnifiedDiff_NoChange(t *testing.T) {
 	lines := []string{"a", "b", "c"}
-	got := unifiedDiff(lines, lines, 3)
+	got := unifiedDiff(lines, lines)
 	for _, l := range got {
 		if l.Kind != diffContext {
 			t.Errorf("expected all context lines, got kind=%d text=%q", l.Kind, l.Text)
@@ -17,7 +17,7 @@ func TestUnifiedDiff_NoChange(t *testing.T) {
 func TestUnifiedDiff_SingleLineAdd(t *testing.T) {
 	old := []string{"resource \"aws_s3_bucket\" \"b\" {", "}"}
 	new := []string{"resource \"aws_s3_bucket\" \"b\" {", "  force_destroy = true", "}"}
-	got := unifiedDiff(old, new, 3)
+	got := unifiedDiff(old, new)
 
 	var adds, removes, ctx int
 	for _, l := range got {
@@ -52,7 +52,7 @@ func TestUnifiedDiff_AttributeChange(t *testing.T) {
 		"  acl = \"private\"",
 		"}",
 	}
-	got := unifiedDiff(old, new, 3)
+	got := unifiedDiff(old, new)
 
 	var adds, removes int
 	for _, l := range got {
@@ -80,7 +80,7 @@ func TestUnifiedDiff_ContextTrimmed(t *testing.T) {
 	old[10] = "old-value"
 	new[10] = "new-value"
 
-	got := unifiedDiff(old, new, 3)
+	got := unifiedDiff(old, new)
 	// We expect: 3 context + 1 remove + 1 add + 3 context = 8 lines max.
 	if len(got) > 8 {
 		t.Errorf("expected at most 8 lines with ctx=3, got %d", len(got))
