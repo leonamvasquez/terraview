@@ -58,6 +58,7 @@ type TopoLayer struct {
 type TopoResult struct {
 	Provider         string
 	Title            string
+	Lang             string // output language; "pt-BR" switches titles to Brazilian Portuguese
 	Layers           []*TopoLayer
 	Connections      []*Connection
 	SubnetPlacements map[string]string   // service group label → subnet tier

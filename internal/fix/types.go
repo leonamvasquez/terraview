@@ -23,6 +23,10 @@ type FixRequest struct {
 	// and generate canonical names instead of inventing placeholders.
 	// Not serialized — used internally to build the AI user message.
 	PlanIndex *PlanIndex `json:"-"`
+
+	// Lang sets the response language. "pt-BR" instructs the AI to respond in
+	// Brazilian Portuguese. Empty means English (default).
+	Lang string `json:"-"`
 }
 
 // FixFinding is the security finding that needs remediation.

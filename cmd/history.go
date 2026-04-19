@@ -118,6 +118,7 @@ func init() {
 	// Export flags
 	historyExportCmd.Flags().StringVarP(&historyExportFmt, "format", "f", "json", "Export format: json, csv")
 	historyExportCmd.Flags().StringVarP(&historyOutFile, "output", "o", "", "Output file path (required)")
+	historyExportCmd.Flags().IntVar(&historyLimit, "limit", 0, "Maximum number of records to export (0 = all)")
 
 	// Register subcommands
 	historyCmd.AddCommand(historyTrendCmd)
@@ -351,7 +352,7 @@ func runHistoryExport(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	filter := history.ListFilter{}
+	filter := history.ListFilter{Limit: historyLimit}
 	if !historyAll {
 		filter.ProjectHash = history.ProjectHash(resolveProjectDir())
 	}

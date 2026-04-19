@@ -72,7 +72,7 @@ func RenderTopoResult(result *TopoResult) string {
 	vpcNodeIDs := getVPCNodeIDs(dagNodes)
 
 	// Title (computed early for dynamic width calculation)
-	title := fmt.Sprintf("Infrastructure Diagram — %s", result.Title)
+	title := diagramTitle(result.Lang, result.Title)
 
 	// Dynamic canvas width based on content
 	canvasWidth := computeMinCanvasWidth(levels, dagNodes, compounds, vpcNodeIDs, globalNodes, title)
@@ -187,7 +187,7 @@ func RenderTopoResult(result *TopoResult) string {
 // renderSimpleFallback renders when there are no active DAG nodes.
 func renderSimpleFallback(result *TopoResult) string {
 	var sb strings.Builder
-	title := fmt.Sprintf("Infrastructure Diagram — %s", result.Title)
+	title := diagramTitle(result.Lang, result.Title)
 	sb.WriteString(fmt.Sprintf("\n%s\n", centerText(title, topoWidth)))
 	sb.WriteString(fmt.Sprintf("%s\n\n", centerText(strings.Repeat("═", runeLen(title)), topoWidth)))
 
