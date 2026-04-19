@@ -84,8 +84,10 @@ nfpms:
       - archlinux
     bindir: /usr/bin
     contents:
-      - src: prompts/*
+      - src: prompts/*.md
         dst: /usr/share/terraview/prompts/
+      - src: prompts/small/*.md
+        dst: /usr/share/terraview/prompts/small/
       - src: LICENSE
         dst: /usr/share/doc/terraview/LICENSE
     scripts:
