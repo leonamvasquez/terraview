@@ -17,12 +17,12 @@ type diffLine struct {
 	Text    string
 }
 
-// unifiedDiff produces a context diff between old and new slices of lines.
+// unifiedDiff produces a context diff between old and nLines slices of lines.
 // It uses a simple LCS-based algorithm adequate for small Terraform HCL blocks.
 // ctx is the number of unchanged lines to show before and after each hunk.
-func unifiedDiff(old, new []string, ctx int) []diffLine {
-	lcs := computeLCS(old, new)
-	script := buildEditScript(old, new, lcs)
+func unifiedDiff(old, nLines []string, ctx int) []diffLine {
+	lcs := computeLCS(old, nLines)
+	script := buildEditScript(old, nLines, lcs)
 	return addContext(script, old, ctx)
 }
 
@@ -50,17 +50,17 @@ func computeLCS(a, b []string) [][]int {
 
 // buildEditScript walks the LCS table backwards to produce a raw edit list
 // (no context lines yet). Each entry is a diffLine without OldLine set.
-func buildEditScript(old, new []string, dp [][]int) []diffLine {
+func buildEditScript(old, nLines []string, dp [][]int) []diffLine {
 	var out []diffLine
-	i, j := len(old), len(new)
+	i, j := len(old), len(nLines)
 	for i > 0 || j > 0 {
 		switch {
-		case i > 0 && j > 0 && old[i-1] == new[j-1]:
+		case i > 0 && j > 0 && old[i-1] == nLines[j-1]:
 			out = append([]diffLine{{Kind: diffContext, OldLine: i, Text: old[i-1]}}, out...)
 			i--
 			j--
 		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
-			out = append([]diffLine{{Kind: diffAdd, Text: new[j-1]}}, out...)
+			out = append([]diffLine{{Kind: diffAdd, Text: nLines[j-1]}}, out...)
 			j--
 		default:
 			out = append([]diffLine{{Kind: diffRemove, OldLine: i, Text: old[i-1]}}, out...)

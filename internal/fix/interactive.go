@@ -241,11 +241,11 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 	fmt.Fprintf(s.out(), "  %sEsforço: %s%s\n", s.col(ansiDim), pf.Suggestion.Effort, s.col(ansiReset))
 }
 
-// printUnifiedDiff renders a context diff between old and new lines, offset by
+// printUnifiedDiff renders a context diff between old and nLines, offset by
 // startLine so line numbers reflect the actual file position.
-func (s *ApplySession) printUnifiedDiff(old, new []string, startLine int) {
+func (s *ApplySession) printUnifiedDiff(old, nLines []string, startLine int) {
 	const ctx = 3
-	lines := unifiedDiff(old, new, ctx)
+	lines := unifiedDiff(old, nLines, ctx)
 	if len(lines) == 0 {
 		// No diff — show a note.
 		fmt.Fprintf(s.out(), "  %s(sem alterações detectadas)%s\n", s.col(ansiDim), s.col(ansiReset))
