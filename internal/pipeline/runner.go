@@ -561,7 +561,7 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 			promptDir = filepath.Join(".", "prompts")
 		}
 		pl := ai.NewPromptLoader(promptDir)
-		if prompts, loadErr := pl.Load(); loadErr == nil {
+		if prompts, loadErr := pl.LoadForModel(providerName, model); loadErr == nil {
 			contextPrompt = prompts.ContextAnalysis
 		}
 	}
