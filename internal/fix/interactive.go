@@ -102,6 +102,9 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 			continue
 		}
 
+		// Audit trail: show diff before applying even without confirmation.
+		s.printDiff(pf)
+
 		if err := s.applyFix(pf); err != nil {
 			fmt.Fprintf(s.out(), "  %s✗%s %s\n    %s%v%s\n\n",
 				s.col(ansiRed), s.col(ansiReset), label,
@@ -210,24 +213,16 @@ func (s *ApplySession) printFindingHeader(idx, total int, pf PendingFix) {
 func (s *ApplySession) printDiff(pf PendingFix) {
 	fmt.Fprintln(s.out())
 
-	// BEFORE — existing block from the .tf file
 	if pf.Location != nil {
 		existing, err := ReadLines(pf.Location)
 		if err == nil && len(existing) > 0 {
 			rel, _ := filepath.Rel(s.WorkDir, pf.Location.File)
 			s.printDiffHeader(fmt.Sprintf("─ %s", rel))
-			for i, line := range existing {
-				lineNo := pf.Location.StartLine + i
-				fmt.Fprintf(s.out(), "  %s%4d %s- %s%s\n",
-					s.col(ansiRed), lineNo, s.col(ansiReset+ansiRed), line, s.col(ansiReset))
-			}
+			s.printUnifiedDiff(existing, splitLines(pf.Suggestion.HCL), pf.Location.StartLine)
 		}
-	}
-
-	// AFTER — AI-proposed fix
-	if pf.Suggestion.HCL != "" {
-		newLines := strings.Split(strings.TrimRight(pf.Suggestion.HCL, "\n"), "\n")
-		for _, line := range newLines {
+	} else if pf.Suggestion.HCL != "" {
+		// No source file — show the proposed HCL as pure additions.
+		for _, line := range splitLines(pf.Suggestion.HCL) {
 			fmt.Fprintf(s.out(), "  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
 		}
 	}
@@ -236,7 +231,7 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 	if len(pf.Suggestion.Prerequisites) > 0 {
 		fmt.Fprintf(s.out(), "\n  %sRecursos a adicionar:%s\n", s.col(ansiBold), s.col(ansiReset))
 		for _, prereq := range pf.Suggestion.Prerequisites {
-			for _, line := range strings.Split(strings.TrimRight(prereq, "\n"), "\n") {
+			for _, line := range splitLines(prereq) {
 				fmt.Fprintf(s.out(), "  %s+ %s%s\n", s.col(ansiGreen), line, s.col(ansiReset))
 			}
 		}
@@ -244,6 +239,35 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 
 	s.printDiffHeader(strings.Repeat("─", 50))
 	fmt.Fprintf(s.out(), "  %sEsforço: %s%s\n", s.col(ansiDim), pf.Suggestion.Effort, s.col(ansiReset))
+}
+
+// printUnifiedDiff renders a context diff between old and nLines, offset by
+// startLine so line numbers reflect the actual file position.
+func (s *ApplySession) printUnifiedDiff(old, nLines []string, startLine int) {
+	const ctx = 3
+	lines := unifiedDiff(old, nLines, ctx)
+	if len(lines) == 0 {
+		// No diff — show a note.
+		fmt.Fprintf(s.out(), "  %s(sem alterações detectadas)%s\n", s.col(ansiDim), s.col(ansiReset))
+		return
+	}
+	for _, l := range lines {
+		lineNo := 0
+		if l.OldLine > 0 {
+			lineNo = startLine + l.OldLine - 1
+		}
+		switch l.Kind {
+		case diffRemove:
+			fmt.Fprintf(s.out(), "  %s%4d - %s%s\n",
+				s.col(ansiRed), lineNo, l.Text, s.col(ansiReset))
+		case diffAdd:
+			fmt.Fprintf(s.out(), "  %s     + %s%s\n",
+				s.col(ansiGreen), l.Text, s.col(ansiReset))
+		default: // diffContext
+			fmt.Fprintf(s.out(), "  %s%4d   %s%s\n",
+				s.col(ansiDim), lineNo, l.Text, s.col(ansiReset))
+		}
+	}
 }
 
 func (s *ApplySession) printWarnings(warnings []ValidationWarning) {
