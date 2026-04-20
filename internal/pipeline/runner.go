@@ -420,6 +420,7 @@ func MergeAndScore(cfg Config, resources []parser.NormalizedResource, topoGraph 
 		dr := normalizer.Deduplicate(hardFindings, validatedAIFindings)
 		hardFindings = dr.Findings
 		verbose("Dedup: %s", dr.Summary)
+		hardFindings = normalizer.ConsolidateIAMFindings(hardFindings)
 
 		if aiValidationReport != nil {
 			aiValidationReport.AIUniqueKept = dr.AIUniqueKept
