@@ -8,10 +8,16 @@ package normalizer
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
+
+// iamSeverityRank maps severity strings to an integer rank (lower = more severe).
+var iamSeverityRank = map[string]int{
+	"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4,
+}
 
 // DeduplicateResult holds the output of the deduplication pass.
 type DeduplicateResult struct {
@@ -189,6 +195,91 @@ func enrichRemediation(scannerRem, aiRem string) string {
 // normalizeResource produces a canonical, comparable resource key.
 func normalizeResource(r string) string {
 	return strings.ToLower(strings.TrimSpace(r))
+}
+
+// ConsolidateIAMFindings reduces noise when a single IAM resource triggers many
+// scanner findings. When 3 or more scanner findings (source != "llm") target the
+// same IAM resource (resource type contains "iam"), they are merged into one:
+// the highest-severity finding is kept and the suppressed rule IDs are appended
+// to its Message field.
+func ConsolidateIAMFindings(findings []rules.Finding) []rules.Finding {
+	// Group scanner IAM findings by normalised resource key.
+	groupIdx := make(map[string][]int, len(findings))
+	for i, f := range findings {
+		if strings.EqualFold(f.Source, "llm") {
+			continue
+		}
+		if !isIAMResource(f.Resource) {
+			continue
+		}
+		key := normalizeResource(f.Resource)
+		groupIdx[key] = append(groupIdx[key], i)
+	}
+
+	// Build suppress/primary maps for groups that meet the threshold.
+	const threshold = 3
+	suppress := make(map[int]bool)
+	extra := make(map[int][]string) // primary index → suppressed rule IDs
+
+	for _, indices := range groupIdx {
+		if len(indices) < threshold {
+			continue
+		}
+		primaryIdx := indices[0]
+		bestRank := iamSeverityRankOf(findings[primaryIdx].Severity)
+		for _, i := range indices[1:] {
+			if r := iamSeverityRankOf(findings[i].Severity); r < bestRank {
+				bestRank = r
+				primaryIdx = i
+			}
+		}
+		var ruleIDs []string
+		for _, i := range indices {
+			if i == primaryIdx {
+				continue
+			}
+			suppress[i] = true
+			if rid := findings[i].RuleID; rid != "" {
+				ruleIDs = append(ruleIDs, rid)
+			}
+		}
+		sort.Strings(ruleIDs)
+		extra[primaryIdx] = ruleIDs
+	}
+
+	if len(suppress) == 0 {
+		return findings
+	}
+
+	out := make([]rules.Finding, 0, len(findings)-len(suppress))
+	for i, f := range findings {
+		if suppress[i] {
+			continue
+		}
+		if ruleIDs, ok := extra[i]; ok && len(ruleIDs) > 0 {
+			f.Message = fmt.Sprintf("%s (+%d IAM rules consolidated: %s)",
+				f.Message, len(ruleIDs), strings.Join(ruleIDs, ", "))
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// isIAMResource returns true when the Terraform resource type contains "iam".
+func isIAMResource(resource string) bool {
+	rtype := strings.ToLower(strings.TrimSpace(resource))
+	if dot := strings.IndexByte(rtype, '.'); dot >= 0 {
+		rtype = rtype[:dot]
+	}
+	return strings.Contains(rtype, "iam")
+}
+
+// iamSeverityRankOf returns the numeric rank of a severity string.
+func iamSeverityRankOf(sev string) int {
+	if r, ok := iamSeverityRank[strings.ToUpper(sev)]; ok {
+		return r
+	}
+	return 99
 }
 
 // formatSummary builds a human-readable summary line.

@@ -424,3 +424,117 @@ func TestNormalizeResource(t *testing.T) {
 		}
 	}
 }
+
+// ── ConsolidateIAMFindings tests ───────────────────────────────────────
+
+func TestConsolidateIAMFindings_NoIAM(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "CKV_AWS_1", Resource: "aws_s3_bucket.data", Severity: "HIGH", Source: "checkov"},
+		{RuleID: "CKV_AWS_2", Resource: "aws_s3_bucket.data", Severity: "MEDIUM", Source: "checkov"},
+		{RuleID: "CKV_AWS_3", Resource: "aws_s3_bucket.data", Severity: "LOW", Source: "checkov"},
+	}
+	got := ConsolidateIAMFindings(findings)
+	if len(got) != 3 {
+		t.Errorf("non-IAM resources must not be consolidated: want 3, got %d", len(got))
+	}
+}
+
+func TestConsolidateIAMFindings_BelowThreshold(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "CKV_AWS_40", Resource: "aws_iam_role.worker", Severity: "HIGH", Source: "checkov", Message: "m1"},
+		{RuleID: "CKV_AWS_274", Resource: "aws_iam_role.worker", Severity: "MEDIUM", Source: "checkov", Message: "m2"},
+	}
+	got := ConsolidateIAMFindings(findings)
+	if len(got) != 2 {
+		t.Errorf("below threshold (2<3): want 2, got %d", len(got))
+	}
+}
+
+func TestConsolidateIAMFindings_Consolidates3(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "CKV_AWS_40", Resource: "aws_iam_role.worker", Severity: "MEDIUM", Source: "checkov", Message: "base message"},
+		{RuleID: "CKV_AWS_274", Resource: "aws_iam_role.worker", Severity: "HIGH", Source: "checkov", Message: "m2"},
+		{RuleID: "CKV_AWS_275", Resource: "aws_iam_role.worker", Severity: "LOW", Source: "checkov", Message: "m3"},
+	}
+	got := ConsolidateIAMFindings(findings)
+	if len(got) != 1 {
+		t.Fatalf("want 1 consolidated finding, got %d", len(got))
+	}
+	if got[0].Severity != "HIGH" {
+		t.Errorf("want highest severity HIGH, got %s", got[0].Severity)
+	}
+	if !strings.Contains(got[0].Message, "CKV_AWS_40") || !strings.Contains(got[0].Message, "CKV_AWS_275") {
+		t.Errorf("message should contain suppressed rule IDs, got: %s", got[0].Message)
+	}
+	if strings.Contains(got[0].Message, "CKV_AWS_274") {
+		t.Errorf("primary rule ID must not appear in consolidated message, got: %s", got[0].Message)
+	}
+}
+
+func TestConsolidateIAMFindings_AINotConsolidated(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "AI-1", Resource: "aws_iam_role.worker", Severity: "HIGH", Source: "llm", Message: "AI finding 1"},
+		{RuleID: "AI-2", Resource: "aws_iam_role.worker", Severity: "MEDIUM", Source: "llm", Message: "AI finding 2"},
+		{RuleID: "AI-3", Resource: "aws_iam_role.worker", Severity: "LOW", Source: "llm", Message: "AI finding 3"},
+	}
+	got := ConsolidateIAMFindings(findings)
+	if len(got) != 3 {
+		t.Errorf("AI (llm) findings must never be consolidated: want 3, got %d", len(got))
+	}
+}
+
+func TestConsolidateIAMFindings_PreservesNonIAM(t *testing.T) {
+	findings := []rules.Finding{
+		{RuleID: "CKV_AWS_40", Resource: "aws_iam_role.worker", Severity: "HIGH", Source: "checkov", Message: "m1"},
+		{RuleID: "CKV_AWS_274", Resource: "aws_iam_role.worker", Severity: "MEDIUM", Source: "checkov", Message: "m2"},
+		{RuleID: "CKV_AWS_275", Resource: "aws_iam_role.worker", Severity: "LOW", Source: "checkov", Message: "m3"},
+		{RuleID: "CKV_AWS_19", Resource: "aws_s3_bucket.data", Severity: "HIGH", Source: "checkov", Message: "S3 finding"},
+	}
+	got := ConsolidateIAMFindings(findings)
+	if len(got) != 2 {
+		t.Fatalf("want 2 (1 IAM consolidated + 1 S3), got %d", len(got))
+	}
+	s3Found := false
+	for _, f := range got {
+		if f.Resource == "aws_s3_bucket.data" {
+			s3Found = true
+		}
+	}
+	if !s3Found {
+		t.Error("S3 finding must be preserved after IAM consolidation")
+	}
+}
+
+func TestConsolidateIAMFindings_MultipleResources(t *testing.T) {
+	// Two IAM resources: role (5 findings → consolidate) and user (2 → keep)
+	roleFindings := func(n int) []rules.Finding {
+		var fs []rules.Finding
+		sevs := []string{"HIGH", "MEDIUM", "LOW", "LOW", "INFO"}
+		for i := 0; i < n; i++ {
+			fs = append(fs, rules.Finding{
+				RuleID:   fmt.Sprintf("CKV_AWS_%d", 40+i),
+				Resource: "aws_iam_role.app",
+				Severity: sevs[i%len(sevs)],
+				Source:   "checkov",
+				Message:  fmt.Sprintf("rule %d", i),
+			})
+		}
+		return fs
+	}
+	findings := append(roleFindings(5),
+		rules.Finding{RuleID: "CKV_AWS_90", Resource: "aws_iam_user.ci", Severity: "HIGH", Source: "checkov", Message: "u1"},
+		rules.Finding{RuleID: "CKV_AWS_91", Resource: "aws_iam_user.ci", Severity: "MEDIUM", Source: "checkov", Message: "u2"},
+	)
+	got := ConsolidateIAMFindings(findings)
+	// role 5→1, user 2→2 (below threshold)
+	if len(got) != 3 {
+		t.Errorf("want 3 findings (1 consolidated role + 2 user), got %d", len(got))
+	}
+}
+
+func TestConsolidateIAMFindings_Empty(t *testing.T) {
+	got := ConsolidateIAMFindings(nil)
+	if len(got) != 0 {
+		t.Errorf("nil input: want 0, got %d", len(got))
+	}
+}
