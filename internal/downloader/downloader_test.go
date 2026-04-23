@@ -84,7 +84,7 @@ func TestDownload_ChecksumInvalid(t *testing.T) {
 	}
 
 	// File should be cleaned up on checksum failure
-	if Exists(dest) {
+	if _, err := os.Stat(dest); err == nil {
 		t.Error("file should be removed on checksum failure")
 	}
 }
@@ -102,7 +102,7 @@ func TestDownload_CreatesParentDirs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !Exists(dest) {
+	if _, err := os.Stat(dest); err != nil {
 		t.Error("file should exist after download")
 	}
 }
@@ -120,18 +120,18 @@ func TestDownload_WindowsPathSeparator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !Exists(dest) {
+	if _, err := os.Stat(dest); err != nil {
 		t.Error("file should exist")
 	}
 }
 
-func TestExists(t *testing.T) {
+func TestFileExists(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "exists-test")
-	if Exists(tmp) {
+	if _, err := os.Stat(tmp); err == nil {
 		t.Error("file should not exist before creation")
 	}
 	os.WriteFile(tmp, []byte("x"), 0644)
-	if !Exists(tmp) {
+	if _, err := os.Stat(tmp); err != nil {
 		t.Error("file should exist after creation")
 	}
 }
