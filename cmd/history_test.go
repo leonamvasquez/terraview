@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -229,5 +231,117 @@ func TestResolveProjectDir_Default(t *testing.T) {
 	// Should return a non-empty path (cwd or ".")
 	if dir == "" {
 		t.Error("resolveProjectDir() returned empty string")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runHistoryClear — exercises branches via real SQLite store in tempdir
+// ---------------------------------------------------------------------------
+
+func TestRunHistoryClear_All(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = true
+	historyBefore = ""
+	defer func() { historyAll = false }()
+
+	if err := runHistoryClear(nil, nil); err != nil {
+		t.Errorf("runHistoryClear (all) failed: %v", err)
+	}
+}
+
+func TestRunHistoryClear_BeforeDate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = false
+	historyBefore = "30d"
+	defer func() { historyBefore = "" }()
+
+	if err := runHistoryClear(nil, nil); err != nil {
+		t.Errorf("runHistoryClear (before=30d) failed: %v", err)
+	}
+}
+
+func TestRunHistoryClear_InvalidBefore(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = false
+	historyBefore = "invalid-date-format"
+	defer func() { historyBefore = "" }()
+
+	if err := runHistoryClear(nil, nil); err == nil {
+		t.Error("expected error for invalid --before value")
+	}
+}
+
+func TestRunHistoryClear_ByProject(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = false
+	historyBefore = ""
+	origWorkDir := workDir
+	workDir = dir
+	defer func() { workDir = origWorkDir }()
+
+	if err := runHistoryClear(nil, nil); err != nil {
+		t.Errorf("runHistoryClear (by project) failed: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runHistoryList — exercises enabled + store path via tempdir HOME
+// ---------------------------------------------------------------------------
+
+func TestRunHistoryList_HappyPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = true
+	historyProject = ""
+	historySince = ""
+	historyLimit = 20
+	historyFormat = "table"
+	origWorkDir := workDir
+	workDir = dir
+	defer func() {
+		historyAll = false
+		historyLimit = 20
+		workDir = origWorkDir
+	}()
+
+	// History is enabled by default config; store is created fresh in tempdir.
+	if err := runHistoryList(nil, nil); err != nil {
+		t.Errorf("runHistoryList happy path failed: %v", err)
+	}
+}
+
+func TestRunHistoryList_FilterByProject(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".terraview"), 0755)
+
+	historyAll = false
+	historyProject = ""
+	historySince = ""
+	historyLimit = 10
+	historyFormat = "table"
+	origWorkDir := workDir
+	workDir = dir
+	defer func() {
+		historyLimit = 20
+		workDir = origWorkDir
+	}()
+
+	if err := runHistoryList(nil, nil); err != nil {
+		t.Errorf("runHistoryList (by project) failed: %v", err)
 	}
 }
