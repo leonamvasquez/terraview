@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// DetectResult holds information about a detected Terraform workspace.
-type DetectResult struct {
+// detectResult holds information about a detected Terraform workspace.
+// Private: external callers use Validate().
+type detectResult struct {
 	Dir              string
 	HasTFFiles       bool
 	HasLockFile      bool
@@ -21,8 +22,8 @@ type DetectResult struct {
 	TerraformVersion string
 }
 
-// Detect examines a directory to determine if it's a Terraform workspace.
-func Detect(dir string) (*DetectResult, error) {
+// detect examines a directory to determine if it's a Terraform workspace.
+func detect(dir string) (*detectResult, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve directory: %w", err)
@@ -33,7 +34,7 @@ func Detect(dir string) (*DetectResult, error) {
 		return nil, fmt.Errorf("not a valid directory: %s", absDir)
 	}
 
-	result := &DetectResult{Dir: absDir}
+	result := &detectResult{Dir: absDir}
 
 	// Check for .tf files
 	tfMatches, _ := filepath.Glob(filepath.Join(absDir, "*.tf"))
@@ -73,7 +74,7 @@ func Detect(dir string) (*DetectResult, error) {
 
 // Validate returns an error if the directory is not a valid Terraform workspace.
 func Validate(dir string) error {
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		return err
 	}

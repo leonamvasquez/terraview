@@ -9,7 +9,7 @@ import (
 
 func TestDetect_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestDetect_WithTFFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "main.tf"), []byte("resource {}"), 0644)
 	os.WriteFile(filepath.Join(dir, "vars.tf"), []byte("variable {}"), 0644)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestDetect_WithLockFile(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".terraform.lock.hcl"), []byte("provider {}"), 0644)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestDetect_WithTerraformDir(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".terraform"), 0755)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestDetect_WithModulesDir(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".terraform", "modules"), 0755)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestDetect_WithPlanJSON(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "plan.json"), []byte("{}"), 0644)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestDetect_WithPlanJSON(t *testing.T) {
 }
 
 func TestDetect_InvalidDir(t *testing.T) {
-	_, err := Detect("/nonexistent/path/to/nowhere")
+	_, err := detect("/nonexistent/path/to/nowhere")
 	if err == nil {
 		t.Fatal("expected error for nonexistent directory")
 	}
@@ -118,7 +118,7 @@ func TestDetect_InvalidDir(t *testing.T) {
 func TestDetect_FileNotDir(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "afile")
 	os.WriteFile(f, []byte("x"), 0644)
-	_, err := Detect(f)
+	_, err := detect(f)
 	if err == nil {
 		t.Fatal("expected error for file path")
 	}
@@ -131,7 +131,7 @@ func TestDetect_FullWorkspace(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, ".terraform", "modules"), 0755)
 	os.WriteFile(filepath.Join(dir, "plan.json"), []byte("{}"), 0644)
 
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestDetect_FullWorkspace(t *testing.T) {
 
 func TestDetect_AbsDir(t *testing.T) {
 	dir := t.TempDir()
-	result, err := Detect(dir)
+	result, err := detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
