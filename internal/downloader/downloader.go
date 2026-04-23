@@ -89,9 +89,3 @@ func Download(url, destination string, opts Options) (int64, error) {
 
 	return written, nil
 }
-
-// Exists checks if a file exists at the given path.
-func Exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
