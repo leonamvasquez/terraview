@@ -97,10 +97,41 @@ func makeCase(t *testing.T, name string, gc GoldenCriteria) (evalsDir string) {
 	return root
 }
 
-// ---- TestLoadCases_AwsSaas ---------------------------------------------------
+// ---- TestLoadCases_AllScenarios ---------------------------------------------
 
+// TestLoadCases_AllScenarios verifies that all four eval fixtures are present
+// and parseable from the testdata/evals directory.
+func TestLoadCases_AllScenarios(t *testing.T) {
+	evalsDir := filepath.Join("..", "..", "..", "testdata", "evals")
+
+	runner := NewRunner(evalsDir, &stubProvider{})
+	cases, err := runner.LoadCases()
+	if err != nil {
+		t.Fatalf("LoadCases: %v", err)
+	}
+
+	wantNames := []string{"aws-saas", "minimal-infra", "eks-production", "no-issues"}
+	found := make(map[string]bool)
+	for _, c := range cases {
+		found[c.Name] = true
+		if c.PlanPath == "" {
+			t.Errorf("%s: PlanPath is empty", c.Name)
+		}
+		if c.Golden.Name == "" {
+			t.Errorf("%s: Golden.Name is empty", c.Name)
+		}
+	}
+
+	for _, name := range wantNames {
+		if !found[name] {
+			t.Errorf("case %q not found in testdata/evals", name)
+		}
+	}
+}
+
+// TestLoadCases_AwsSaas keeps backward-compat: verifies the original fixture
+// specifically so regressions are caught without touching the above broader test.
 func TestLoadCases_AwsSaas(t *testing.T) {
-	// Point at the real testdata directory so we verify the fixture exists.
 	evalsDir := filepath.Join("..", "..", "..", "testdata", "evals")
 
 	runner := NewRunner(evalsDir, &stubProvider{})
@@ -124,6 +155,27 @@ func TestLoadCases_AwsSaas(t *testing.T) {
 	}
 	if !found {
 		t.Error("aws-saas case not found in testdata/evals")
+	}
+}
+
+// TestLoadCases_InvalidGolden verifies that a malformed golden.json causes
+// LoadCases to return an error instead of silently ignoring the case.
+func TestLoadCases_InvalidGolden(t *testing.T) {
+	root := t.TempDir()
+	caseDir := filepath.Join(root, "bad-golden")
+	if err := os.MkdirAll(caseDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writePlan(t, caseDir)
+	// Write invalid JSON as golden.json.
+	if err := os.WriteFile(filepath.Join(caseDir, "golden.json"), []byte("not-json{{{"), 0o644); err != nil {
+		t.Fatalf("write golden.json: %v", err)
+	}
+
+	runner := NewRunner(root, &stubProvider{})
+	_, err := runner.LoadCases()
+	if err == nil {
+		t.Error("expected error for invalid golden.json, got nil")
 	}
 }
 
@@ -327,6 +379,205 @@ func TestRun_PassRequiredFindingsAny(t *testing.T) {
 				t.Errorf("Pass=%v, want %v; failures: %v", res.Pass, tc.wantPass, res.Failures)
 			}
 		})
+	}
+}
+
+// ---- TestRunAll_MultipleScenarios -------------------------------------------
+
+// TestRunAll_MultipleScenarios exercises RunAll with two cases in the same
+// evalsDir, covering the sequential execution path.
+func TestRunAll_MultipleScenarios(t *testing.T) {
+	root := t.TempDir()
+
+	for _, name := range []string{"case-a", "case-b"} {
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		writePlan(t, dir)
+		writeGolden(t, dir, GoldenCriteria{
+			Name:        name,
+			MinFindings: 1,
+		})
+	}
+
+	stub := &stubProvider{
+		findings: []rules.Finding{
+			{RuleID: "CKV_AWS_1", Severity: "HIGH", Source: "llm"},
+		},
+		summary: "Analysis complete.",
+	}
+
+	runner := NewRunner(root, stub)
+	results := runner.RunAll(context.Background())
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	for _, r := range results {
+		if !r.Pass {
+			t.Errorf("case %q should pass; failures: %v", r.Case.Name, r.Failures)
+		}
+	}
+}
+
+// TestRunAll_LoadError covers the RunAll error path when evalsDir does not exist.
+func TestRunAll_LoadError(t *testing.T) {
+	runner := NewRunner("/nonexistent/path/that/does/not/exist", &stubProvider{})
+	results := runner.RunAll(context.Background())
+	if len(results) == 0 {
+		t.Fatal("expected at least one result with failure")
+	}
+	if len(results[0].Failures) == 0 {
+		t.Error("expected failure message for missing evalsDir")
+	}
+}
+
+// ---- TestRun_ParseError -----------------------------------------------------
+
+// TestRun_ParseError covers the plan parse failure path in Run.
+func TestRun_ParseError(t *testing.T) {
+	root := t.TempDir()
+	caseDir := filepath.Join(root, "bad-plan")
+	if err := os.MkdirAll(caseDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Write invalid JSON as plan.json.
+	if err := os.WriteFile(filepath.Join(caseDir, "plan.json"), []byte("not-json"), 0o644); err != nil {
+		t.Fatalf("write plan.json: %v", err)
+	}
+	writeGolden(t, caseDir, GoldenCriteria{Name: "bad-plan"})
+
+	runner := NewRunner(root, &stubProvider{})
+	cases, err := runner.LoadCases()
+	if err != nil {
+		t.Fatalf("LoadCases: %v", err)
+	}
+	if len(cases) == 0 {
+		t.Fatal("expected one case to be loaded")
+	}
+
+	res := runner.Run(context.Background(), cases[0])
+	if res.Pass {
+		t.Error("expected Pass=false for invalid plan.json")
+	}
+	if len(res.Failures) == 0 {
+		t.Error("expected at least one failure message")
+	}
+}
+
+// ---- TestRun_NoIssues -------------------------------------------------------
+
+// TestRun_NoIssues validates that min_findings=0 passes even with zero findings,
+// and that forbidden_strings check fires for HIGH severity in summary.
+func TestRun_NoIssues(t *testing.T) {
+	tests := []struct {
+		name             string
+		findings         []rules.Finding
+		summary          string
+		forbiddenStrings []string
+		wantPass         bool
+	}{
+		{
+			name:             "zero findings passes min_findings=0",
+			findings:         []rules.Finding{},
+			summary:          "Infrastructure is well configured.",
+			forbiddenStrings: []string{"CRITICAL", "HIGH severity"},
+			wantPass:         true,
+		},
+		{
+			name:             "forbidden string triggers failure",
+			findings:         []rules.Finding{},
+			summary:          "No CRITICAL issues found.",
+			forbiddenStrings: []string{"CRITICAL"},
+			wantPass:         false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gc := GoldenCriteria{
+				Name:             tc.name,
+				MinFindings:      0,
+				ForbiddenStrings: tc.forbiddenStrings,
+			}
+			evalsDir := makeCase(t, tc.name, gc)
+
+			stub := &stubProvider{
+				findings: tc.findings,
+				summary:  tc.summary,
+			}
+
+			runner := NewRunner(evalsDir, stub)
+			cases, err := runner.LoadCases()
+			if err != nil {
+				t.Fatalf("LoadCases: %v", err)
+			}
+
+			res := runner.Run(context.Background(), cases[0])
+			if res.Pass != tc.wantPass {
+				t.Errorf("Pass=%v, want %v; failures: %v", res.Pass, tc.wantPass, res.Failures)
+			}
+		})
+	}
+}
+
+// ---- TestEvaluate_ScoreRange ------------------------------------------------
+
+// TestEvaluate_ScoreRange exercises score_range validation directly on evaluate.
+// The evaluate function does not currently check score_range (the score comes from
+// the pipeline, not from contextanalysis alone), so this test documents that
+// evaluate passes regardless of score_range when other criteria are met.
+func TestEvaluate_ScoreRange(t *testing.T) {
+	gc := GoldenCriteria{
+		Name:        "score-range-test",
+		MinFindings: 0,
+		ScoreRange:  ScoreRange{Min: 6.0, Max: 10.0},
+	}
+	res := &Result{
+		Case:    EvalCase{Golden: gc},
+		Summary: "Infrastructure looks good.",
+	}
+	evaluate(gc, res)
+	if !res.Pass {
+		t.Errorf("expected Pass=true; failures: %v", res.Failures)
+	}
+}
+
+// ---- TestRun_MaxResponseTokens_Exceeded ------------------------------------
+
+// TestRun_MaxResponseTokens_Exceeded verifies the token count heuristic triggers.
+func TestRun_MaxResponseTokens_Exceeded(t *testing.T) {
+	gc := GoldenCriteria{
+		Name:              "token-limit",
+		MaxResponseTokens: 5,
+	}
+	evalsDir := makeCase(t, "token-limit", gc)
+
+	// 4 chars ≈ 1 token; 24 chars > 5 tokens.
+	stub := &stubProvider{
+		summary: "This is a long analysis output that exceeds the token limit.",
+	}
+
+	runner := NewRunner(evalsDir, stub)
+	cases, err := runner.LoadCases()
+	if err != nil {
+		t.Fatalf("LoadCases: %v", err)
+	}
+
+	res := runner.Run(context.Background(), cases[0])
+	if res.Pass {
+		t.Error("expected Pass=false for token limit exceeded")
+	}
+
+	var found bool
+	for _, f := range res.Failures {
+		if contains(f, "max_response_tokens") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected max_response_tokens failure, got: %v", res.Failures)
 	}
 }
 

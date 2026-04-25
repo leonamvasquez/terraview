@@ -1,0 +1,10 @@
+{
+  "name": "minimal-infra",
+  "description": "Single VPC with public S3 and unencrypted EC2 — basic security issues only",
+  "required_findings_any": ["S3", "encryption", "public"],
+  "min_findings": 2,
+  "score_range": {"min": 2.0, "max": 6.0},
+  "required_sections": ["Security", "Finding"],
+  "forbidden_strings": ["PLACEHOLDER", "TODO", "N/A"],
+  "max_response_tokens": 2000
+}

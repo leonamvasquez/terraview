@@ -1,0 +1,173 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.10.3",
+  "variables": {
+    "environment": { "value": "production" },
+    "region": { "value": "us-east-1" },
+    "cluster_name": { "value": "prod-eks" }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_vpc.eks",
+      "mode": "managed", "type": "aws_vpc", "name": "eks",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "cidr_block": "10.10.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": true,
+        "tags": { "Name": "prod-eks-vpc" }
+      }}
+    },
+    {
+      "address": "aws_subnet.eks_private[0]",
+      "mode": "managed", "type": "aws_subnet", "name": "eks_private",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "vpc_id": null, "cidr_block": "10.10.1.0/24",
+        "availability_zone": "us-east-1a",
+        "map_public_ip_on_launch": false,
+        "tags": { "Name": "prod-eks-private-1a", "kubernetes.io/role/internal-elb": "1" }
+      }}
+    },
+    {
+      "address": "aws_subnet.eks_public[0]",
+      "mode": "managed", "type": "aws_subnet", "name": "eks_public",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "vpc_id": null, "cidr_block": "10.10.10.0/24",
+        "availability_zone": "us-east-1a",
+        "map_public_ip_on_launch": true,
+        "tags": { "Name": "prod-eks-public-1a", "kubernetes.io/role/elb": "1" }
+      }}
+    },
+    {
+      "address": "aws_eks_cluster.prod",
+      "mode": "managed", "type": "aws_eks_cluster", "name": "prod",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-eks",
+        "version": "1.30",
+        "role_arn": null,
+        "enabled_cluster_log_types": [],
+        "kubernetes_network_config": [{ "ip_family": "ipv4", "service_ipv4_cidr": "172.20.0.0/16" }],
+        "vpc_config": [{ "endpoint_private_access": false, "endpoint_public_access": true, "public_access_cidrs": ["0.0.0.0/0"], "subnet_ids": null }],
+        "tags": { "Name": "prod-eks-cluster" }
+      }}
+    },
+    {
+      "address": "aws_eks_node_group.workers",
+      "mode": "managed", "type": "aws_eks_node_group", "name": "workers",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "cluster_name": "prod-eks",
+        "node_group_name": "prod-workers",
+        "node_role_arn": null,
+        "subnet_ids": null,
+        "capacity_type": "ON_DEMAND",
+        "instance_types": ["m5.large"],
+        "scaling_config": [{ "min_size": 2, "max_size": 10, "desired_size": 3 }],
+        "tags": { "Name": "prod-workers-ng" }
+      }}
+    },
+    {
+      "address": "aws_iam_role.eks_cluster",
+      "mode": "managed", "type": "aws_iam_role", "name": "eks_cluster",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-eks-cluster-role",
+        "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"eks.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+        "tags": { "Name": "prod-eks-cluster-role" }
+      }}
+    },
+    {
+      "address": "aws_iam_role.eks_node",
+      "mode": "managed", "type": "aws_iam_role", "name": "eks_node",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-eks-node-role",
+        "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+        "tags": { "Name": "prod-eks-node-role" }
+      }}
+    },
+    {
+      "address": "aws_iam_role.irsa_app",
+      "mode": "managed", "type": "aws_iam_role", "name": "irsa_app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-irsa-app-role",
+        "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B716D3041E\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"oidc.eks.us-east-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B716D3041E:sub\":\"system:serviceaccount:default:app-service-account\"}}}]}",
+        "tags": { "Name": "prod-irsa-app-role" }
+      }}
+    },
+    {
+      "address": "aws_iam_role_policy.irsa_app_s3",
+      "mode": "managed", "type": "aws_iam_role_policy", "name": "irsa_app_s3",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-irsa-app-s3-policy",
+        "role": "prod-irsa-app-role",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"*\"}]}"
+      }}
+    },
+    {
+      "address": "aws_lb.alb",
+      "mode": "managed", "type": "aws_lb", "name": "alb",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-eks-alb",
+        "internal": false,
+        "load_balancer_type": "application",
+        "enable_deletion_protection": false,
+        "enable_http2": true,
+        "security_groups": null,
+        "subnets": null,
+        "tags": { "Name": "prod-eks-alb" }
+      }}
+    },
+    {
+      "address": "aws_security_group.alb",
+      "mode": "managed", "type": "aws_security_group", "name": "alb",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "prod-alb-sg", "vpc_id": null,
+        "description": "ALB security group",
+        "ingress": [
+          { "from_port": 80, "to_port": 80, "protocol": "tcp",
+            "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": ["::/0"],
+            "description": "HTTP from internet", "self": false,
+            "prefix_list_ids": [], "security_groups": [] },
+          { "from_port": 443, "to_port": 443, "protocol": "tcp",
+            "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": ["::/0"],
+            "description": "HTTPS from internet", "self": false,
+            "prefix_list_ids": [], "security_groups": [] }
+        ],
+        "egress": [
+          { "from_port": 0, "to_port": 0, "protocol": "-1",
+            "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": [],
+            "description": "", "self": false,
+            "prefix_list_ids": [], "security_groups": [] }
+        ],
+        "tags": { "Name": "prod-alb-sg" }
+      }}
+    },
+    {
+      "address": "aws_db_instance.rds",
+      "mode": "managed", "type": "aws_db_instance", "name": "rds",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "identifier": "prod-eks-rds",
+        "engine": "postgres",
+        "engine_version": "15.3",
+        "instance_class": "db.t3.medium",
+        "allocated_storage": 100,
+        "storage_encrypted": false,
+        "publicly_accessible": false,
+        "backup_retention_period": 7,
+        "deletion_protection": false,
+        "skip_final_snapshot": true,
+        "multi_az": false,
+        "tags": { "Name": "prod-eks-rds" }
+      }}
+    }
+  ]
+}
