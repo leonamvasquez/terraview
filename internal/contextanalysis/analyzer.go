@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -40,6 +41,7 @@ type Analyzer struct {
 	lang                  string
 	contextAnalysisPrompt string // loaded from context-analysis.md
 	maxResources          int    // batch size limit (0 = defaultContextBatchSize)
+	followUpRounds        int    // number of follow-up rounds after initial analysis (0 = disabled)
 }
 
 // NewAnalyzer creates a new context analyzer with the given AI provider.
@@ -52,6 +54,15 @@ func NewAnalyzer(provider ai.Provider, lang string, contextPrompt string, maxRes
 		contextAnalysisPrompt: contextPrompt,
 		maxResources:          maxResources,
 	}
+}
+
+// WithFollowUpRounds configures the number of follow-up rounds to run after the
+// initial analysis. Each round sends a new prompt asking for additional cross-resource
+// risks not already identified, enabling iterative discovery. Setting n=0 (default)
+// disables follow-up and preserves backward-compatible behavior.
+func (a *Analyzer) WithFollowUpRounds(n int) *Analyzer {
+	a.followUpRounds = n
+	return a
 }
 
 // effectiveBatchSize returns the resource cap per AI call.
@@ -110,6 +121,17 @@ func (a *Analyzer) Analyze(ctx context.Context, resources []parser.NormalizedRes
 		return nil, err
 	}
 	result.ExcludedNoOp = excluded
+
+	if a.followUpRounds > 0 && len(result.Findings) > 0 {
+		updated, fuErr := a.runFollowUp(ctx, active, result)
+		if fuErr != nil {
+			// Non-fatal: log and return the initial result unchanged.
+			log.Printf("contextanalysis: follow-up rounds failed (non-fatal): %v", fuErr)
+		} else {
+			result = updated
+		}
+	}
+
 	return result, nil
 }
 
@@ -271,6 +293,93 @@ func resourcePriorityTier(resourceType string) int {
 		}
 	}
 	return 3
+}
+
+// followUpFinding is a compact representation of an already-identified finding
+// sent back to the AI so it can avoid repeating the same issues.
+type followUpFinding struct {
+	RuleID   string `json:"rule_id"`
+	Severity string `json:"severity"`
+	Resource string `json:"resource"`
+	Message  string `json:"message"`
+}
+
+// runFollowUp executes up to a.followUpRounds additional AI calls, each asking for
+// cross-resource risks not yet identified. It accumulates new findings into a copy
+// of initial and appends round summaries. Breaks early when a round returns no new findings.
+func (a *Analyzer) runFollowUp(ctx context.Context, resources []parser.NormalizedResource, initial *Result) (*Result, error) {
+	result := &Result{
+		Findings: make([]rules.Finding, len(initial.Findings)),
+		Summary:  initial.Summary,
+		Model:    initial.Model,
+		Provider: initial.Provider,
+	}
+	copy(result.Findings, initial.Findings)
+
+	prev := result.Findings
+
+	for round := 1; round <= a.followUpRounds; round++ {
+		if ctx.Err() != nil {
+			break
+		}
+
+		followUpPromptStr := a.buildFollowUpPrompt(prev)
+
+		req := ai.Request{
+			Resources: resources,
+			Summary:   map[string]interface{}{"follow_up": true, "round": round, "analysis": followUpPromptStr},
+			Prompts: ai.Prompts{
+				System: a.buildSystemPrompt(),
+			},
+		}
+
+		completion, err := a.provider.Analyze(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("follow-up round %d: %w", round, err)
+		}
+
+		newFindings := make([]rules.Finding, 0, len(completion.Findings))
+		for _, f := range completion.Findings {
+			f.Source = "ai/context/followup"
+			newFindings = append(newFindings, f)
+		}
+
+		if len(newFindings) == 0 {
+			break
+		}
+
+		result.Findings = append(result.Findings, newFindings...)
+		prev = result.Findings
+
+		roundSummary := completion.Summary
+		if roundSummary == "" {
+			roundSummary = fmt.Sprintf("%d additional finding(s) identified.", len(newFindings))
+		}
+		result.Summary += fmt.Sprintf("\n\n[Follow-up round %d]\n%s", round, roundSummary)
+	}
+
+	return result, nil
+}
+
+// buildFollowUpPrompt builds the follow-up user prompt string that instructs the AI
+// to find only additional risks beyond those already identified in prev.
+func (a *Analyzer) buildFollowUpPrompt(prev []rules.Finding) string {
+	compact := make([]followUpFinding, len(prev))
+	for i, f := range prev {
+		compact[i] = followUpFinding{
+			RuleID:   f.RuleID,
+			Severity: f.Severity,
+			Resource: f.Resource,
+			Message:  f.Message,
+		}
+	}
+
+	prevJSON, _ := json.Marshal(compact)
+
+	return `follow_up_instruction: The following findings were already identified in a previous analysis pass. ` +
+		`Identify ONLY additional cross-resource risks that were NOT covered above. ` +
+		`Do not repeat the findings above.` +
+		"\n\nprevious_findings: " + string(prevJSON)
 }
 
 // buildSystemPrompt constructs the system prompt for contextual analysis.
