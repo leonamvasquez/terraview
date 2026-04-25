@@ -75,7 +75,7 @@ func (r *Runner) LoadCases() ([]EvalCase, error) {
 		return nil, fmt.Errorf("eval: read dir %s: %w", r.evalsDir, err)
 	}
 
-	var cases []EvalCase
+	cases := make([]EvalCase, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
