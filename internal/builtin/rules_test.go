@@ -199,9 +199,386 @@ func TestCKV_AWS_158_CloudWatchLogGroupWithKMS(t *testing.T) {
 	checkSilent(t, "CKV_AWS_158", r)
 }
 
+// ---- EKS -----------------------------------------------------------------
+
+func TestCKV_AWS_58_EKSMissingSecretsEncryption(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_58", r)
+}
+
+func TestCKV_AWS_58_EKSWithSecretsEncryption(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{
+		"encryption_config": []interface{}{map[string]interface{}{
+			"resources": []interface{}{"secrets"},
+			"provider":  []interface{}{map[string]interface{}{"key_arn": "arn:aws:kms:us-east-1:123456789012:key/abc"}},
+		}},
+	})
+	checkSilent(t, "CKV_AWS_58", r)
+}
+
+func TestCKV_AWS_39_EKSPublicAccessOpen(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{
+		"vpc_config": []interface{}{map[string]interface{}{
+			"endpoint_public_access": true,
+			"public_access_cidrs":    []interface{}{"0.0.0.0/0"},
+		}},
+	})
+	checkFires(t, "CKV_AWS_39", r)
+}
+
+func TestCKV_AWS_39_EKSPublicAccessRestricted(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{
+		"vpc_config": []interface{}{map[string]interface{}{
+			"endpoint_public_access": true,
+			"public_access_cidrs":    []interface{}{"10.0.0.0/8"},
+		}},
+	})
+	checkSilent(t, "CKV_AWS_39", r)
+}
+
+func TestCKV_AWS_37_EKSMissingAuditLog(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{
+		"enabled_cluster_log_types": []interface{}{"controllerManager"},
+	})
+	checkFires(t, "CKV_AWS_37", r)
+}
+
+func TestCKV_AWS_37_EKSWithAPIAndAuditLog(t *testing.T) {
+	r := resource("aws_eks_cluster", "aws_eks_cluster.main", map[string]interface{}{
+		"enabled_cluster_log_types": []interface{}{"api", "audit", "controllerManager"},
+	})
+	checkSilent(t, "CKV_AWS_37", r)
+}
+
+// ---- ECS -----------------------------------------------------------------
+
+func TestCKV_AWS_97_ECSHostNetworkMode(t *testing.T) {
+	r := resource("aws_ecs_task_definition", "aws_ecs_task_definition.app", map[string]interface{}{
+		"network_mode": "host",
+	})
+	checkFires(t, "CKV_AWS_97", r)
+}
+
+func TestCKV_AWS_97_ECSAwsvpcNetworkMode(t *testing.T) {
+	r := resource("aws_ecs_task_definition", "aws_ecs_task_definition.app", map[string]interface{}{
+		"network_mode": "awsvpc",
+	})
+	checkSilent(t, "CKV_AWS_97", r)
+}
+
+func TestCKV_AWS_336_ECSCredentialInEnvVar(t *testing.T) {
+	r := resource("aws_ecs_task_definition", "aws_ecs_task_definition.app", map[string]interface{}{
+		"container_definitions": `[{"name":"app","environment":[{"name":"AWS_ACCESS_KEY_ID","value":"AKIA..."}]}]`,
+	})
+	checkFires(t, "CKV_AWS_336", r)
+}
+
+func TestCKV_AWS_336_ECSNoCredentialInEnvVar(t *testing.T) {
+	r := resource("aws_ecs_task_definition", "aws_ecs_task_definition.app", map[string]interface{}{
+		"container_definitions": `[{"name":"app","environment":[{"name":"ENV","value":"prod"}]}]`,
+	})
+	checkSilent(t, "CKV_AWS_336", r)
+}
+
+// ---- ECR -----------------------------------------------------------------
+
+func TestCKV_AWS_32_ECRScanOnPushDisabled(t *testing.T) {
+	r := resource("aws_ecr_repository", "aws_ecr_repository.app", map[string]interface{}{
+		"image_scanning_configuration": []interface{}{map[string]interface{}{"scan_on_push": false}},
+	})
+	checkFires(t, "CKV_AWS_32", r)
+}
+
+func TestCKV_AWS_32_ECRScanOnPushEnabled(t *testing.T) {
+	r := resource("aws_ecr_repository", "aws_ecr_repository.app", map[string]interface{}{
+		"image_scanning_configuration": []interface{}{map[string]interface{}{"scan_on_push": true}},
+	})
+	checkSilent(t, "CKV_AWS_32", r)
+}
+
+func TestCKV_AWS_136_ECRMutableTags(t *testing.T) {
+	r := resource("aws_ecr_repository", "aws_ecr_repository.app", map[string]interface{}{
+		"image_tag_mutability": "MUTABLE",
+	})
+	checkFires(t, "CKV_AWS_136", r)
+}
+
+func TestCKV_AWS_136_ECRImmutableTags(t *testing.T) {
+	r := resource("aws_ecr_repository", "aws_ecr_repository.app", map[string]interface{}{
+		"image_tag_mutability": "IMMUTABLE",
+	})
+	checkSilent(t, "CKV_AWS_136", r)
+}
+
+// ---- SQS -----------------------------------------------------------------
+
+func TestCKV_AWS_27_SQSNoEncryption(t *testing.T) {
+	r := resource("aws_sqs_queue", "aws_sqs_queue.jobs", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_27", r)
+}
+
+func TestCKV_AWS_27_SQSWithManagedSSE(t *testing.T) {
+	r := resource("aws_sqs_queue", "aws_sqs_queue.jobs", map[string]interface{}{
+		"sqs_managed_sse_enabled": true,
+	})
+	checkSilent(t, "CKV_AWS_27", r)
+}
+
+// ---- SNS -----------------------------------------------------------------
+
+func TestCKV_AWS_26_SNSNoKMS(t *testing.T) {
+	r := resource("aws_sns_topic", "aws_sns_topic.alerts", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_26", r)
+}
+
+func TestCKV_AWS_26_SNSWithKMS(t *testing.T) {
+	r := resource("aws_sns_topic", "aws_sns_topic.alerts", map[string]interface{}{
+		"kms_master_key_id": "arn:aws:kms:us-east-1:123456789012:key/abc",
+	})
+	checkSilent(t, "CKV_AWS_26", r)
+}
+
+// ---- Secrets Manager -----------------------------------------------------
+
+func TestCKV_AWS_149_SecretNoKMS(t *testing.T) {
+	r := resource("aws_secretsmanager_secret", "aws_secretsmanager_secret.db", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_149", r)
+}
+
+func TestCKV_AWS_149_SecretWithKMS(t *testing.T) {
+	r := resource("aws_secretsmanager_secret", "aws_secretsmanager_secret.db", map[string]interface{}{
+		"kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/abc",
+	})
+	checkSilent(t, "CKV_AWS_149", r)
+}
+
+// ---- CloudTrail ----------------------------------------------------------
+
+func TestCKV_AWS_35_CloudTrailNoKMS(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"enable_log_file_validation": true,
+		"s3_bucket_name":             "my-trail-bucket",
+	})
+	checkFires(t, "CKV_AWS_35", r)
+}
+
+func TestCKV_AWS_35_CloudTrailWithKMS(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"kms_key_id":                 "arn:aws:kms:us-east-1:123456789012:key/abc",
+		"enable_log_file_validation": true,
+		"s3_bucket_name":             "my-trail-bucket",
+	})
+	checkSilent(t, "CKV_AWS_35", r)
+}
+
+func TestCKV_AWS_36_CloudTrailNoLogValidation(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"kms_key_id":     "arn:aws:kms:us-east-1:123456789012:key/abc",
+		"s3_bucket_name": "my-trail-bucket",
+	})
+	checkFires(t, "CKV_AWS_36", r)
+}
+
+func TestCKV_AWS_36_CloudTrailWithLogValidation(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"kms_key_id":                 "arn:aws:kms:us-east-1:123456789012:key/abc",
+		"enable_log_file_validation": true,
+		"s3_bucket_name":             "my-trail-bucket",
+	})
+	checkSilent(t, "CKV_AWS_36", r)
+}
+
+func TestCKV_AWS_67_CloudTrailNoS3Bucket(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"kms_key_id":                 "arn:aws:kms:us-east-1:123456789012:key/abc",
+		"enable_log_file_validation": true,
+	})
+	checkFires(t, "CKV_AWS_67", r)
+}
+
+func TestCKV_AWS_67_CloudTrailWithS3Bucket(t *testing.T) {
+	r := resource("aws_cloudtrail", "aws_cloudtrail.main", map[string]interface{}{
+		"kms_key_id":                 "arn:aws:kms:us-east-1:123456789012:key/abc",
+		"enable_log_file_validation": true,
+		"s3_bucket_name":             "my-trail-bucket",
+	})
+	checkSilent(t, "CKV_AWS_67", r)
+}
+
+// ---- IAM -----------------------------------------------------------------
+
+func TestCKV_AWS_40_IAMUserInlinePolicy(t *testing.T) {
+	r := resource("aws_iam_user_policy", "aws_iam_user_policy.admin", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
+	})
+	checkFires(t, "CKV_AWS_40", r)
+}
+
+func TestCKV_AWS_40_IAMOtherTypeNotFlagged(t *testing.T) {
+	// aws_iam_policy should not trigger CKV_AWS_40
+	r := resource("aws_iam_policy", "aws_iam_policy.readonly", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::my-bucket/*"}]}`,
+	})
+	checkSilent(t, "CKV_AWS_40", r)
+}
+
+func TestCKV_AWS_60_IAMPolicyWildcardAdmin(t *testing.T) {
+	r := resource("aws_iam_policy", "aws_iam_policy.admin", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}`,
+	})
+	checkFires(t, "CKV_AWS_60", r)
+}
+
+func TestCKV_AWS_60_IAMPolicyRestricted(t *testing.T) {
+	r := resource("aws_iam_policy", "aws_iam_policy.readonly", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::my-bucket/*"}]}`,
+	})
+	checkSilent(t, "CKV_AWS_60", r)
+}
+
+func TestCKV_AWS_62_IAMRolePolicyWildcardAdmin(t *testing.T) {
+	r := resource("aws_iam_role_policy", "aws_iam_role_policy.admin", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":["*"],"Resource":["*"]}]}`,
+	})
+	checkFires(t, "CKV_AWS_62", r)
+}
+
+func TestCKV_AWS_62_IAMRolePolicyRestricted(t *testing.T) {
+	r := resource("aws_iam_role_policy", "aws_iam_role_policy.ec2", map[string]interface{}{
+		"policy": `{"Statement":[{"Effect":"Allow","Action":"ec2:DescribeInstances","Resource":"*"}]}`,
+	})
+	checkSilent(t, "CKV_AWS_62", r)
+}
+
+// ---- OpenSearch / Elasticsearch ------------------------------------------
+
+func TestCKV_AWS_84_OpenSearchNoAuditLog(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_84", r)
+}
+
+func TestCKV_AWS_84_OpenSearchWithAuditLog(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{
+		"log_publishing_options": []interface{}{
+			map[string]interface{}{"log_type": "AUDIT_LOGS", "enabled": true},
+		},
+	})
+	checkSilent(t, "CKV_AWS_84", r)
+}
+
+func TestCKV_AWS_137_OpenSearchNoEncryptAtRest(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{})
+	checkFires(t, "CKV_AWS_137", r)
+}
+
+func TestCKV_AWS_137_OpenSearchEncryptAtRestEnabled(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{
+		"encrypt_at_rest": []interface{}{map[string]interface{}{"enabled": true}},
+	})
+	checkSilent(t, "CKV_AWS_137", r)
+}
+
+func TestCKV_AWS_148_OpenSearchOpenPrincipal(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{
+		"access_policies": `{"Statement":[{"Effect":"Allow","Principal":"*","Action":"es:*","Resource":"*"}]}`,
+	})
+	checkFires(t, "CKV_AWS_148", r)
+}
+
+func TestCKV_AWS_148_OpenSearchRestrictedPrincipal(t *testing.T) {
+	r := resource("aws_opensearch_domain", "aws_opensearch_domain.main", map[string]interface{}{
+		"access_policies": `{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::123456789012:role/my-role"},"Action":"es:*","Resource":"*"}]}`,
+	})
+	checkSilent(t, "CKV_AWS_148", r)
+}
+
+// ---- RDS Cluster ---------------------------------------------------------
+
+func TestCKV_AWS_96_RDSClusterNoIAMAuth(t *testing.T) {
+	r := resource("aws_rds_cluster", "aws_rds_cluster.main", map[string]interface{}{
+		"iam_database_authentication_enabled": false,
+	})
+	checkFires(t, "CKV_AWS_96", r)
+}
+
+func TestCKV_AWS_96_RDSClusterWithIAMAuth(t *testing.T) {
+	r := resource("aws_rds_cluster", "aws_rds_cluster.main", map[string]interface{}{
+		"iam_database_authentication_enabled": true,
+		"storage_encrypted":                   true,
+	})
+	checkSilent(t, "CKV_AWS_96", r)
+}
+
+func TestCKV_AWS_162_RDSClusterNotEncrypted(t *testing.T) {
+	r := resource("aws_rds_cluster", "aws_rds_cluster.main", map[string]interface{}{
+		"storage_encrypted": false,
+	})
+	checkFires(t, "CKV_AWS_162", r)
+}
+
+func TestCKV_AWS_162_RDSClusterEncrypted(t *testing.T) {
+	r := resource("aws_rds_cluster", "aws_rds_cluster.main", map[string]interface{}{
+		"storage_encrypted":                   true,
+		"iam_database_authentication_enabled": true,
+	})
+	checkSilent(t, "CKV_AWS_162", r)
+}
+
+// ---- MSK -----------------------------------------------------------------
+
+func TestCKV_AWS_80_MSKPlaintextTransport(t *testing.T) {
+	r := resource("aws_msk_cluster", "aws_msk_cluster.main", map[string]interface{}{
+		"encryption_info": []interface{}{map[string]interface{}{
+			"encryption_in_transit": []interface{}{map[string]interface{}{
+				"client_broker": "PLAINTEXT",
+			}},
+		}},
+	})
+	checkFires(t, "CKV_AWS_80", r)
+}
+
+func TestCKV_AWS_80_MSKTLSTransport(t *testing.T) {
+	r := resource("aws_msk_cluster", "aws_msk_cluster.main", map[string]interface{}{
+		"encryption_info": []interface{}{map[string]interface{}{
+			"encryption_in_transit": []interface{}{map[string]interface{}{
+				"client_broker": "TLS",
+			}},
+			"encryption_at_rest": []interface{}{map[string]interface{}{
+				"data_volume_kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/abc",
+			}},
+		}},
+	})
+	checkSilent(t, "CKV_AWS_80", r)
+}
+
+func TestCKV_AWS_81_MSKNoKMSAtRest(t *testing.T) {
+	r := resource("aws_msk_cluster", "aws_msk_cluster.main", map[string]interface{}{
+		"encryption_info": []interface{}{map[string]interface{}{
+			"encryption_in_transit": []interface{}{map[string]interface{}{
+				"client_broker": "TLS",
+			}},
+		}},
+	})
+	checkFires(t, "CKV_AWS_81", r)
+}
+
+func TestCKV_AWS_81_MSKWithKMSAtRest(t *testing.T) {
+	r := resource("aws_msk_cluster", "aws_msk_cluster.main", map[string]interface{}{
+		"encryption_info": []interface{}{map[string]interface{}{
+			"encryption_in_transit": []interface{}{map[string]interface{}{
+				"client_broker": "TLS",
+			}},
+			"encryption_at_rest": []interface{}{map[string]interface{}{
+				"data_volume_kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/abc",
+			}},
+		}},
+	})
+	checkSilent(t, "CKV_AWS_81", r)
+}
+
 func TestAllRulesCount(t *testing.T) {
-	if n := len(All()); n != 20 {
-		t.Errorf("expected 20 built-in rules, got %d", n)
+	if n := len(All()); n != 43 {
+		t.Errorf("expected 43 built-in rules, got %d", n)
 	}
 }
 
