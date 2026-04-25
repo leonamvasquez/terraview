@@ -1,0 +1,10 @@
+{
+  "name": "no-issues",
+  "description": "Well-configured infra — encrypted S3, restricted SGs, encrypted RDS, CloudTrail enabled",
+  "required_findings_any": [],
+  "min_findings": 0,
+  "score_range": {"min": 6.0, "max": 10.0},
+  "required_sections": [],
+  "forbidden_strings": ["CRITICAL", "HIGH severity", "PLACEHOLDER"],
+  "max_response_tokens": 2000
+}

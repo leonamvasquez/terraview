@@ -1,0 +1,10 @@
+{
+  "name": "eks-production",
+  "description": "EKS cluster with node groups, IAM IRSA, ALB and RDS — IAM and network focus",
+  "required_findings_any": ["IAM", "privilege", "network", "EKS"],
+  "min_findings": 3,
+  "score_range": {"min": 3.0, "max": 8.0},
+  "required_sections": ["Security", "IAM", "Finding"],
+  "forbidden_strings": ["PLACEHOLDER", "TODO"],
+  "max_response_tokens": 3000
+}

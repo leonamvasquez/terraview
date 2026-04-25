@@ -1,0 +1,132 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.10.3",
+  "variables": {
+    "environment": { "value": "production" },
+    "region": { "value": "us-east-1" }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_vpc.secure",
+      "mode": "managed", "type": "aws_vpc", "name": "secure",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "cidr_block": "10.20.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": true,
+        "instance_tenancy": "default",
+        "tags": { "Name": "secure-vpc", "Environment": "production" }
+      }}
+    },
+    {
+      "address": "aws_s3_bucket.secure_data",
+      "mode": "managed", "type": "aws_s3_bucket", "name": "secure_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": "secure-data-prod-us-east-1",
+        "force_destroy": false,
+        "tags": { "Name": "secure-data", "Environment": "production" }
+      }}
+    },
+    {
+      "address": "aws_s3_bucket_server_side_encryption_configuration.secure_data",
+      "mode": "managed", "type": "aws_s3_bucket_server_side_encryption_configuration", "name": "secure_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": null,
+        "rule": [{ "apply_server_side_encryption_by_default": [{ "sse_algorithm": "aws:kms", "kms_master_key_id": null }] }]
+      }}
+    },
+    {
+      "address": "aws_s3_bucket_public_access_block.secure_data",
+      "mode": "managed", "type": "aws_s3_bucket_public_access_block", "name": "secure_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": null,
+        "block_public_acls": true,
+        "block_public_policy": true,
+        "ignore_public_acls": true,
+        "restrict_public_buckets": true
+      }}
+    },
+    {
+      "address": "aws_s3_bucket_versioning.secure_data",
+      "mode": "managed", "type": "aws_s3_bucket_versioning", "name": "secure_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": null,
+        "versioning_configuration": [{ "status": "Enabled" }]
+      }}
+    },
+    {
+      "address": "aws_security_group.restricted",
+      "mode": "managed", "type": "aws_security_group", "name": "restricted",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "secure-restricted-sg", "vpc_id": null,
+        "description": "Restricted security group — no public ingress",
+        "ingress": [
+          { "from_port": 443, "to_port": 443, "protocol": "tcp",
+            "cidr_blocks": ["10.20.0.0/16"], "ipv6_cidr_blocks": [],
+            "description": "HTTPS from VPC only", "self": false,
+            "prefix_list_ids": [], "security_groups": [] }
+        ],
+        "egress": [
+          { "from_port": 443, "to_port": 443, "protocol": "tcp",
+            "cidr_blocks": ["0.0.0.0/0"], "ipv6_cidr_blocks": [],
+            "description": "HTTPS egress", "self": false,
+            "prefix_list_ids": [], "security_groups": [] }
+        ],
+        "tags": { "Name": "secure-restricted-sg" }
+      }}
+    },
+    {
+      "address": "aws_db_instance.secure_rds",
+      "mode": "managed", "type": "aws_db_instance", "name": "secure_rds",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "identifier": "secure-rds",
+        "engine": "postgres",
+        "engine_version": "15.3",
+        "instance_class": "db.t3.medium",
+        "allocated_storage": 100,
+        "storage_encrypted": true,
+        "kms_key_id": null,
+        "publicly_accessible": false,
+        "backup_retention_period": 14,
+        "deletion_protection": true,
+        "skip_final_snapshot": false,
+        "multi_az": true,
+        "enabled_cloudwatch_logs_exports": ["postgresql", "upgrade"],
+        "tags": { "Name": "secure-rds", "Environment": "production" }
+      }}
+    },
+    {
+      "address": "aws_cloudtrail.main",
+      "mode": "managed", "type": "aws_cloudtrail", "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "name": "secure-cloudtrail",
+        "s3_bucket_name": null,
+        "include_global_service_events": true,
+        "is_multi_region_trail": true,
+        "enable_log_file_validation": true,
+        "kms_key_id": null,
+        "tags": { "Name": "secure-cloudtrail", "Environment": "production" }
+      }}
+    },
+    {
+      "address": "aws_kms_key.main",
+      "mode": "managed", "type": "aws_kms_key", "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "description": "Secure infra encryption key",
+        "enable_key_rotation": true,
+        "key_usage": "ENCRYPT_DECRYPT",
+        "deletion_window_in_days": 30,
+        "multi_region": false,
+        "tags": { "Name": "secure-kms-key" }
+      }}
+    }
+  ]
+}

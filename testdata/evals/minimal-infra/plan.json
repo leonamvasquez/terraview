@@ -1,0 +1,57 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.10.3",
+  "variables": {
+    "environment": { "value": "dev" },
+    "region": { "value": "us-east-1" }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_vpc.main",
+      "mode": "managed", "type": "aws_vpc", "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "cidr_block": "10.0.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": false,
+        "instance_tenancy": "default",
+        "tags": { "Name": "minimal-vpc" }
+      }}
+    },
+    {
+      "address": "aws_s3_bucket.public_data",
+      "mode": "managed", "type": "aws_s3_bucket", "name": "public_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": "minimal-public-data-bucket",
+        "force_destroy": true,
+        "tags": { "Name": "minimal-public-data" }
+      }}
+    },
+    {
+      "address": "aws_s3_bucket_acl.public_data",
+      "mode": "managed", "type": "aws_s3_bucket_acl", "name": "public_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "bucket": null,
+        "acl": "public-read"
+      }}
+    },
+    {
+      "address": "aws_instance.web",
+      "mode": "managed", "type": "aws_instance", "name": "web",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["create"], "before": null, "after": {
+        "ami": "ami-0abcdef1234567890",
+        "instance_type": "t3.micro",
+        "associate_public_ip_address": true,
+        "ebs_optimized": false,
+        "monitoring": false,
+        "root_block_device": [{ "encrypted": false, "volume_type": "gp3", "volume_size": 20 }],
+        "vpc_security_group_ids": null,
+        "subnet_id": null,
+        "tags": { "Name": "minimal-web" }
+      }}
+    }
+  ]
+}
