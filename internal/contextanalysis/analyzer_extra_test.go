@@ -330,3 +330,164 @@ func (c *cancelOnCallProvider) Analyze(_ context.Context, _ ai.Request) (ai.Comp
 	}
 	return ai.Completion{Summary: "ok"}, nil
 }
+
+// ── followUpStub ───────────────────────────────────────────────────────
+
+// followUpStub returns different findings on each call: call 1 = initial findings,
+// call 2+ = follow-up findings (one per round, empty on the last configured round).
+type followUpStub struct {
+	calls           int
+	initialFindings []rules.Finding
+	roundFindings   [][]rules.Finding // index 0 = round 1 response, etc.
+	roundErr        error             // returned on round 1 if non-nil
+}
+
+func (s *followUpStub) Name() string                                            { return "followup-stub" }
+func (s *followUpStub) Validate(_ context.Context) error                        { return nil }
+func (s *followUpStub) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
+func (s *followUpStub) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	s.calls++
+	if s.calls == 1 {
+		return ai.Completion{
+			Findings: s.initialFindings,
+			Summary:  "initial summary",
+			Model:    "stub-model",
+			Provider: "followup-stub",
+		}, nil
+	}
+	// follow-up rounds: calls 2, 3, ...
+	roundIdx := s.calls - 2
+	if s.roundErr != nil && roundIdx == 0 {
+		return ai.Completion{}, s.roundErr
+	}
+	if roundIdx < len(s.roundFindings) {
+		return ai.Completion{
+			Findings: s.roundFindings[roundIdx],
+			Summary:  fmt.Sprintf("round %d summary", roundIdx+1),
+			Model:    "stub-model",
+			Provider: "followup-stub",
+		}, nil
+	}
+	return ai.Completion{Summary: "no more"}, nil
+}
+
+// ── follow-up tests ────────────────────────────────────────────────────
+
+func TestWithFollowUpRounds_DisabledByDefault(t *testing.T) {
+	stub := &followUpStub{
+		initialFindings: []rules.Finding{
+			{RuleID: "CTX-001", Severity: "HIGH", Resource: "aws_instance.r0", Message: "issue"},
+		},
+	}
+	a := NewAnalyzer(stub, "", "", 0)
+	// followUpRounds defaults to 0 — no WithFollowUpRounds call
+
+	result, err := a.Analyze(context.Background(), makeResources(1), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stub.calls != 1 {
+		t.Errorf("want exactly 1 provider call (no follow-up), got %d", stub.calls)
+	}
+	if len(result.Findings) != 1 {
+		t.Errorf("want 1 finding, got %d", len(result.Findings))
+	}
+}
+
+func TestWithFollowUpRounds_OnRound(t *testing.T) {
+	stub := &followUpStub{
+		initialFindings: []rules.Finding{
+			{RuleID: "CTX-001", Severity: "HIGH", Resource: "aws_instance.r0", Message: "initial issue"},
+		},
+		roundFindings: [][]rules.Finding{
+			{
+				{RuleID: "CTX-002", Severity: "MEDIUM", Resource: "aws_s3_bucket.b0", Message: "follow-up issue"},
+			},
+		},
+	}
+	a := NewAnalyzer(stub, "", "", 0).WithFollowUpRounds(1)
+
+	result, err := a.Analyze(context.Background(), makeResources(1), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stub.calls != 2 {
+		t.Errorf("want 2 provider calls (initial + 1 follow-up), got %d", stub.calls)
+	}
+	if len(result.Findings) != 2 {
+		t.Fatalf("want 2 findings total, got %d", len(result.Findings))
+	}
+	// Second finding must be tagged as follow-up source
+	if result.Findings[1].Source != "ai/context/followup" {
+		t.Errorf("follow-up finding source must be 'ai/context/followup', got %q", result.Findings[1].Source)
+	}
+	if result.Findings[0].Source != "ai/context" {
+		t.Errorf("initial finding source must be 'ai/context', got %q", result.Findings[0].Source)
+	}
+}
+
+func TestWithFollowUpRounds_StopsEarly(t *testing.T) {
+	// Round 1 returns 0 new findings → loop must break; provider called 2x total.
+	stub := &followUpStub{
+		initialFindings: []rules.Finding{
+			{RuleID: "CTX-001", Severity: "HIGH", Resource: "aws_instance.r0", Message: "initial issue"},
+		},
+		roundFindings: [][]rules.Finding{
+			{}, // round 1: empty → early stop
+		},
+	}
+	a := NewAnalyzer(stub, "", "", 0).WithFollowUpRounds(3)
+
+	result, err := a.Analyze(context.Background(), makeResources(1), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stub.calls != 2 {
+		t.Errorf("want 2 provider calls (initial + 1 empty follow-up), got %d", stub.calls)
+	}
+	if len(result.Findings) != 1 {
+		t.Errorf("want 1 finding (no new from follow-up), got %d", len(result.Findings))
+	}
+}
+
+func TestWithFollowUpRounds_ErrorIsNonFatal(t *testing.T) {
+	stub := &followUpStub{
+		initialFindings: []rules.Finding{
+			{RuleID: "CTX-001", Severity: "HIGH", Resource: "aws_instance.r0", Message: "initial issue"},
+		},
+		roundErr: errors.New("provider down on follow-up"),
+	}
+	a := NewAnalyzer(stub, "", "", 0).WithFollowUpRounds(1)
+
+	result, err := a.Analyze(context.Background(), makeResources(1), nil)
+	if err != nil {
+		t.Fatalf("follow-up error must be non-fatal, got: %v", err)
+	}
+	// Initial result is preserved
+	if len(result.Findings) != 1 {
+		t.Errorf("want 1 finding (initial preserved), got %d", len(result.Findings))
+	}
+	if result.Findings[0].RuleID != "CTX-001" {
+		t.Errorf("want initial finding CTX-001, got %q", result.Findings[0].RuleID)
+	}
+}
+
+func TestBuildFollowUpPrompt_IncludesInstruction(t *testing.T) {
+	a := NewAnalyzer(&mockProvider{name: "mock"}, "", "", 0)
+
+	prev := []rules.Finding{
+		{RuleID: "CTX-001", Severity: "HIGH", Resource: "aws_instance.r0", Message: "some issue"},
+	}
+
+	prompt := a.buildFollowUpPrompt(prev)
+
+	if !strings.Contains(prompt, "follow_up_instruction") {
+		t.Errorf("prompt must contain 'follow_up_instruction', got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "previous_findings") {
+		t.Errorf("prompt must contain 'previous_findings', got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "CTX-001") {
+		t.Errorf("prompt must include previous finding rule_id CTX-001, got: %s", prompt)
+	}
+}

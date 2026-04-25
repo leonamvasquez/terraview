@@ -41,3 +41,23 @@ Before producing findings, reason through these steps internally:
 - **MEDIUM**: Defense-in-depth gaps, architectural anti-patterns, cost waste >30%
 - **LOW**: Hygiene issues, drift-prone patterns, minor optimization opportunities
 - **INFO**: Observations, positive patterns worth noting, documentation suggestions
+
+## Example
+
+Input context: Plan with 3 resources — `aws_s3_bucket.assets` (public), `aws_iam_role.app_role`
+(assume from EC2, attached inline policy granting `s3:*` on `*`), and `aws_db_instance.prod`
+(publicly_accessible=true, no deletion_protection).
+
+```json
+[
+  {
+    "rule_id": "CTX_001",
+    "severity": "CRITICAL",
+    "category": "security",
+    "resource": "aws_db_instance.prod",
+    "message": "RDS instance is publicly accessible with no deletion protection and is accessible from the same EC2 role that has s3:* — a compromised instance could exfiltrate both database and all S3 objects.",
+    "remediation": "Set publicly_accessible=false and deletion_protection=true on the RDS instance. Restrict aws_iam_role.app_role to specific S3 ARNs and remove RDS access from the same role.",
+    "references": ["CIS AWS 2.3.2", "NIST SC-7"]
+  }
+]
+```
