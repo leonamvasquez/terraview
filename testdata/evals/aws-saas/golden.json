@@ -1,0 +1,10 @@
+{
+  "name": "aws-saas",
+  "description": "Multi-tier SaaS platform with public API, EKS, RDS, and S3",
+  "required_findings_any": ["CKV_AWS_", "HIGH", "CRITICAL"],
+  "min_findings": 1,
+  "score_range": {"min": 0.0, "max": 9.0},
+  "required_sections": ["Security", "Finding", "finding"],
+  "forbidden_strings": ["PLACEHOLDER", "TODO", "N/A", "n/a"],
+  "max_response_tokens": 4000
+}
