@@ -123,7 +123,7 @@ func (a *Analyzer) Analyze(ctx context.Context, resources []parser.NormalizedRes
 	result.ExcludedNoOp = excluded
 
 	if a.followUpRounds > 0 && len(result.Findings) > 0 {
-		updated, fuErr := a.runFollowUp(ctx, active, graph, result)
+		updated, fuErr := a.runFollowUp(ctx, active, result)
 		if fuErr != nil {
 			// Non-fatal: log and return the initial result unchanged.
 			log.Printf("contextanalysis: follow-up rounds failed (non-fatal): %v", fuErr)
@@ -307,7 +307,7 @@ type followUpFinding struct {
 // runFollowUp executes up to a.followUpRounds additional AI calls, each asking for
 // cross-resource risks not yet identified. It accumulates new findings into a copy
 // of initial and appends round summaries. Breaks early when a round returns no new findings.
-func (a *Analyzer) runFollowUp(ctx context.Context, resources []parser.NormalizedResource, graph *topology.Graph, initial *Result) (*Result, error) {
+func (a *Analyzer) runFollowUp(ctx context.Context, resources []parser.NormalizedResource, initial *Result) (*Result, error) {
 	result := &Result{
 		Findings: make([]rules.Finding, len(initial.Findings)),
 		Summary:  initial.Summary,
