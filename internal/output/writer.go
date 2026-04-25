@@ -3,7 +3,9 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,15 +51,35 @@ func NewWriterWithConfig(config WriterConfig) *Writer {
 	return &Writer{config: config}
 }
 
-// WriteJSON writes the review result as structured JSON.
+// WriteJSON writes the review result as structured JSON to the given file path.
+// The parent directory is created automatically if it does not exist.
 func (w *Writer) WriteJSON(result aggregator.ReviewResult, path string) error {
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal review result: %w", err)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create directory for %s: %w", path, err)
+	}
+
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+
+	return nil
+}
+
+// WriteJSONWriter serializes the review result as JSON to an arbitrary io.Writer.
+// Used when --format json is requested without an explicit -o directory (stdout).
+func (w *Writer) WriteJSONWriter(result aggregator.ReviewResult, dst io.Writer) error {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal review result: %w", err)
+	}
+
+	if _, err := dst.Write(data); err != nil {
+		return fmt.Errorf("failed to write JSON: %w", err)
 	}
 
 	return nil

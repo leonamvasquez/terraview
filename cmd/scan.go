@@ -193,6 +193,10 @@ type reviewConfig struct {
 	effectiveAI     bool
 	effectiveFormat string
 
+	// userSpecifiedOutput is true when -o was explicitly set by the user.
+	// When false and format is json/sarif, output goes to stdout instead of a file.
+	userSpecifiedOutput bool
+
 	// Suppression
 	ignoreFile string
 
@@ -339,21 +343,22 @@ func resolveReviewConfig(scannerName string) (reviewConfig, error) {
 	}
 
 	return reviewConfig{
-		cfg:             cfg,
-		scannerName:     scannerName,
-		resolvedPlan:    resolvedPlan,
-		resolvedOutput:  resolvedOutput,
-		effectiveAI:     effectiveAI,
-		effectiveFormat: effectiveFormat,
-		ignoreFile:      resolvedIgnoreFile,
-		aiProvider:      effectiveProvider,
-		aiModel:         effectiveModel,
-		aiURL:           effectiveURL,
-		aiTimeout:       cfg.LLM.TimeoutSeconds,
-		aiTemperature:   cfg.LLM.Temperature,
-		aiAPIKey:        cfg.LLM.APIKey,
-		aiMaxResources:  resolveMaxResources(maxResourcesFlag, cfg.LLM.MaxResources),
-		aiNumCtx:        cfg.LLM.Ollama.NumCtx,
+		cfg:                 cfg,
+		scannerName:         scannerName,
+		resolvedPlan:        resolvedPlan,
+		resolvedOutput:      resolvedOutput,
+		effectiveAI:         effectiveAI,
+		effectiveFormat:     effectiveFormat,
+		userSpecifiedOutput: outputDir != "",
+		ignoreFile:          resolvedIgnoreFile,
+		aiProvider:          effectiveProvider,
+		aiModel:             effectiveModel,
+		aiURL:               effectiveURL,
+		aiTimeout:           cfg.LLM.TimeoutSeconds,
+		aiTemperature:       cfg.LLM.Temperature,
+		aiAPIKey:            cfg.LLM.APIKey,
+		aiMaxResources:      resolveMaxResources(maxResourcesFlag, cfg.LLM.MaxResources),
+		aiNumCtx:            cfg.LLM.Ollama.NumCtx,
 	}, nil
 }
 
@@ -410,35 +415,52 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		Version: Version,
 	})
 
+	// userSpecifiedOutput is true when -o was explicitly provided by the caller.
+	// When false, machine-readable formats (json/sarif) are written to stdout
+	// so the CLI can be composed with pipes without leftover files.
+	userSpecifiedOutput := rc.userSpecifiedOutput
+
 	switch rc.effectiveFormat {
 	case output.FormatHTML:
-		if err := os.MkdirAll(rc.resolvedOutput, 0755); err != nil {
+		if err := os.MkdirAll(rc.resolvedOutput, 0o755); err != nil {
 			return 0, fmt.Errorf("failed to create output directory: %w", err)
 		}
 		htmlPath := filepath.Join(rc.resolvedOutput, "review.html")
 		if err := writer.WriteHTML(result, htmlPath); err != nil {
 			return 0, fmt.Errorf("failed to write HTML: %w", err)
 		}
-		fmt.Printf("%s HTML report written: %s\n", output.Prefix(), htmlPath)
+		fmt.Fprintf(os.Stderr, "%s HTML report written: %s\n", output.Prefix(), htmlPath)
 
 	case output.FormatJSON:
-		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
-		if err := writer.WriteJSON(result, jsonPath); err != nil {
-			return 0, fmt.Errorf("failed to write JSON: %w", err)
+		if userSpecifiedOutput {
+			jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
+			if err := writer.WriteJSON(result, jsonPath); err != nil {
+				return 0, fmt.Errorf("failed to write JSON: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "Written: %s\n", jsonPath)
+		} else {
+			if err := writer.WriteJSONWriter(result, os.Stdout); err != nil {
+				return 0, fmt.Errorf("failed to write JSON: %w", err)
+			}
 		}
-		logVerbose("Written: %s", jsonPath)
 
 	case output.FormatSARIF:
-		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
-		if err := writer.WriteJSON(result, jsonPath); err != nil {
-			return 0, fmt.Errorf("failed to write JSON: %w", err)
+		if userSpecifiedOutput {
+			jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
+			if err := writer.WriteJSON(result, jsonPath); err != nil {
+				return 0, fmt.Errorf("failed to write JSON: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "Written: %s\n", jsonPath)
+			sarifPath := filepath.Join(rc.resolvedOutput, "review.sarif.json")
+			if err := writer.WriteSARIF(result, sarifPath); err != nil {
+				return 0, fmt.Errorf("failed to write SARIF: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "Written: %s\n", sarifPath)
+		} else {
+			if err := writer.WriteSARIFWriter(result, os.Stdout); err != nil {
+				return 0, fmt.Errorf("failed to write SARIF: %w", err)
+			}
 		}
-		logVerbose("Written: %s", jsonPath)
-		sarifPath := filepath.Join(rc.resolvedOutput, "review.sarif.json")
-		if err := writer.WriteSARIF(result, sarifPath); err != nil {
-			return 0, fmt.Errorf("failed to write SARIF: %w", err)
-		}
-		logVerbose("Written: %s", sarifPath)
 
 	default: // pretty, compact
 		jsonPath := filepath.Join(rc.resolvedOutput, "review.json")
@@ -453,11 +475,17 @@ func renderOutput(rc reviewConfig, result aggregator.ReviewResult, scannerResult
 		logVerbose("Written: %s", mdPath)
 	}
 
-	// Print summary
-	writer.PrintSummary(result)
+	// When a machine-readable format is piped to stdout (no -o flag), suppress
+	// all human-readable output so stdout contains only the serialized payload.
+	stdoutIsPayload := !userSpecifiedOutput &&
+		(rc.effectiveFormat == output.FormatJSON || rc.effectiveFormat == output.FormatSARIF)
 
-	// Print scanner stats if scanners were used
-	if scannerResult != nil && rc.effectiveFormat != output.FormatJSON {
+	if !stdoutIsPayload {
+		writer.PrintSummary(result)
+	}
+
+	// Print scanner stats if scanners were used (never on a stdout payload)
+	if !stdoutIsPayload && scannerResult != nil && rc.effectiveFormat != output.FormatJSON {
 		if brFlag {
 			fmt.Print(scanner.FormatScannerHeaderBR(*scannerResult))
 		} else {

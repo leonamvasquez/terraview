@@ -3,7 +3,9 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/leonamvasquez/terraview/internal/aggregator"
@@ -94,7 +96,8 @@ type SARIFArtifactLocation struct {
 	URI string `json:"uri"`
 }
 
-// WriteSARIF writes the review result as a SARIF 2.1.0 report.
+// WriteSARIF writes the review result as a SARIF 2.1.0 report to the given file path.
+// The parent directory is created automatically if it does not exist.
 func (w *Writer) WriteSARIF(result aggregator.ReviewResult, path string) error {
 	report := buildSARIF(result, w.config.Version)
 
@@ -103,8 +106,29 @@ func (w *Writer) WriteSARIF(result aggregator.ReviewResult, path string) error {
 		return fmt.Errorf("failed to marshal SARIF: %w", err)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create directory for %s: %w", path, err)
+	}
+
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write SARIF to %s: %w", path, err)
+	}
+
+	return nil
+}
+
+// WriteSARIFWriter serializes the review result as SARIF to an arbitrary io.Writer.
+// Used when --format sarif is requested without an explicit -o directory (stdout).
+func (w *Writer) WriteSARIFWriter(result aggregator.ReviewResult, dst io.Writer) error {
+	report := buildSARIF(result, w.config.Version)
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal SARIF: %w", err)
+	}
+
+	if _, err := dst.Write(data); err != nil {
+		return fmt.Errorf("failed to write SARIF: %w", err)
 	}
 
 	return nil
