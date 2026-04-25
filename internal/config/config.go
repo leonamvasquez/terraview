@@ -126,11 +126,30 @@ type SeverityWeightsConfig struct {
 
 // RulesConfig configures rule loading.
 type RulesConfig struct {
-	RequiredTags  []string `yaml:"required_tags"`
-	RulePacks     []string `yaml:"rule_packs"`
-	StrictMode    *bool    `yaml:"strict_mode,omitempty"`
-	DisabledRules []string `yaml:"disabled_rules,omitempty"`
-	EnabledRules  []string `yaml:"enabled_rules,omitempty"`
+	RequiredTags  []string           `yaml:"required_tags"`
+	RulePacks     []string           `yaml:"rule_packs"`
+	StrictMode    *bool              `yaml:"strict_mode,omitempty"`
+	DisabledRules []string           `yaml:"disabled_rules,omitempty"`
+	EnabledRules  []string           `yaml:"enabled_rules,omitempty"`
+	Custom        []CustomRuleConfig `yaml:"custom,omitempty"`
+}
+
+// CustomRuleConfig defines a user-supplied policy rule loaded from .terraview.yaml.
+type CustomRuleConfig struct {
+	ID           string              `yaml:"id"`
+	Severity     string              `yaml:"severity"`
+	Category     string              `yaml:"category,omitempty"`
+	Message      string              `yaml:"message"`
+	Remediation  string              `yaml:"remediation,omitempty"`
+	ResourceType string              `yaml:"resource_type,omitempty"`
+	Condition    CustomRuleCondition `yaml:"condition"`
+}
+
+// CustomRuleCondition specifies the field, operator, and optional value for a custom rule.
+type CustomRuleCondition struct {
+	Field string `yaml:"field"`
+	Op    string `yaml:"op"`
+	Value string `yaml:"value,omitempty"`
 }
 
 // OutputConfig configures output defaults.
@@ -285,11 +304,12 @@ type fileSeverityWeights struct {
 }
 
 type fileRulesConfig struct {
-	RequiredTags  *[]string `yaml:"required_tags"`
-	RulePacks     *[]string `yaml:"rule_packs"`
-	StrictMode    *bool     `yaml:"strict_mode,omitempty"`
-	DisabledRules *[]string `yaml:"disabled_rules,omitempty"`
-	EnabledRules  *[]string `yaml:"enabled_rules,omitempty"`
+	RequiredTags  *[]string           `yaml:"required_tags"`
+	RulePacks     *[]string           `yaml:"rule_packs"`
+	StrictMode    *bool               `yaml:"strict_mode,omitempty"`
+	DisabledRules *[]string           `yaml:"disabled_rules,omitempty"`
+	EnabledRules  *[]string           `yaml:"enabled_rules,omitempty"`
+	Custom        *[]CustomRuleConfig `yaml:"custom,omitempty"`
 }
 
 type fileOutputConfig struct {
@@ -450,6 +470,9 @@ func (f *fileConfig) merge(defaults Config) Config {
 		}
 		if f.Rules.EnabledRules != nil {
 			cfg.Rules.EnabledRules = *f.Rules.EnabledRules
+		}
+		if f.Rules.Custom != nil {
+			cfg.Rules.Custom = *f.Rules.Custom
 		}
 	}
 

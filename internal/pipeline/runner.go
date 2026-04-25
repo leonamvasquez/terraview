@@ -386,6 +386,23 @@ func MergeAndScore(cfg Config, resources []parser.NormalizedResource, topoGraph 
 
 	hardFindings := sr.HardFindings
 
+	// Evaluate user-defined policy rules from .terraview.yaml.
+	if len(cfg.Cfg.Rules.Custom) > 0 {
+		wrapped := make([]rules.ResourceLike, len(resources))
+		for i := range resources {
+			wrapped[i] = normalizedResourceWrapper{r: &resources[i]}
+		}
+		customFindings := rules.EvaluateCustomRules(
+			configToCustomRules(cfg.Cfg.Rules.Custom),
+			wrapped,
+			func(err error) { verbose("custom rule eval: %v", err) },
+		)
+		if len(customFindings) > 0 {
+			verbose("Custom rules: %d findings", len(customFindings))
+			hardFindings = append(hardFindings, customFindings...)
+		}
+	}
+
 	var aiValidationReport *aggregator.AIValidationReport
 	validatedAIFindings := sr.ContextFindings
 	if len(sr.ContextFindings) > 0 && topoGraph != nil {
@@ -727,6 +744,38 @@ func FilterDisabledRules(findings []rules.Finding, disabled []string) []rules.Fi
 		}
 	}
 	return filtered
+}
+
+// normalizedResourceWrapper adapts parser.NormalizedResource to rules.ResourceLike
+// without creating an import cycle or adding methods to the parser package.
+type normalizedResourceWrapper struct {
+	r *parser.NormalizedResource
+}
+
+func (w normalizedResourceWrapper) GetType() string                   { return w.r.Type }
+func (w normalizedResourceWrapper) GetAddress() string                { return w.r.Address }
+func (w normalizedResourceWrapper) GetValues() map[string]interface{} { return w.r.Values }
+
+// configToCustomRules converts config.CustomRuleConfig slice to rules.CustomRule slice.
+// The caller (pipeline) owns the conversion to keep config free from rules imports.
+func configToCustomRules(cfgRules []config.CustomRuleConfig) []rules.CustomRule {
+	out := make([]rules.CustomRule, len(cfgRules))
+	for i, c := range cfgRules {
+		out[i] = rules.CustomRule{
+			ID:           c.ID,
+			Severity:     c.Severity,
+			Category:     c.Category,
+			Message:      c.Message,
+			Remediation:  c.Remediation,
+			ResourceType: c.ResourceType,
+			Condition: rules.CustomCondition{
+				Field: c.Condition.Field,
+				Op:    c.Condition.Op,
+				Value: c.Condition.Value,
+			},
+		}
+	}
+	return out
 }
 
 // RecordToHistory stores the scan result in the local history database.
