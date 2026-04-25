@@ -850,17 +850,17 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
                           └─────────────┬───────────────┘
                                         │
 ┌───────────────────────────────────────┼───────────────────────────────────────────┐
-│                                 terraview CLI                                      │
-│  scan | status | fix | diagram | explain | history | provider | scanners | mcp     │
+│                                 terraview CLI                                     │
+│  scan | status | fix | diagram | explain | history | provider | scanners | mcp    │
 └───────────────────────────────────────┬───────────────────────────────────────────┘
                                         │
                ┌────────────────────────┼────────────────────────┐
                │                        │                        │
                ▼                        ▼                        ▼
-   ┌────────────────────┐  ┌─────────────────────┐  ┌────────────────────┐
-   │ Terraform Executor │  │  Plan JSON (--plan)  │  │   History Store   │
-   │   init + plan      │  │                      │  │   SQLite (local)  │
-   │   show -json       │  │                      │  │   trends/compare  │
+   ┌────────────────────┐  ┌──────────────────────┐  ┌────────────────────┐
+   │ Terraform Executor │  │  Plan JSON (--plan)  │  │   History Store    │
+   │   init + plan      │  │                      │  │   SQLite (local)   │
+   │   show -json       │  │                      │  │   trends/compare   │
    └─────────┬──────────┘  └──────────┬───────────┘  └────────────────────┘
              │                        │
              └───────────┬────────────┘
