@@ -88,11 +88,15 @@ func detectProvider(provider, resourceType string) string {
 }
 
 func (e *Extractor) scoreNetwork(resType string, vals map[string]interface{}) int {
-	rt := strings.ToLower(resType)
 	score := 0
 
-	if isNetworkResource(rt) {
-		score = 1
+	if p, ok := lookupProfile(resType); ok {
+		score = p.network
+	} else {
+		rt := strings.ToLower(resType)
+		if isNetworkResource(rt) {
+			score = 1
+		}
 	}
 
 	if hasTruthyKey(vals, "publicly_accessible") ||
@@ -115,18 +119,27 @@ func (e *Extractor) scoreNetwork(resType string, vals map[string]interface{}) in
 }
 
 func (e *Extractor) scoreEncryption(resType string, vals map[string]interface{}) int {
-	rt := strings.ToLower(resType)
 	score := 0
+	hasBaseEncryptionRisk := false
 
-	if needsEncryption(rt) {
-		score = 1
+	if p, ok := lookupProfile(resType); ok {
+		score = p.encryption
+		hasBaseEncryptionRisk = p.encryption > 0
+	} else {
+		rt := strings.ToLower(resType)
+		if needsEncryption(rt) {
+			score = 1
+			hasBaseEncryptionRisk = true
+		}
+	}
 
+	if hasBaseEncryptionRisk {
 		if hasFalsyKey(vals, "encrypted") ||
 			hasFalsyKey(vals, "encryption_at_rest") ||
 			hasFalsyKey(vals, "storage_encrypted") ||
 			hasFalsyKey(vals, "infrastructure_encryption_enabled") || // Azure
 			hasFalsyKey(vals, "enable_https_traffic_only") { // Azure storage
-			score = 3
+			score = maxInt(score, 3)
 		}
 
 		if !hasNonEmptyKey(vals, "kms_key_id") &&
@@ -151,14 +164,23 @@ func (e *Extractor) scoreEncryption(resType string, vals map[string]interface{})
 }
 
 func (e *Extractor) scoreIdentity(resType string, vals map[string]interface{}) int {
-	rt := strings.ToLower(resType)
 	score := 0
+	hasBaseIdentityRisk := false
 
-	if isIdentityResource(rt) {
-		score = 1
+	if p, ok := lookupProfile(resType); ok {
+		score = p.identity
+		hasBaseIdentityRisk = p.identity > 0
+	} else {
+		rt := strings.ToLower(resType)
+		if isIdentityResource(rt) {
+			score = 1
+			hasBaseIdentityRisk = true
+		}
+	}
 
+	if hasBaseIdentityRisk {
 		if hasWildcardPolicy(vals) {
-			score = 3
+			score = maxInt(score, 3)
 		}
 
 		if hasWildcardAssumeRole(vals) {
@@ -169,11 +191,16 @@ func (e *Extractor) scoreIdentity(resType string, vals map[string]interface{}) i
 	return score
 }
 
-func (e *Extractor) scoreGovernance(_ string, vals map[string]interface{}) int {
+func (e *Extractor) scoreGovernance(resType string, vals map[string]interface{}) int {
 	score := 0
 
+	if p, ok := lookupProfile(resType); ok {
+		score = p.governance
+	}
+
+	// Field-based adjustments apply to all resource types regardless of registry.
 	if !hasNonEmptyKey(vals, "tags") && !hasNonEmptyKey(vals, "labels") {
-		score = 1
+		score = maxInt(score, 1)
 	}
 
 	if hasTruthyKey(vals, "skip_final_snapshot") {
@@ -189,18 +216,28 @@ func (e *Extractor) scoreGovernance(_ string, vals map[string]interface{}) int {
 }
 
 func (e *Extractor) scoreObservability(resType string, vals map[string]interface{}) int {
-	rt := strings.ToLower(resType)
 	score := 0
+	hasBaseObservabilityRisk := false
 
-	if needsMonitoring(rt) {
-		score = 1
+	if p, ok := lookupProfile(resType); ok {
+		score = p.observability
+		hasBaseObservabilityRisk = p.observability > 0
+	} else {
+		rt := strings.ToLower(resType)
+		if needsMonitoring(rt) {
+			score = 1
+			hasBaseObservabilityRisk = true
+		}
+	}
 
+	if hasBaseObservabilityRisk {
 		if hasFalsyKey(vals, "logging") ||
 			hasFalsyKey(vals, "access_logs") ||
 			hasFalsyKey(vals, "enhanced_monitoring_enabled") {
-			score = 2
+			score = maxInt(score, 2)
 		}
 
+		rt := strings.ToLower(resType)
 		if !hasPositiveIntKey(vals, "retention_in_days") &&
 			!hasPositiveIntKey(vals, "backup_retention_period") {
 			if isLoggingResource(rt) || isDatabaseResource(rt) {
