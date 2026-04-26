@@ -135,7 +135,10 @@ func runHistoryList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !cfg.History.Enabled {
-		fmt.Fprintln(os.Stderr, "Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml")
+		fmt.Fprintln(os.Stderr, pick(
+			"History disabled. Set 'history.enabled: true' in .terraview.yaml",
+			"Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml",
+		))
 		return nil
 	}
 
@@ -157,7 +160,7 @@ func runHistoryList(cmd *cobra.Command, args []string) error {
 
 	projectName := resolveProjectName()
 	if historyAll {
-		projectName = "todos os projetos"
+		projectName = pick("all projects", "todos os projetos")
 	}
 
 	return history.FormatList(os.Stdout, records, historyFormat, projectName)
@@ -197,7 +200,10 @@ func runHistoryTrend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !cfg.History.Enabled {
-		fmt.Fprintln(os.Stderr, "Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml")
+		fmt.Fprintln(os.Stderr, pick(
+			"History disabled. Set 'history.enabled: true' in .terraview.yaml",
+			"Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml",
+		))
 		return nil
 	}
 
@@ -226,7 +232,7 @@ func runHistoryTrend(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(records) == 0 {
-		fmt.Fprintln(os.Stdout, "Nenhum scan encontrado para tendência.")
+		fmt.Fprintln(os.Stdout, pick("No scans found for trend.", "Nenhum scan encontrado para tendência."))
 		return nil
 	}
 
@@ -241,7 +247,10 @@ func runHistoryCompare(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !cfg.History.Enabled {
-		fmt.Fprintln(os.Stderr, "Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml")
+		fmt.Fprintln(os.Stderr, pick(
+			"History disabled. Set 'history.enabled: true' in .terraview.yaml",
+			"Histórico desabilitado. Configure 'history.enabled: true' em .terraview.yaml",
+		))
 		return nil
 	}
 
@@ -256,17 +265,17 @@ func runHistoryCompare(cmd *cobra.Command, args []string) error {
 	// Get latest scan
 	latest, err := store.GetLatest(projectHash)
 	if err != nil {
-		return fmt.Errorf("sem scans para comparar: %w", err)
+		return fmt.Errorf("%s: %w", pick("no scans to compare", "sem scans para comparar"), err)
 	}
 
 	var oldScan *history.ScanRecord
-	label := "Anterior"
+	label := pick("Previous", "Anterior")
 
 	if historyWith > 0 {
 		// Compare with specific scan ID
 		oldScan, err = store.GetByID(historyWith)
 		if err != nil {
-			return fmt.Errorf("scan #%d não encontrado: %w", historyWith, err)
+			return fmt.Errorf("scan #%d %s: %w", historyWith, pick("not found", "não encontrado"), err)
 		}
 		label = fmt.Sprintf("Scan #%d", historyWith)
 	} else if historySince != "" {
@@ -277,14 +286,14 @@ func runHistoryCompare(cmd *cobra.Command, args []string) error {
 		}
 		oldScan, err = store.GetOldestSince(projectHash, since)
 		if err != nil {
-			return fmt.Errorf("sem scans no período: %w", err)
+			return fmt.Errorf("%s: %w", pick("no scans in range", "sem scans no período"), err)
 		}
-		label = historySince + " atrás"
+		label = historySince + pick(" ago", " atrás")
 	} else {
 		// Default: compare with previous scan
 		oldScan, err = store.GetPrevious(projectHash)
 		if err != nil {
-			return fmt.Errorf("sem scan anterior para comparar: %w", err)
+			return fmt.Errorf("%s: %w", pick("no previous scan to compare", "sem scan anterior para comparar"), err)
 		}
 	}
 
@@ -324,20 +333,20 @@ func runHistoryClear(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "%d registros removidos.\n", removed)
+	fmt.Fprintf(os.Stdout, pick("%d record(s) removed.\n", "%d registro(s) removido(s).\n"), removed)
 	return nil
 }
 
 // validateExportParams checks export parameters before I/O. Pure function.
 func validateExportParams(outFile, format string) error {
 	if outFile == "" {
-		return fmt.Errorf("especifique o arquivo de saída com -o/--output")
+		return fmt.Errorf("%s", pick("specify output file with -o/--output", "especifique o arquivo de saída com -o/--output"))
 	}
 	switch format {
 	case "json", "csv":
 		return nil
 	default:
-		return fmt.Errorf("formato de exportação inválido: %q (use json ou csv)", format)
+		return fmt.Errorf("%s: %q", pick("invalid export format (use json or csv)", "formato de exportação inválido (use json ou csv)"), format)
 	}
 }
 
@@ -372,7 +381,7 @@ func runHistoryExport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stdout, "Exportado %d registros para %s\n", len(records), historyOutFile)
+	fmt.Fprintf(os.Stdout, pick("Exported %d record(s) to %s\n", "Exportado(s) %d registro(s) para %s\n"), len(records), historyOutFile)
 	return nil
 }
 
@@ -386,14 +395,14 @@ func parseSince(s string) (time.Time, error) {
 	// Try duration-like format: Nd (days), Nh (hours)
 	s = strings.TrimSpace(s)
 	if len(s) < 2 {
-		return time.Time{}, fmt.Errorf("formato inválido: %q (use 7d, 30d, 2025-01-01)", s)
+		return time.Time{}, fmt.Errorf("invalid format: %q (use 7d, 30d, 2025-01-01)", s)
 	}
 
 	unit := s[len(s)-1]
 	numStr := s[:len(s)-1]
 	num, err := strconv.Atoi(numStr)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("formato inválido: %q (use 7d, 30d, 2025-01-01)", s)
+		return time.Time{}, fmt.Errorf("invalid format: %q (use 7d, 30d, 2025-01-01)", s)
 	}
 
 	switch unit {
@@ -402,7 +411,7 @@ func parseSince(s string) (time.Time, error) {
 	case 'h':
 		return time.Now().Add(-time.Duration(num) * time.Hour), nil
 	default:
-		return time.Time{}, fmt.Errorf("unidade inválida %q (use d ou h)", string(unit))
+		return time.Time{}, fmt.Errorf("invalid unit %q (use d or h)", string(unit))
 	}
 }
 

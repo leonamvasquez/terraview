@@ -119,41 +119,60 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	fmt.Println(ansiBold + "  " + pick("AI Provider", "Provider de IA") + ansiReset)
 	fmt.Println()
 
-	providers := []struct {
-		name   string
+	// configuredProvider is the provider set in .terraview.yaml (may be empty).
+	configuredProvider := cfg.LLM.Provider
+
+	type providerSpec struct {
+		// name is the display name shown to the user.
+		name string
+		// configKey is the key used in .terraview.yaml llm.provider.
+		configKey string
+		// envVar is the environment variable required for HTTP providers (empty for CLI/local).
 		envVar string
-		cmd    string
-	}{
-		{"Ollama", "", "ollama"},
-		{"Gemini", "GEMINI_API_KEY", ""},
-		{"Claude", "ANTHROPIC_API_KEY", ""},
-		{"OpenAI", "OPENAI_API_KEY", ""},
-		{"DeepSeek", "DEEPSEEK_API_KEY", ""},
-		{"OpenRouter", "OPENROUTER_API_KEY", ""},
+		// cliBinary is the executable to look up for CLI-based providers (empty for HTTP).
+		cliBinary string
+	}
+
+	providerSpecs := []providerSpec{
+		{name: "ollama", configKey: "ollama", cliBinary: "ollama"},
+		{name: "gemini-cli", configKey: "gemini-cli", cliBinary: "gemini"},
+		{name: "claude-code", configKey: "claude-code", cliBinary: "claude"},
+		{name: "gemini", configKey: "gemini", envVar: "GEMINI_API_KEY"},
+		{name: "claude", configKey: "claude", envVar: "ANTHROPIC_API_KEY"},
+		{name: "openai", configKey: "openai", envVar: "OPENAI_API_KEY"},
+		{name: "deepseek", configKey: "deepseek", envVar: "DEEPSEEK_API_KEY"},
+		{name: "openrouter", configKey: "openrouter", envVar: "OPENROUTER_API_KEY"},
 	}
 
 	aiAvail := 0
-	for _, p := range providers {
-		if p.cmd != "" {
-			if commandAvailable(p.cmd) {
-				fmt.Printf("  %s[✓]%s %s %s(local)%s\n",
-					ansiGreen, ansiReset, p.name, ansiDim, ansiReset)
+	for _, p := range providerSpecs {
+		isConfigured := p.configKey == configuredProvider
+		defaultTag := ""
+		if isConfigured {
+			defaultTag = " " + ansiCyan + pick("(default)", "(padrão)") + ansiReset
+		}
+
+		if p.cliBinary != "" {
+			if commandAvailable(p.cliBinary) {
+				fmt.Printf("  %s[✓]%s %-12s %s%s%s%s\n",
+					ansiGreen, ansiReset, p.name, ansiDim,
+					pick("local CLI", "CLI local"), ansiReset, defaultTag)
 				aiAvail++
 			} else {
-				fmt.Printf("  %s[✗]%s %s %s(%s)%s\n",
+				fmt.Printf("  %s[✗]%s %-12s %s%s%s%s\n",
 					ansiRed, ansiReset, p.name, ansiDim,
-					pick("not installed", "não instalado"), ansiReset)
+					pick("not installed", "não instalado"), ansiReset, defaultTag)
 			}
 		} else if p.envVar != "" {
 			if os.Getenv(p.envVar) != "" {
-				fmt.Printf("  %s[✓]%s %s %s(%s %s)%s\n",
+				fmt.Printf("  %s[✓]%s %-12s %s%s %s%s%s\n",
 					ansiGreen, ansiReset, p.name, ansiDim, p.envVar,
-					pick("set", "configurado"), ansiReset)
+					pick("set", "configurado"), ansiReset, defaultTag)
 				aiAvail++
 			} else {
-				fmt.Printf("  %s[✗]%s %s %s(%s %s)%s\n",
+				fmt.Printf("  %s[✗]%s %-12s %s%s %s%s%s\n",
 					ansiYellow, ansiReset, p.name, ansiDim, p.envVar,
-					pick("not set", "não configurado"), ansiReset)
+					pick("not set", "não configurado"), ansiReset, defaultTag)
 			}
 		}
 	}

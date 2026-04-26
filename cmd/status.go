@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leonamvasquez/terraview/internal/history"
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 )
 
@@ -77,6 +78,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 }
 
 func printStatusHeader(ls *history.LastScan, projectDir string) {
+	msgs := i18n.T()
 	age := time.Since(ls.Timestamp)
 	ageStr := humanAge(age)
 
@@ -88,9 +90,9 @@ func printStatusHeader(ls *history.LastScan, projectDir string) {
 		}
 	}
 
-	fmt.Printf("\n%sOn project:%s %s\n", bold, reset, projectDir)
-	fmt.Printf("%sLast scan:%s  %s (%s)  ·  %d resources  ·  %s\n\n",
-		dim, reset,
+	fmt.Printf("\n%s%s%s %s\n", bold, msgs.StatusOnProject, reset, projectDir)
+	fmt.Printf("%s%s%s %s (%s)  ·  %d resources  ·  %s\n\n",
+		dim, msgs.StatusLastScan, reset,
 		ls.Timestamp.Format("2006-01-02 15:04"),
 		ageStr,
 		ls.TotalResources,
@@ -178,7 +180,7 @@ func printOpenFindings(ls *history.LastScan) {
 		shown = targets[:maxShown]
 	}
 
-	fmt.Printf("%sOpen findings:%s\n\n", bold, reset)
+	fmt.Printf("%s%s%s\n\n", bold, i18n.T().StatusOpenFindings, reset)
 	for _, f := range shown {
 		sevColor := yellow
 		if f.Severity == "CRITICAL" {

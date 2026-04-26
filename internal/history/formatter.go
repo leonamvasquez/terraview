@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/leonamvasquez/terraview/internal/i18n"
 )
 
 const (
@@ -27,8 +29,9 @@ func FormatList(w io.Writer, records []ScanRecord, format, projectName string) e
 }
 
 func formatPretty(w io.Writer, records []ScanRecord, projectName string) error {
+	msgs := i18n.T()
 	if len(records) == 0 {
-		fmt.Fprintln(w, "Nenhum scan encontrado.")
+		fmt.Fprintln(w, msgs.HistoryNoScans)
 		return nil
 	}
 
@@ -36,14 +39,14 @@ func formatPretty(w io.Writer, records []ScanRecord, projectName string) error {
 		projectName = records[0].ProjectDir
 	}
 
-	title := fmt.Sprintf("Histórico de Scans — %s", projectName)
+	title := fmt.Sprintf(msgs.HistoryTitle, projectName)
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w, strings.Repeat("═", len([]rune(title))))
 	fmt.Fprintln(w)
 
 	// Header
 	fmt.Fprintf(w, "%-4s %-20s %-10s %-10s %-8s %-10s %s\n",
-		"#", "Data", "Scanner", "Provider", "Overall", "Security", "Findings")
+		"#", msgs.HistoryColDate, "Scanner", "Provider", "Overall", "Security", "Findings")
 	fmt.Fprintf(w, "%-4s %-20s %-10s %-10s %-8s %-10s %s\n",
 		"───", "────────────────────", "──────────", "──────────", "────────", "──────────", "─────────────")
 
@@ -123,12 +126,13 @@ func formatCSV(w io.Writer, records []ScanRecord) error {
 
 // FormatTrendOutput formats the full trend display.
 func FormatTrendOutput(w io.Writer, trends []TrendData, projectName string, count int) {
+	msgs := i18n.T()
 	if len(trends) == 0 {
-		fmt.Fprintln(w, "Nenhum dado para tendência.")
+		fmt.Fprintln(w, msgs.TrendNoData)
 		return
 	}
 
-	title := fmt.Sprintf("Tendência — %s (últimos %d scans)", projectName, count)
+	title := fmt.Sprintf(msgs.TrendTitle, projectName, count)
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w, strings.Repeat("═", len([]rune(title))))
 	fmt.Fprintln(w)
@@ -140,13 +144,14 @@ func FormatTrendOutput(w io.Writer, trends []TrendData, projectName string, coun
 
 // FormatCompareOutput formats a comparison result.
 func FormatCompareOutput(w io.Writer, cr CompareResult, projectName string) {
-	title := fmt.Sprintf("Comparação — %s", projectName)
+	msgs := i18n.T()
+	title := fmt.Sprintf(msgs.CompareTitle, projectName)
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w, strings.Repeat("═", len([]rune(title))))
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "%-20s %-16s %-12s %-6s\n",
-		"", cr.Label, "Agora", "Delta")
+		"", cr.Label, msgs.CompareColNow, "Delta")
 	fmt.Fprintf(w, "%-20s %-16s %-12s %-6s\n",
 		"────────────────────", "────────────────", "────────────", "──────")
 

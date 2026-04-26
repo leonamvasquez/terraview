@@ -106,8 +106,8 @@ func TestParseSince_InvalidUnit(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown unit 'w', got nil")
 	}
-	if !strings.Contains(err.Error(), "unidade inválida") {
-		t.Errorf("error %q should mention 'unidade inválida'", err.Error())
+	if !strings.Contains(err.Error(), "invalid unit") {
+		t.Errorf("error %q should mention 'invalid unit'", err.Error())
 	}
 }
 
@@ -130,8 +130,8 @@ func TestParseSince_TooShort_SingleChar(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for single char 'd', got nil")
 	}
-	if !strings.Contains(err.Error(), "formato inválido") {
-		t.Errorf("error %q should mention 'formato inválido'", err.Error())
+	if !strings.Contains(err.Error(), "invalid format") {
+		t.Errorf("error %q should mention 'invalid format'", err.Error())
 	}
 }
 
@@ -140,8 +140,8 @@ func TestParseSince_NonNumeric(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-numeric 'Xd'")
 	}
-	if !strings.Contains(err.Error(), "formato inválido") {
-		t.Errorf("error %q should mention 'formato inválido'", err.Error())
+	if !strings.Contains(err.Error(), "invalid format") {
+		t.Errorf("error %q should mention 'invalid format'", err.Error())
 	}
 }
 
@@ -164,11 +164,11 @@ func TestParseSince_TableDriven(t *testing.T) {
 		{"24h", false, ""},
 		{"1h", false, ""},
 		{"0d", false, ""},
-		{"7w", true, "unidade inválida"},
-		{"7m", true, "unidade inválida"},
-		{"", true, "formato inválido"},
-		{"d", true, "formato inválido"},
-		{"Xd", true, "formato inválido"},
+		{"7w", true, "invalid unit"},
+		{"7m", true, "invalid unit"},
+		{"", true, "invalid format"},
+		{"d", true, "invalid format"},
+		{"Xd", true, "invalid format"},
 		{"nope", true, ""},
 	}
 	for _, tt := range tests {

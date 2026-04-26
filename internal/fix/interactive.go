@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
@@ -238,7 +239,7 @@ func (s *ApplySession) printDiff(pf PendingFix) {
 	}
 
 	s.printDiffHeader(strings.Repeat("─", 50))
-	fmt.Fprintf(s.out(), "  %sEsforço: %s%s\n", s.col(ansiDim), pf.Suggestion.Effort, s.col(ansiReset))
+	fmt.Fprintf(s.out(), "  %s%s: %s%s\n", s.col(ansiDim), i18n.T().FixEffort, pf.Suggestion.Effort, s.col(ansiReset))
 }
 
 // printUnifiedDiff renders a context diff between old and nLines, offset by

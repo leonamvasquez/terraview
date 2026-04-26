@@ -142,7 +142,8 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 
 	prompt := buildInfraExplainPrompt(resources, topoGraph)
 	if brFlag {
-		prompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text, descriptions, and explanations must be in Portuguese.\n"
+		// Translate content but keep JSON keys in English to avoid breaking the parser.
+		prompt += "\n\nIMPORTANT: You MUST respond entirely in Brazilian Portuguese (pt-BR). All text, descriptions, and explanations must be in Portuguese. However, JSON keys MUST remain in English exactly as specified (overview, architecture, components, connections, patterns, concerns, resource, purpose, role).\n"
 	}
 
 	req := ai.Request{
@@ -265,15 +266,59 @@ func parseInfraExplanation(raw string) *InfraExplanation {
 	}
 }
 
+// jsonKeyAliases maps pt-BR key variants (including accent-stripped forms) to
+// canonical English keys. This handles LLMs that ignore the "keep keys in English"
+// instruction when responding in pt-BR.
+var jsonKeyAliases = map[string]string{
+	"visao_geral":  "overview",
+	"visão_geral":  "overview",
+	"visao geral":  "overview",
+	"visão geral":  "overview",
+	"resumo":       "overview",
+	"arquitetura":  "architecture",
+	"componentes":  "components",
+	"conexoes":     "connections",
+	"conexões":     "connections",
+	"padroes":      "patterns",
+	"padrões":      "patterns",
+	"preocupacoes": "concerns",
+	"preocupações": "concerns",
+	"observacoes":  "concerns",
+	"observações":  "concerns",
+	"recurso":      "resource",
+	"finalidade":   "purpose",
+	"proposito":    "purpose",
+	"propósito":    "purpose",
+	"papel":        "role",
+}
+
+// normalizeMapKeys returns a new map with any pt-BR keys translated to their
+// canonical English equivalents so the rest of the parser can be language-agnostic.
+func normalizeMapKeys(m map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		canonical := strings.ToLower(k)
+		if alias, ok := jsonKeyAliases[canonical]; ok {
+			out[alias] = v
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // infraExplFromMap builds an InfraExplanation from a generic map, handling
 // overview/architecture as either string or nested object.
+// It also accepts pt-BR key variants via normalizeMapKeys.
 func infraExplFromMap(m map[string]interface{}) *InfraExplanation {
+	m = normalizeMapKeys(m)
 	expl := &InfraExplanation{}
 
 	switch v := m["overview"].(type) {
 	case string:
 		expl.Overview = v
 	case map[string]interface{}:
+		v = normalizeMapKeys(v)
 		if s, ok := v["overview"].(string); ok {
 			expl.Overview = s
 		} else if s, ok := v["summary"].(string); ok {
@@ -292,10 +337,11 @@ func infraExplFromMap(m map[string]interface{}) *InfraExplanation {
 		expl.Architecture = s
 	}
 
-	// Parse components array
+	// Parse components array — normalize nested keys so pt-BR variants are accepted.
 	if arr, ok := m["components"].([]interface{}); ok {
 		for _, item := range arr {
 			if obj, ok := item.(map[string]interface{}); ok {
+				obj = normalizeMapKeys(obj)
 				c := ComponentExpl{}
 				if s, ok := obj["resource"].(string); ok {
 					c.Resource = s
