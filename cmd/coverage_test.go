@@ -1652,8 +1652,9 @@ func TestRenderOutput_JSONFormat(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		resolvedOutput:  dir,
-		effectiveFormat: output.FormatJSON,
+		resolvedOutput:      dir,
+		effectiveFormat:     output.FormatJSON,
+		userSpecifiedOutput: true,
 	}
 	result := aggregator.ReviewResult{
 		PlanFile:       "test.json",
@@ -1700,8 +1701,9 @@ func TestRenderOutput_SARIFFormat(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		resolvedOutput:  dir,
-		effectiveFormat: output.FormatSARIF,
+		resolvedOutput:      dir,
+		effectiveFormat:     output.FormatSARIF,
+		userSpecifiedOutput: true,
 	}
 	result := aggregator.ReviewResult{
 		PlanFile:       "test.json",
@@ -3154,8 +3156,9 @@ func TestRenderOutput_SARIFWritesFile(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		resolvedOutput:  dir,
-		effectiveFormat: output.FormatSARIF,
+		resolvedOutput:      dir,
+		effectiveFormat:     output.FormatSARIF,
+		userSpecifiedOutput: true,
 	}
 	result := aggregator.ReviewResult{
 		PlanFile:       "test.json",
@@ -3429,8 +3432,9 @@ func TestRenderOutput_SARIFFormatWithFindings(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		effectiveFormat: output.FormatSARIF,
-		resolvedOutput:  tmpDir,
+		effectiveFormat:     output.FormatSARIF,
+		resolvedOutput:      tmpDir,
+		userSpecifiedOutput: true,
 	}
 
 	result := aggregator.ReviewResult{
@@ -3579,8 +3583,9 @@ func TestRenderOutput_FullFormat(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		effectiveFormat: output.FormatJSON,
-		resolvedOutput:  tmpDir,
+		effectiveFormat:     output.FormatJSON,
+		resolvedOutput:      tmpDir,
+		userSpecifiedOutput: true,
 	}
 
 	result := aggregator.ReviewResult{
@@ -4390,8 +4395,9 @@ func TestRenderOutput_SARIFWritesSarifFile(t *testing.T) {
 	strict = false
 
 	rc := reviewConfig{
-		effectiveFormat: output.FormatSARIF,
-		resolvedOutput:  tmpDir,
+		effectiveFormat:     output.FormatSARIF,
+		resolvedOutput:      tmpDir,
+		userSpecifiedOutput: true,
 	}
 	result := aggregator.ReviewResult{
 		Findings: []rules.Finding{
@@ -4503,4 +4509,198 @@ func TestValidateExportParams_InvalidFormat(t *testing.T) {
 	if err := validateExportParams("/tmp/out.txt", "xml"); err == nil {
 		t.Error("expected error for invalid format")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// BUG-001: --format json|sarif without -o writes to stdout (not a file)
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_JSONToStdout_NoOutputDir(t *testing.T) {
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
+	brFlag = false
+	strict = false
+
+	// userSpecifiedOutput: false simulates the user not passing -o
+	rc := reviewConfig{
+		effectiveFormat:     output.FormatJSON,
+		userSpecifiedOutput: false,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "plan.json",
+		TotalResources: 3,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 9.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	out, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected JSON output on stdout, got 0 bytes")
+	}
+	if !json.Valid(out) {
+		t.Errorf("stdout output is not valid JSON: %s", out[:min(200, len(out))])
+	}
+}
+
+func TestRenderOutput_SARIFToStdout_NoOutputDir(t *testing.T) {
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
+	brFlag = false
+	strict = false
+
+	// userSpecifiedOutput: false simulates the user not passing -o
+	rc := reviewConfig{
+		effectiveFormat:     output.FormatSARIF,
+		userSpecifiedOutput: false,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "plan.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Findings: []rules.Finding{
+			{RuleID: "CKV_AWS_1", Severity: "HIGH", Category: "security",
+				Resource: "aws_instance.web", Message: "Open SSH", Source: "scanner:checkov"},
+		},
+		SeverityCounts: map[string]int{"HIGH": 1},
+		CategoryCounts: map[string]int{"security": 1},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	out, _ := io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("renderOutput error: %v", err)
+	}
+	_ = exitCode
+	if len(out) == 0 {
+		t.Fatal("expected SARIF output on stdout, got 0 bytes")
+	}
+	if !json.Valid(out) {
+		t.Errorf("stdout output is not valid JSON (SARIF): %s", out[:min(200, len(out))])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BUG-002: --output <inexistent-dir> auto-creates the directory
+// ---------------------------------------------------------------------------
+
+func TestRenderOutput_JSONAutoCreateDir(t *testing.T) {
+	// Use a subdirectory that does not exist yet
+	base := t.TempDir()
+	subDir := filepath.Join(base, "nested", "sub", "dir")
+
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
+	brFlag = false
+	strict = false
+
+	rc := reviewConfig{
+		effectiveFormat:     output.FormatJSON,
+		resolvedOutput:      subDir,
+		userSpecifiedOutput: true,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "plan.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		Score:          scoring.Score{OverallScore: 10.0},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("expected auto-create dir to succeed, got: %v", err)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	jsonPath := filepath.Join(subDir, "review.json")
+	if _, err := os.Stat(jsonPath); err != nil {
+		t.Errorf("review.json not created in auto-created dir: %v", err)
+	}
+}
+
+func TestRenderOutput_SARIFAutoCreateDir(t *testing.T) {
+	base := t.TempDir()
+	subDir := filepath.Join(base, "deep", "nested")
+
+	oldBR, oldStrict := brFlag, strict
+	defer func() { brFlag, strict = oldBR, oldStrict }()
+	brFlag = false
+	strict = false
+
+	rc := reviewConfig{
+		effectiveFormat:     output.FormatSARIF,
+		resolvedOutput:      subDir,
+		userSpecifiedOutput: true,
+	}
+	result := aggregator.ReviewResult{
+		PlanFile:       "plan.json",
+		TotalResources: 1,
+		Verdict:        aggregator.Verdict{Safe: true, Label: "SAFE"},
+		SeverityCounts: map[string]int{},
+		CategoryCounts: map[string]int{},
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode, err := renderOutput(rc, result, nil)
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.ReadAll(r)
+
+	if err != nil {
+		t.Fatalf("expected auto-create dir to succeed, got: %v", err)
+	}
+	_ = exitCode
+	sarifPath := filepath.Join(subDir, "review.sarif.json")
+	if _, err := os.Stat(sarifPath); err != nil {
+		t.Errorf("review.sarif.json not created in auto-created dir: %v", err)
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
