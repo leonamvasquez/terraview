@@ -287,7 +287,7 @@ var jsonKeyAliases = map[string]string{
 	"observações":  "concerns",
 	"recurso":      "resource",
 	"finalidade":   "purpose",
-	"proposito":    "purpose",
+	"proposito":    "purpose", //nolint:misspell // pt-BR alias intentional
 	"propósito":    "purpose",
 	"papel":        "role",
 }
