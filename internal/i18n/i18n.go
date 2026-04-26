@@ -46,6 +46,23 @@ type Messages struct {
 	LblResources     string // "Resources analyzed" / "Recursos analisados"
 	LblTotalFindings string // "Total findings" / "Total de achados"
 	LblAIQuality     string // "AI analysis" / "Análise IA"
+
+	// History formatter
+	HistoryTitle   string // "Scan History — %s" / "Histórico de Scans — %s"
+	HistoryNoScans string // "No scans found." / "Nenhum scan encontrado."
+	HistoryColDate string // "Date" / "Data"
+	TrendTitle     string // "Trend — %s (last %d scans)" / "Tendência — %s (últimos %d scans)"
+	TrendNoData    string // "No data for trend." / "Nenhum dado para tendência."
+	CompareTitle   string // "Comparison — %s" / "Comparação — %s"
+	CompareColNow  string // "Now" / "Agora"
+
+	// Fix
+	FixEffort string // "Effort" / "Esforço"
+
+	// Status
+	StatusOnProject    string // "On project:" / "No projeto:"
+	StatusLastScan     string // "Last scan:" / "Último scan:"
+	StatusOpenFindings string // "Open findings:" / "Achados abertos:"
 }
 
 // active holds the currently selected language. 0 = EN, 1 = BR.
@@ -85,6 +102,20 @@ var en = Messages{
 	LblResources:     "Resources analyzed",
 	LblTotalFindings: "Total findings",
 	LblAIQuality:     "AI analysis",
+
+	HistoryTitle:   "Scan History — %s",
+	HistoryNoScans: "No scans found.",
+	HistoryColDate: "Date",
+	TrendTitle:     "Trend — %s (last %d scans)",
+	TrendNoData:    "No data for trend.",
+	CompareTitle:   "Comparison — %s",
+	CompareColNow:  "Now",
+
+	FixEffort: "Effort",
+
+	StatusOnProject:    "On project:",
+	StatusLastScan:     "Last scan:",
+	StatusOpenFindings: "Open findings:",
 }
 
 var br = Messages{
@@ -121,6 +152,20 @@ var br = Messages{
 	LblResources:     "Recursos analisados",
 	LblTotalFindings: "Total de achados",
 	LblAIQuality:     "Análise IA",
+
+	HistoryTitle:   "Histórico de Scans — %s",
+	HistoryNoScans: "Nenhum scan encontrado.",
+	HistoryColDate: "Data",
+	TrendTitle:     "Tendência — %s (últimos %d scans)",
+	TrendNoData:    "Nenhum dado para tendência.",
+	CompareTitle:   "Comparação — %s",
+	CompareColNow:  "Agora",
+
+	FixEffort: "Esforço",
+
+	StatusOnProject:    "No projeto:",
+	StatusLastScan:     "Último scan:",
+	StatusOpenFindings: "Achados abertos:",
 }
 
 // SetLang selects the active language. Use "pt-BR" for Portuguese.

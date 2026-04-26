@@ -6,16 +6,30 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonamvasquez/terraview/internal/i18n"
 )
 
 func TestFormatList_Pretty_EmptyList(t *testing.T) {
-	var buf bytes.Buffer
-	FormatList(&buf, nil, FormatPretty, "test-project")
-	out := buf.String()
-
-	if !strings.Contains(out, "Nenhum scan encontrado") {
-		t.Errorf("expected empty message, got: %s", out)
-	}
+	t.Run("default_english", func(t *testing.T) {
+		i18n.SetLang("en")
+		var buf bytes.Buffer
+		FormatList(&buf, nil, FormatPretty, "test-project")
+		out := buf.String()
+		if !strings.Contains(out, "No scans found") {
+			t.Errorf("expected English empty message, got: %s", out)
+		}
+	})
+	t.Run("pt_br", func(t *testing.T) {
+		i18n.SetLang("pt-BR")
+		t.Cleanup(func() { i18n.SetLang("en") })
+		var buf bytes.Buffer
+		FormatList(&buf, nil, FormatPretty, "test-project")
+		out := buf.String()
+		if !strings.Contains(out, "Nenhum scan encontrado") {
+			t.Errorf("expected pt-BR empty message, got: %s", out)
+		}
+	})
 }
 
 func TestFormatList_Pretty_WithRecords(t *testing.T) {
@@ -191,13 +205,25 @@ func TestFormatList_CSV_Values(t *testing.T) {
 }
 
 func TestFormatTrendOutput_Empty(t *testing.T) {
-	var buf bytes.Buffer
-	FormatTrendOutput(&buf, nil, "my-project", 0)
-	out := buf.String()
-
-	if !strings.Contains(out, "Nenhum dado para tendência") {
-		t.Errorf("expected no-data message: %s", out)
-	}
+	t.Run("default_english", func(t *testing.T) {
+		i18n.SetLang("en")
+		var buf bytes.Buffer
+		FormatTrendOutput(&buf, nil, "my-project", 0)
+		out := buf.String()
+		if !strings.Contains(out, "No data for trend") {
+			t.Errorf("expected English no-data message: %s", out)
+		}
+	})
+	t.Run("pt_br", func(t *testing.T) {
+		i18n.SetLang("pt-BR")
+		t.Cleanup(func() { i18n.SetLang("en") })
+		var buf bytes.Buffer
+		FormatTrendOutput(&buf, nil, "my-project", 0)
+		out := buf.String()
+		if !strings.Contains(out, "Nenhum dado para tendência") {
+			t.Errorf("expected pt-BR no-data message: %s", out)
+		}
+	})
 }
 
 func TestFormatTrendOutput_WithTrends(t *testing.T) {
@@ -206,34 +232,64 @@ func TestFormatTrendOutput_WithTrends(t *testing.T) {
 		ComputeTrend("Security", []float64{4.0, 6.0, 8.0}),
 	}
 
-	var buf bytes.Buffer
-	FormatTrendOutput(&buf, trends, "my-project", 3)
-	out := buf.String()
-
-	if !strings.Contains(out, "my-project") {
-		t.Errorf("missing project name: %s", out)
-	}
-	if !strings.Contains(out, "Tendência") {
-		t.Errorf("missing title: %s", out)
-	}
+	t.Run("default_english", func(t *testing.T) {
+		i18n.SetLang("en")
+		var buf bytes.Buffer
+		FormatTrendOutput(&buf, trends, "my-project", 3)
+		out := buf.String()
+		if !strings.Contains(out, "my-project") {
+			t.Errorf("missing project name: %s", out)
+		}
+		if !strings.Contains(out, "Trend") {
+			t.Errorf("missing English title: %s", out)
+		}
+	})
+	t.Run("pt_br", func(t *testing.T) {
+		i18n.SetLang("pt-BR")
+		t.Cleanup(func() { i18n.SetLang("en") })
+		var buf bytes.Buffer
+		FormatTrendOutput(&buf, trends, "my-project", 3)
+		out := buf.String()
+		if !strings.Contains(out, "my-project") {
+			t.Errorf("missing project name: %s", out)
+		}
+		if !strings.Contains(out, "Tendência") {
+			t.Errorf("missing pt-BR title: %s", out)
+		}
+	})
 }
 
 func TestFormatCompareOutput(t *testing.T) {
 	oldScan := ScanRecord{ScoreOverall: 5.0, ScoreSecurity: 4.0}
 	newScan := ScanRecord{ScoreOverall: 8.0, ScoreSecurity: 7.0}
 
-	cr := CompareTwoScans("Antes", oldScan, newScan)
-
-	var buf bytes.Buffer
-	FormatCompareOutput(&buf, cr, "my-project")
-	out := buf.String()
-
-	if !strings.Contains(out, "Comparação") {
-		t.Errorf("missing title: %s", out)
-	}
-	if !strings.Contains(out, "my-project") {
-		t.Errorf("missing project name: %s", out)
-	}
+	t.Run("default_english", func(t *testing.T) {
+		i18n.SetLang("en")
+		cr := CompareTwoScans("Previous", oldScan, newScan)
+		var buf bytes.Buffer
+		FormatCompareOutput(&buf, cr, "my-project")
+		out := buf.String()
+		if !strings.Contains(out, "Comparison") {
+			t.Errorf("missing English title: %s", out)
+		}
+		if !strings.Contains(out, "my-project") {
+			t.Errorf("missing project name: %s", out)
+		}
+	})
+	t.Run("pt_br", func(t *testing.T) {
+		i18n.SetLang("pt-BR")
+		t.Cleanup(func() { i18n.SetLang("en") })
+		cr := CompareTwoScans("Anterior", oldScan, newScan)
+		var buf bytes.Buffer
+		FormatCompareOutput(&buf, cr, "my-project")
+		out := buf.String()
+		if !strings.Contains(out, "Comparação") {
+			t.Errorf("missing pt-BR title: %s", out)
+		}
+		if !strings.Contains(out, "my-project") {
+			t.Errorf("missing project name: %s", out)
+		}
+	})
 }
 
 func TestTruncate(t *testing.T) {

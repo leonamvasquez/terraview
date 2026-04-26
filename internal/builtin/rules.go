@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
@@ -95,6 +96,12 @@ func isList(v map[string]interface{}, key string) bool {
 }
 
 func finding(r parser.NormalizedResource, ruleID, severity, category, msg, remediation string) *rules.Finding {
+	// Use the pt-BR message when available and the locale is active.
+	if i18n.IsBR() {
+		if translated, ok := messagesPTBR[ruleID]; ok {
+			msg = translated
+		}
+	}
 	return &rules.Finding{
 		RuleID:      ruleID,
 		Severity:    severity,
