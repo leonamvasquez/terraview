@@ -45,7 +45,7 @@ func TestApplyFix_RejectsUnbalancedBraces(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected brace-imbalance error")
 	}
-	if !strings.Contains(err.Error(), "chaves desbalanceadas") {
+	if !strings.Contains(err.Error(), "delimitadores desbalanceados") {
 		t.Errorf("error should mention brace imbalance, got: %v", err)
 	}
 
