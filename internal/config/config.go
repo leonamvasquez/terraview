@@ -88,19 +88,25 @@ type ScannerConfig struct {
 
 // LLMConfig configures LLM behavior.
 type LLMConfig struct {
-	Enabled        bool         `yaml:"enabled"`
-	Provider       string       `yaml:"provider"`
-	Model          string       `yaml:"model"`
-	URL            string       `yaml:"url"`
-	APIKey         string       `yaml:"api_key"`
-	TimeoutSeconds int          `yaml:"timeout_seconds"`
-	Temperature    float64      `yaml:"temperature"`
-	MaxResources   int          `yaml:"max_resources"`
-	Ollama         OllamaConfig `yaml:"ollama"`
-	Cache          bool         `yaml:"cache"`
-	CacheTTLHours  int          `yaml:"cache_ttl_hours"`
-	Redact         bool         `yaml:"redact"`     // redact sensitive data before sending to AI
-	RedactLog      bool         `yaml:"redact_log"` // show redaction manifest in verbose mode
+	Enabled        bool   `yaml:"enabled"`
+	Provider       string `yaml:"provider"`
+	Model          string `yaml:"model"`
+	URL            string `yaml:"url"`
+	APIKey         string `yaml:"api_key"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	// FixTimeoutSeconds overrides TimeoutSeconds for `terraview fix`. CLI
+	// providers (claude-code, gemini-cli) need more headroom because of
+	// subprocess startup + hook overhead. 0 = derive from TimeoutSeconds.
+	FixTimeoutSeconds int `yaml:"fix_timeout_seconds"`
+	// FixMaxRetries controls retries per fix call. 0 = use built-in default.
+	FixMaxRetries int          `yaml:"fix_max_retries"`
+	Temperature   float64      `yaml:"temperature"`
+	MaxResources  int          `yaml:"max_resources"`
+	Ollama        OllamaConfig `yaml:"ollama"`
+	Cache         bool         `yaml:"cache"`
+	CacheTTLHours int          `yaml:"cache_ttl_hours"`
+	Redact        bool         `yaml:"redact"`     // redact sensitive data before sending to AI
+	RedactLog     bool         `yaml:"redact_log"` // show redaction manifest in verbose mode
 }
 
 // OllamaConfig holds Ollama-specific resource limits.
@@ -270,19 +276,21 @@ type fileHistoryConfig struct {
 }
 
 type fileLLMConfig struct {
-	Enabled        *bool             `yaml:"enabled"`
-	Provider       *string           `yaml:"provider"`
-	Model          *string           `yaml:"model"`
-	URL            *string           `yaml:"url"`
-	APIKey         *string           `yaml:"api_key"`
-	TimeoutSeconds *int              `yaml:"timeout_seconds"`
-	Temperature    *float64          `yaml:"temperature"`
-	MaxResources   *int              `yaml:"max_resources"`
-	Ollama         *fileOllamaConfig `yaml:"ollama"`
-	Cache          *bool             `yaml:"cache"`
-	CacheTTLHours  *int              `yaml:"cache_ttl_hours"`
-	Redact         *bool             `yaml:"redact"`
-	RedactLog      *bool             `yaml:"redact_log"`
+	Enabled           *bool             `yaml:"enabled"`
+	Provider          *string           `yaml:"provider"`
+	Model             *string           `yaml:"model"`
+	URL               *string           `yaml:"url"`
+	APIKey            *string           `yaml:"api_key"`
+	TimeoutSeconds    *int              `yaml:"timeout_seconds"`
+	FixTimeoutSeconds *int              `yaml:"fix_timeout_seconds"`
+	FixMaxRetries     *int              `yaml:"fix_max_retries"`
+	Temperature       *float64          `yaml:"temperature"`
+	MaxResources      *int              `yaml:"max_resources"`
+	Ollama            *fileOllamaConfig `yaml:"ollama"`
+	Cache             *bool             `yaml:"cache"`
+	CacheTTLHours     *int              `yaml:"cache_ttl_hours"`
+	Redact            *bool             `yaml:"redact"`
+	RedactLog         *bool             `yaml:"redact_log"`
 }
 
 type fileOllamaConfig struct {
@@ -331,6 +339,12 @@ func (f *fileConfig) validate() error {
 		}
 		if f.LLM.TimeoutSeconds != nil && *f.LLM.TimeoutSeconds <= 0 {
 			return fmt.Errorf("llm.timeout_seconds must be positive, got %d", *f.LLM.TimeoutSeconds)
+		}
+		if f.LLM.FixTimeoutSeconds != nil && *f.LLM.FixTimeoutSeconds <= 0 {
+			return fmt.Errorf("llm.fix_timeout_seconds must be positive, got %d", *f.LLM.FixTimeoutSeconds)
+		}
+		if f.LLM.FixMaxRetries != nil && *f.LLM.FixMaxRetries < 0 {
+			return fmt.Errorf("llm.fix_max_retries must be >= 0, got %d", *f.LLM.FixMaxRetries)
 		}
 		if f.LLM.MaxResources != nil && *f.LLM.MaxResources < 0 {
 			return fmt.Errorf("llm.max_resources must be >= 0, got %d", *f.LLM.MaxResources)
@@ -404,6 +418,12 @@ func (f *fileConfig) merge(defaults Config) Config {
 		}
 		if f.LLM.TimeoutSeconds != nil {
 			cfg.LLM.TimeoutSeconds = *f.LLM.TimeoutSeconds
+		}
+		if f.LLM.FixTimeoutSeconds != nil {
+			cfg.LLM.FixTimeoutSeconds = *f.LLM.FixTimeoutSeconds
+		}
+		if f.LLM.FixMaxRetries != nil {
+			cfg.LLM.FixMaxRetries = *f.LLM.FixMaxRetries
 		}
 		if f.LLM.Temperature != nil {
 			cfg.LLM.Temperature = *f.LLM.Temperature

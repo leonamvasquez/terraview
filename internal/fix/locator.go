@@ -166,7 +166,7 @@ func findInFile(path, rType, rName string) (*Location, error) {
 			// Heredoc content doesn't affect brace depth — skip line entirely.
 			continue
 		}
-		if loc != nil || strings.Contains(line, needle) {
+		if loc != nil || lineStartsResourceBlock(line, needle) {
 			// Check for heredoc start on this line: <<MARKER or <<-MARKER
 			if idx := strings.Index(line, "<<"); idx >= 0 {
 				marker := strings.TrimSpace(line[idx+2:])
@@ -182,14 +182,22 @@ func findInFile(path, rType, rName string) (*Location, error) {
 		}
 
 		if loc == nil {
-			if strings.Contains(line, needle) {
+			// Match only at top level (depth == 0) and only when the line
+			// actually starts with `resource "TYPE" "NAME"` — ignore comments
+			// and substrings inside other blocks/strings.
+			if depth == 0 && lineStartsResourceBlock(line, needle) {
 				loc = &Location{File: path, StartLine: lineNum}
 				depth = countBraces(line)
 				if depth == 0 {
 					loc.EndLine = lineNum
 					return loc, nil
 				}
+				continue
 			}
+			// Track top-level depth so we don't match a needle that appears
+			// inside an unrelated block (e.g. nested data source with the same
+			// name in a description).
+			depth += countBraces(line)
 			continue
 		}
 
@@ -206,6 +214,31 @@ func findInFile(path, rType, rName string) (*Location, error) {
 		return nil, err
 	}
 	return nil, nil // not found in this file
+}
+
+// lineStartsResourceBlock reports whether line opens a resource block matching
+// needle (`resource "TYPE" "NAME"`). Strict-match: the trimmed line must begin
+// with needle followed by whitespace or `{`. Lines that begin with `#` or `//`
+// (comments) never match. This prevents false positives where the needle
+// appears inside a comment, string, or unrelated nested block — a class of
+// bug observed in real fix runs where the applier replaced the wrong block.
+func lineStartsResourceBlock(line, needle string) bool {
+	trimmed := strings.TrimLeft(line, " \t")
+	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+		return false
+	}
+	if !strings.HasPrefix(trimmed, needle) {
+		return false
+	}
+	rest := trimmed[len(needle):]
+	if rest == "" {
+		return true
+	}
+	switch rest[0] {
+	case ' ', '\t', '{':
+		return true
+	}
+	return false
 }
 
 // countBraces returns the net brace depth change for a single line.
