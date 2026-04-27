@@ -45,6 +45,19 @@ When current_hcl is provided:
 - Fake ARNs: arn:aws: with REGION, ACCOUNT_ID, or "your-" anywhere in it
 - String-quoted Terraform references: WRONG: kms_key_id = "aws_kms_key.main.arn" / RIGHT: kms_key_id = aws_kms_key.main.arn
 
+## Schema whitelist — never invent attributes
+
+If the user message contains "valid_attributes" for the resource type, every
+top-level argument or nested block name in the generated HCL MUST appear in
+that list. Common hallucinations to avoid:
+- "web_acl_arn" on aws_lb (WAF needs a separate aws_wafv2_web_acl_association resource)
+- "encryption" on aws_s3_bucket (use aws_s3_bucket_server_side_encryption_configuration)
+- "logging" on aws_s3_bucket (use aws_s3_bucket_logging)
+- "versioning" on aws_s3_bucket (use aws_s3_bucket_versioning)
+- "acl" on aws_s3_bucket (use aws_s3_bucket_acl)
+If a remediation requires a feature not in valid_attributes, emit a separate
+prerequisite resource block instead of inventing an argument.
+
 ## HCL syntax rules
 
 - Use jsonencode({}) for JSON — never heredoc with raw JSON (heredoc braces break block detection)
@@ -151,12 +164,13 @@ func buildUserMessage(req FixRequest) string {
 			Message  string `json:"message"`
 			Category string `json:"category"`
 		} `json:"finding"`
-		ResourceType  string                 `json:"resource_type"`
-		ResourceAddr  string                 `json:"resource_addr"`
-		CurrentHCL    string                 `json:"current_hcl,omitempty"`
-		FileContext   string                 `json:"file_context,omitempty"`
-		CurrentConfig map[string]interface{} `json:"current_config,omitempty"`
-		PlanContext   *planContext           `json:"plan_context,omitempty"`
+		ResourceType    string                 `json:"resource_type"`
+		ResourceAddr    string                 `json:"resource_addr"`
+		CurrentHCL      string                 `json:"current_hcl,omitempty"`
+		FileContext     string                 `json:"file_context,omitempty"`
+		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
+		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ValidAttributes []string               `json:"valid_attributes,omitempty"`
 	}
 
 	var p payload
@@ -174,6 +188,13 @@ func buildUserMessage(req FixRequest) string {
 	// Secondary: truncated plan-JSON config (resolved values, useful when HCL not available).
 	if req.CurrentHCL == "" {
 		p.CurrentConfig = TruncateConfig(req.ResourceConfig, req.Finding.RuleID)
+	}
+
+	// Curated whitelist of top-level attributes for the target resource type
+	// (only set for types in our schema map). The AI must not emit arguments
+	// outside this list — a post-flight check rejects fixes that violate it.
+	if attrs := KnownAttributes(req.ResourceType); len(attrs) > 0 {
+		p.ValidAttributes = attrs
 	}
 
 	// Build plan context from the index when available.

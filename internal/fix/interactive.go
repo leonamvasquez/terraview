@@ -348,6 +348,17 @@ func (s *ApplySession) applyFix(pf PendingFix) error {
 		return fmt.Errorf("HCL gerado tem chaves desbalanceadas — fix rejeitado para evitar corrupção do arquivo")
 	}
 
+	// Pre-flight: reject AI-hallucinated attributes (e.g. web_acl_arn on aws_lb)
+	// when the resource type is in our curated schema map.
+	if pf.Suggestion.HCL != "" {
+		resourceType := extractResourceTypeFromHCL(pf.Suggestion.HCL)
+		if resourceType != "" {
+			if err := ValidateAttributes(pf.Suggestion.HCL, resourceType); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Backup the file before any modification so we can roll back if validate fails.
 	bakPath, err := BackupFile(pf.Location.File)
 	if err != nil {
