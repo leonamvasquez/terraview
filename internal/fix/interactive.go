@@ -342,10 +342,11 @@ func readKey() string {
 }
 
 func (s *ApplySession) applyFix(pf PendingFix) error {
-	// Pre-flight: verify the generated HCL has balanced braces before touching
-	// any file. An unbalanced block would corrupt the target file.
-	if pf.Suggestion.HCL != "" && !isBraceBalanced(pf.Suggestion.HCL) {
-		return fmt.Errorf("HCL gerado tem chaves desbalanceadas — fix rejeitado para evitar corrupção do arquivo")
+	// Pre-flight: verify the generated HCL has balanced delimiters before
+	// touching any file. Unbalanced {}, [] or () corrupt the target file when
+	// the broken block bleeds into the next resource.
+	if pf.Suggestion.HCL != "" && !isHCLBalanced(pf.Suggestion.HCL) {
+		return fmt.Errorf("HCL gerado tem delimitadores desbalanceados ({}, [] ou ()) — fix rejeitado para evitar corrupção do arquivo")
 	}
 
 	// Pre-flight: reject AI-hallucinated attributes (e.g. web_acl_arn on aws_lb)

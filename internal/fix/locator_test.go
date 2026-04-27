@@ -79,6 +79,76 @@ func TestIsBraceBalanced(t *testing.T) {
 	}
 }
 
+func TestIsHCLBalanced(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want bool
+	}{
+		{
+			"balanced braces and brackets",
+			`resource "aws_iam_role_policy" "p" {
+  policy = jsonencode({
+    Statement = [
+      { Effect = "Allow", Action = ["s3:GetObject"] }
+    ]
+  })
+}`,
+			true,
+		},
+		{
+			"orphan closing bracket — bug observed in real fix",
+			`resource "aws_ecs_task_definition" "t" {
+  container_definitions = jsonencode([
+    { name = "app" }
+  ])
+}
+])`,
+			false,
+		},
+		{
+			"orphan closing paren",
+			`resource "aws_lb" "x" {
+  name = format("%s-lb", var.name))
+}`,
+			false,
+		},
+		{
+			"unbalanced brackets in jsonencode",
+			`policy = jsonencode({
+  Statement = [
+    { Effect = "Allow" }
+})`,
+			false,
+		},
+		{
+			"brackets inside string ignored",
+			`description = "use [a] and [b]"`,
+			true,
+		},
+		{
+			"brackets inside heredoc ignored",
+			`policy = <<POLICY
+[ this ] is ( raw )
+POLICY`,
+			true,
+		},
+		{
+			"closing before opening",
+			`}}{{`,
+			false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isHCLBalanced(tc.hcl)
+			if got != tc.want {
+				t.Errorf("isHCLBalanced() = %v, want %v\nHCL:\n%s", got, tc.want, tc.hcl)
+			}
+		})
+	}
+}
+
 func TestFindResource_HeredocPolicy(t *testing.T) {
 	// A .tf file where the resource contains a heredoc JSON policy.
 	// The brace inside the heredoc must not confuse the block finder.
@@ -128,6 +198,75 @@ resource "aws_kms_key" "other" {
 	}
 	if loc2 == nil {
 		t.Fatal("expected location for aws_kms_key.other, got nil")
+	}
+}
+
+func TestLineStartsResourceBlock(t *testing.T) {
+	needle := `resource "aws_lb" "main"`
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{"plain header", `resource "aws_lb" "main" {`, true},
+		{"indented header", `  resource "aws_lb" "main" {`, true},
+		{"header without brace", `resource "aws_lb" "main"`, true},
+		{"comment hash", `# resource "aws_lb" "main" {`, false},
+		{"comment slash", `// resource "aws_lb" "main" {`, false},
+		{"description string", `description = "see resource \"aws_lb\" \"main\""`, false},
+		{"different name prefix", `resource "aws_lb" "main_other" {`, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lineStartsResourceBlock(tc.line, needle); got != tc.want {
+				t.Errorf("got %v, want %v for %q", got, tc.want, tc.line)
+			}
+		})
+	}
+}
+
+func TestFindResource_IgnoresCommentedHeader(t *testing.T) {
+	content := `# old version: resource "aws_lb" "main" { ... }
+resource "aws_lb" "main" {
+  name = "real"
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lb.tf")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loc, err := FindResource(dir, "aws_lb.main")
+	if err != nil || loc == nil {
+		t.Fatalf("FindResource: loc=%v err=%v", loc, err)
+	}
+	if loc.StartLine != 2 {
+		t.Errorf("StartLine = %d, want 2 (must skip commented header on line 1)", loc.StartLine)
+	}
+}
+
+func TestFindResource_IgnoresNamePrefix(t *testing.T) {
+	// Two resources with similar names: the locator must not match the
+	// "main_other" header when asked for "main".
+	content := `resource "aws_lb" "main_other" {
+  name = "other"
+}
+
+resource "aws_lb" "main" {
+  name = "real"
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lb.tf")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loc, err := FindResource(dir, "aws_lb.main")
+	if err != nil || loc == nil {
+		t.Fatalf("FindResource: loc=%v err=%v", loc, err)
+	}
+	if loc.StartLine != 5 {
+		t.Errorf("StartLine = %d, want 5 (must not match main_other on line 1)", loc.StartLine)
 	}
 }
 
