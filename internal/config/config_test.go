@@ -112,6 +112,40 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_FixTimeoutAndRetries(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+llm:
+  fix_timeout_seconds: 240
+  fix_max_retries: 3
+`
+	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.LLM.FixTimeoutSeconds != 240 {
+		t.Errorf("expected fix_timeout_seconds 240, got %d", cfg.LLM.FixTimeoutSeconds)
+	}
+	if cfg.LLM.FixMaxRetries != 3 {
+		t.Errorf("expected fix_max_retries 3, got %d", cfg.LLM.FixMaxRetries)
+	}
+}
+
+func TestLoad_InvalidFixTimeout(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+llm:
+  fix_timeout_seconds: -1
+`
+	os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(content), 0644)
+	if _, err := Load(dir); err == nil {
+		t.Fatal("expected validation error for negative fix_timeout_seconds")
+	}
+}
+
 func TestLoad_NegativeWeight(t *testing.T) {
 	dir := t.TempDir()
 	content := `
