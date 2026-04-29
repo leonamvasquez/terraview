@@ -535,11 +535,20 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 	if maxResources > 0 && effectiveResources > maxResources {
 		effectiveResources = maxResources
 	}
-	scaledTimeout := timeoutSecs + effectiveResources*3 + util.ContextTimeoutGraceSecs
+	// CLI-based providers (gemini-cli, claude-code) spawn a subprocess that
+	// loads its own model context and frequently exceeds the default 120s.
+	// Apply a higher base timeout to match the Sprint 14 fix pattern used
+	// in `terraview fix`.
+	isCLIProvider := providerName == "gemini-cli" || providerName == "claude-code"
+	baseTimeout := timeoutSecs
+	if isCLIProvider && baseTimeout < 300 {
+		baseTimeout = 300
+	}
+	scaledTimeout := baseTimeout + effectiveResources*3 + util.ContextTimeoutGraceSecs
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(scaledTimeout)*time.Second)
 	defer cancel()
 	verbose("AI timeout: %ds (base %d + %d resources × 3s + %ds grace)",
-		scaledTimeout, timeoutSecs, effectiveResources, util.ContextTimeoutGraceSecs)
+		scaledTimeout, baseTimeout, effectiveResources, util.ContextTimeoutGraceSecs)
 
 	var monitor *runtime.Monitor
 	if providerName == "ollama" {
@@ -552,7 +561,7 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 		APIKey:       apiKey,
 		BaseURL:      url,
 		Temperature:  temp,
-		TimeoutSecs:  timeoutSecs,
+		TimeoutSecs:  baseTimeout,
 		MaxTokens:    util.DefaultAnalyzeMaxTokens,
 		MaxRetries:   2,
 		MaxResources: maxResources,
