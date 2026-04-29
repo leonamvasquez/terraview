@@ -7,6 +7,54 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [0.9.0] — 2026-04-29
+
+Sprints 6–14: hardening do core (cobertura, qualidade do fix engine, scanner standalone expandido, eval framework de IA e correções de UX). Foco em estabilidade pré-release público.
+
+### Added
+
+- **Built-in scanner expandido de 20 → 43 regras CKV_AWS** — cobertura adicional em EKS, ECS, ECR, SQS, SNS, IAM, CloudTrail, OpenSearch, MSK e RDS Cluster (`internal/builtin/`, PR #100)
+- **Policy-as-code** — regras customizadas declaradas em `.terraview.yaml` via engine de regras nativo (`internal/rules/`, PR #102)
+- **Type-aware feature extraction** — registro com 70+ tipos AWS para extração semântica precisa por recurso (PR #101)
+- **AI eval framework** — golden files em `testdata/evals/` (`aws-saas`, `eks-production`, `minimal-infra`, `no-issues`) para validar regressões de prompt; expandido de 2 para 4 cenários
+- **Few-shot examples nos prompts** + follow-up loop em `contextanalysis` para refinar findings ambíguos
+- **Schema whitelist no fix engine** — atributos por tipo de recurso enviados ao prompt + validação pós-resposta rejeita HCL com argumentos alucinados (ex.: `web_acl_arn` em `aws_lb`) (PR #113)
+- **Validação de delimitadores HCL no fix** — pre-flight valida `{}`, `[]` e `()` aware de strings/comentários/heredocs antes de aplicar (PR #111)
+- **Locator com match estrito** — `findInFile` ignora cabeçalhos comentados (`# resource ...`) e prefixos de nome similares (`main_other` ≠ `main`) (PR #114)
+- **Timeout/retries configuráveis para CLI providers** — `llm.fix_timeout_seconds` e `llm.fix_max_retries` no `.terraview.yaml`; defaults aumentados para `claude-code`/`gemini-cli` (180s × 2 retries) (PR #112)
+- **Consolidação de findings IAM** — IAM com 3+ violações no mesmo recurso é agregado em um único finding (PR #81)
+- **`scan --findings ext.json`** — importação de findings externos (Checkov/tfsec/Trivy)
+
+### Changed
+
+- **JSON/SARIF em stdout quando `-o` ausente** — antes silenciava o output; agora escreve no `os.Stdout` se não houver diretório (PR #107)
+- **Auto-criação do diretório de saída** — `-o /path/inexistente` cria a árvore via `os.MkdirAll` (PR #107)
+- **i18n completa** — `history`, `status`, `scan`, `fix`, `setup`, `explain` traduzem todas as strings com `--br`; parser de `explain` aceita seções em EN e PT-BR (PR #108)
+- **`setup` detecta CLI providers** — `gemini-cli` e `claude-code` mostram status real via `exec.LookPath` (PR #108)
+
+### Tests
+
+- **Cobertura ampliada para 75%+** em pacotes críticos: `pipeline` 38.5%→75.1% (PR #75, #98), `cmd` 51%→75.1% (#58d8b54), `internal/builtin` 54.2%→98.3% (PR #83), `contextanalysis` 55.3%→93.3% (PR #82), `installer` 16.4%→61.1% (PR #84), `history`, `terraformexec`, `mcp`, `scanner`, `diagram`, `runtime` e providers (PRs #92–#99)
+- **Novos testes do fix engine** — `TestIsHCLBalanced`, `TestLineStartsResourceBlock`, `TestFindResource_IgnoresCommentedHeader/IgnoresNamePrefix`, `TestExtractTopLevelAttrs`, `TestValidateAttributes`, `TestExtractResourceTypeFromHCL`, `TestKnownAttributes`
+
+### Removed
+
+- **Código morto** — `internal/regression` (PR #86), `installer` reduzido a `OllamaInstalled()` (PR #85), pacote `internal/ai/eval` duplicado (PR #87), `workspace.Detect()`/`DetectResult` (PR #88), `downloader.Exists` e constantes não usadas (PR #89)
+- **`examples/aws-saas`** stub removido — plan canônico vive em `testdata/evals/aws-saas/plan.json` (PR #91)
+
+### Documentation
+
+- **Screenshots** — `scan.png` e `diagram.png` integrados nas seções "Exemplos" e "Diagram" dos dois READMEs
+
+### Dependencies
+
+- `modernc.org/sqlite` 1.48.2 → 1.49.1 (PR #80)
+- `github/codeql-action` 4.35.1 → 4.35.2 (PR #79)
+- `goreleaser/goreleaser-action` 7.0.0 → 7.1.0 (PR #77)
+- Bumps de imagens base (golang, alpine) — PRs #76, #78
+
+---
+
 ## [0.8.0] — 2026-04-19
 
 Sprint 5: polimento do core loop, qualidade de IA e scanner standalone sem dependências externas. Score geral: 8.1 → **8.8/10**.
