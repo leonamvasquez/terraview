@@ -4,11 +4,25 @@
 
 | Scanner | Descrição | Instalação |
 |---------|-----------|------------|
+| **builtin** | Scanner em Go puro embutido no terraview — 43 regras CKV_AWS, sem dependências externas | já incluído no binário |
 | [Checkov](https://www.checkov.io/) | Scanner de segurança e compliance para IaC | `terraview scanners install checkov` |
 | [tfsec](https://aquasecurity.github.io/tfsec/) | Análise estática de segurança para Terraform | `terraview scanners install tfsec` |
 | [Terrascan](https://runterrascan.io/) | Detector de violations e compliance | `terraview scanners install terrascan` |
 
 Os findings de todos os scanners são normalizados, deduplicados e exibidos em um scorecard unificado.
+
+## Scanner `builtin` (sem dependências)
+
+O `builtin` é um scanner em Go puro empacotado dentro do próprio binário do terraview. Ele roda sem `pip`, `npm` ou downloads externos — útil para CI air-gapped, imagens Docker mínimas e ambientes onde instalar scanners de terceiros é inviável.
+
+```bash
+terraview scan builtin                      # scanner embutido + IA (se configurada)
+terraview scan builtin --static             # somente builtin, sem IA
+```
+
+Quando nenhum scanner externo é detectado no `PATH`, o terraview usa o `builtin` como fallback automático.
+
+**Cobertura atual (43 regras CKV_AWS):** S3, RDS, EC2, Security Groups, Lambda, CloudFront, DynamoDB, ElastiCache, CloudWatch, EKS, ECS, ECR, SQS, SNS, IAM, CloudTrail, OpenSearch, MSK e RDS Cluster.
 
 ## Gerenciamento de scanners
 

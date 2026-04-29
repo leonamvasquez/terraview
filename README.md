@@ -15,11 +15,11 @@
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/leonamvasquez/terraview/badge)](https://scorecard.dev/viewer/?uri=github.com/leonamvasquez/terraview)
 
-O Terraview é uma ferramenta de análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA executada **em paralelo**.
+O Terraview é uma ferramenta Open Source de análise de segurança para planos Terraform que combina scanners estáticos (Checkov, tfsec, Terrascan) com análise contextual por IA executada **em paralelo**.
 
-Ele inspeciona infraestrutura provisionada com Terraform, detecta misconfigurations de segurança e compliance usando scanners open-source consagrados, e automaticamente enriquece o resultado com análise contextual multi-provider de IA quando um provider está configurado. Suporta Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code e qualquer API OpenAI-compatible via provider Custom.
+Ele inspeciona infraestrutura provisionada com Terraform, detecta misconfigurations de segurança e compliance usando scanners open-source consagrados, e automaticamente enriquece o resultado com análise contextual multi-provider de IA quando um provider está configurado.
 
-O Terraview roda como binário único, sem dependências externas. Quando um provider de IA está configurado, scanner e IA rodam em paralelo automaticamente. Use `--static` para rodar somente o scanner, sem IA.
+O Terraview roda como binário único, sem dependências externas. Quando um provider de IA está configurado, scanner e IA rodam em paralelo automaticamente.
 
 ## Sumário
 
@@ -57,6 +57,8 @@ O Terraview roda como binário único, sem dependências externas. Quando um pro
 ## Funcionalidades
 
 - **Scanners de Segurança** — integração automática com Checkov, tfsec e Terrascan; detecta o que está instalado e executa sem configuração
+- **Scanner `builtin`** — 43 regras CKV_AWS em Go puro embutidas no binário; roda sem Python, npm ou downloads externos. Fallback automático quando nenhum scanner externo está no PATH (ideal para CI air-gapped e imagens Docker mínimas)
+- **Policy-as-code nativo** — regras customizadas declaradas em `.terraview.yaml` (8 operadores: `is_null`, `equals`, `contains`, `matches`, etc.) sem Rego ou Sentinel
 - **Análise contextual por IA (default)** — quando um provider de IA está configurado, a IA roda **em paralelo** com o scanner, analisando relações cross-resource, cadeias de dependências e anti-patterns arquiteturais que scanners estáticos não detectam
 - **IA Multi-Provider** — três categorias:
   - **API**: Ollama (local), Google Gemini, Anthropic Claude, OpenAI, DeepSeek e OpenRouter
@@ -84,7 +86,12 @@ O Terraview roda como binário único, sem dependências externas. Quando um pro
 
 ## Exemplos
 
-Saída de scan no CLI
+### Saída de scan no CLI
+
+<img src=".github/assets/scan.png" alt="terraview scan" width="100%">
+
+<details>
+<summary>Versão em texto</summary>
 
 ```
   $ terraview scan checkov
@@ -133,7 +140,9 @@ Saída de scan no CLI
   ✓ 1 arquivo corrigido · backup em s3.tf.tvfix.bak · terraform validate passou
 ```
 
-Saída de setup
+</details>
+
+### Saída de setup
 
 ```
   terraview setup
@@ -421,6 +430,8 @@ Safeguards: pre-flight de brace-balance, backup `.tvfix.bak` por arquivo, `terra
 
 Gera um diagrama ASCII determinístico da infraestrutura a partir de um plan Terraform. Não requer IA. Atualmente suporta **apenas AWS**.
 
+<img src=".github/assets/diagram.png" alt="terraview diagram" width="100%">
+
 Dois modos de renderização disponíveis:
 
 - **topo** (default) — visão topológica com aninhamento de VPC, tiers de subnet, setas de conexão, referências cruzadas de security groups, arestas bidirecionais, nós visuais NAT/TGW/VPN e agregação de recursos
@@ -634,6 +645,16 @@ rules:
   disabled_rules:               # silencia rule IDs específicos
     - CKV_AWS_79
   # enabled_rules: []           # se definido, apenas estas regras são avaliadas
+  custom:                       # policy-as-code: regras nativas (sem Rego/Sentinel)
+    - id: ORG_S3_001
+      severity: HIGH
+      category: security
+      message: "Bucket S3 sem tag 'DataClassification'"
+      remediation: "Adicione tags = { DataClassification = 'public|internal|confidential' }"
+      resource_type: aws_s3_bucket
+      condition:
+        field: tags.DataClassification
+        op: not_null
 
 output:
   format: pretty                # pretty, compact, json
@@ -656,11 +677,12 @@ O Ollama não requer API key. Os providers `gemini-cli` e `claude-code` autentic
 
 | Scanner | Descrição | Instalação |
 |---------|-----------|------------|
+| **builtin** | Scanner em Go puro embutido no terraview — 43 regras CKV_AWS, sem dependências externas | já incluído no binário |
 | [Checkov](https://www.checkov.io/) | Scanner de segurança e compliance para IaC | `terraview scanners install checkov` |
 | [tfsec](https://aquasecurity.github.io/tfsec/) | Análise estática de segurança para Terraform | `terraview scanners install tfsec` |
 | [Terrascan](https://runterrascan.io/) | Detector de violações de compliance | `terraview scanners install terrascan` |
 
-Os findings de todos os scanners são normalizados, deduplicados e apresentados em um scorecard unificado.
+Os findings de todos os scanners são normalizados, deduplicados e apresentados em um scorecard unificado. O `builtin` cobre S3, RDS, EC2, Security Groups, Lambda, CloudFront, DynamoDB, ElastiCache, CloudWatch, EKS, ECS, ECR, SQS, SNS, IAM, CloudTrail, OpenSearch, MSK e RDS Cluster — útil para ambientes air-gapped onde scanners externos não podem ser instalados.
 
 ```bash
 terraview scanners install --all            # instala todos

@@ -57,6 +57,8 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 ## Features
 
 - **Security Scanners** — automatic integration with Checkov, tfsec and Terrascan; detects what's installed and runs automatically
+- **`builtin` scanner** — 43 CKV_AWS rules in pure Go bundled in the binary; runs without Python, npm or external downloads. Auto-fallback when no external scanner is on PATH (ideal for air-gapped CI and minimal Docker images)
+- **Native policy-as-code** — custom rules declared in `.terraview.yaml` (8 operators: `is_null`, `equals`, `contains`, `matches`, etc.) without Rego or Sentinel
 - **AI contextual analysis (default)** — when an AI provider is configured, AI runs **in parallel** with the scanner, analyzing cross-resource relationships, dependency chains and architectural anti-patterns that scanners cannot detect.
 - **Multi-Provider AI** — three categories:
   - **API**: Ollama (local), Google Gemini, Anthropic Claude, OpenAI, DeepSeek and OpenRouter
@@ -84,7 +86,12 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
 
 ## Examples
 
-Scan output in the CLI
+### Scan output in the CLI
+
+<img src=".github/assets/scan.png" alt="terraview scan" width="100%">
+
+<details>
+<summary>Text version</summary>
 
 ```
   terraview scan checkov
@@ -106,7 +113,9 @@ Scan output in the CLI
   ...
 ```
 
-Setup output
+</details>
+
+### Setup output
 
 ```
   terraview setup
@@ -394,6 +403,9 @@ Safeguards: brace-balance pre-flight, `.tvfix.bak` backup per file, `terraform v
 
 Generates a deterministic ASCII infrastructure diagram from a Terraform plan. Does not require AI. Currently supports **AWS only**.
 
+<img src=".github/assets/diagram.png" alt="terraview diagram" width="100%">
+
+
 Two rendering modes are available:
 
 - **topo** (default) — topological view with VPC nesting, subnet tiers, connection arrows, security group cross-references, bidirectional edges, NAT/TGW/VPN visual nodes, and resource aggregation
@@ -607,6 +619,16 @@ rules:
   disabled_rules:               # silence specific rule IDs
     - CKV_AWS_79
   # enabled_rules: []           # if set, only these rules are evaluated
+  custom:                       # policy-as-code: native rules (no Rego/Sentinel)
+    - id: ORG_S3_001
+      severity: HIGH
+      category: security
+      message: "S3 bucket missing 'DataClassification' tag"
+      remediation: "Add tags = { DataClassification = 'public|internal|confidential' }"
+      resource_type: aws_s3_bucket
+      condition:
+        field: tags.DataClassification
+        op: not_null
 
 output:
   format: pretty                # pretty, compact, json
@@ -629,11 +651,12 @@ Ollama requires no API key. The `gemini-cli` and `claude-code` providers authent
 
 | Scanner | Description | Install |
 |---------|-------------|---------|
+| **builtin** | Pure-Go scanner bundled in the terraview binary — 43 CKV_AWS rules, no external dependencies | already shipped in the binary |
 | [Checkov](https://www.checkov.io/) | Security and compliance scanner for IaC | `terraview scanners install checkov` |
 | [tfsec](https://aquasecurity.github.io/tfsec/) | Static security analysis for Terraform | `terraview scanners install tfsec` |
 | [Terrascan](https://runterrascan.io/) | Compliance violation detector | `terraview scanners install terrascan` |
 
-Findings from all scanners are normalized, deduplicated, and presented in a unified scorecard.
+Findings from all scanners are normalized, deduplicated, and presented in a unified scorecard. The `builtin` scanner covers S3, RDS, EC2, Security Groups, Lambda, CloudFront, DynamoDB, ElastiCache, CloudWatch, EKS, ECS, ECR, SQS, SNS, IAM, CloudTrail, OpenSearch, MSK and RDS Cluster — useful for air-gapped environments where external scanners cannot be installed.
 
 ```bash
 terraview scanners install --all            # install all
