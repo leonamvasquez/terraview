@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
+	"github.com/leonamvasquez/terraview/internal/debuglog"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/util"
@@ -51,10 +52,15 @@ var modelContextLimits = map[string]int{
 	"claude-sonnet-4-6": 150,
 	"claude-opus-4-6":   200,
 	// Google
-	"gemini-2.0-flash": 120,
-	"gemini-1.5-flash": 100,
-	"gemini-1.5-pro":   200,
-	"gemini-2.5-pro":   200,
+	"gemini-3.1-pro-preview":        250,
+	"gemini-3-flash-preview":        150,
+	"gemini-3.1-flash-lite-preview": 80,
+	"gemini-2.5-pro":                200,
+	"gemini-2.5-flash":              120,
+	"gemini-2.5-flash-lite":         80,
+	"gemini-2.0-flash":              120,
+	"gemini-1.5-flash":              100,
+	"gemini-1.5-pro":                200,
 	// OpenAI
 	"gpt-4o":      100,
 	"gpt-4o-mini": 60,
@@ -363,6 +369,11 @@ func buildUserPrompt(resources []parser.NormalizedResource, summary map[string]i
 
 // parseResponse extracts findings from a raw JSON response string.
 func parseResponse(response, providerName string) ([]rules.Finding, string, error) {
+	debuglog.Log("ai.parse_response.raw", map[string]any{
+		"provider": providerName,
+		"bytes":    len(response),
+		"raw":      response,
+	})
 	response = strings.TrimSpace(response)
 
 	// Extract JSON from markdown code blocks if present.
@@ -379,6 +390,20 @@ func parseResponse(response, providerName string) ([]rules.Finding, string, erro
 	}
 
 	response = strings.TrimSpace(response)
+
+	// Some providers (notably gemini-cli) prepend explanatory text or wrap the
+	// JSON in conversational prose despite the system prompt. Extract the JSON
+	// body by isolating the substring between the first '{' and the last '}'.
+	if !json.Valid([]byte(response)) {
+		if start := strings.Index(response, "{"); start != -1 {
+			if end := strings.LastIndex(response, "}"); end > start {
+				candidate := strings.TrimSpace(response[start : end+1])
+				if json.Valid([]byte(candidate)) {
+					response = candidate
+				}
+			}
+		}
+	}
 
 	if !json.Valid([]byte(response)) {
 		return nil, "", fmt.Errorf("%w: response is not valid JSON", ai.ErrInvalidResponse)
