@@ -8,7 +8,6 @@ package pipeline
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -489,12 +488,6 @@ func MergeAndScore(cfg Config, resources []parser.NormalizedResource, topoGraph 
 	return result
 }
 
-// cachedAnalysis is the serialized form of an AI context analysis result.
-type cachedAnalysis struct {
-	Findings []rules.Finding `json:"findings"`
-	Summary  string          `json:"summary"`
-}
-
 // RunContextAnalysis executes AI-powered contextual analysis of the
 // topology. Honors sanitization, Ollama lifecycle, and disk caching just like
 // the original CLI implementation.
@@ -635,37 +628,47 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 		verbose("Sensitive data redaction disabled")
 	}
 
-	// Build cache key based on SHA-256 hash of plan content
+	// Per-resource cache (CTXPERF-004): replaces the legacy plan-hash cache.
+	// Each resource is keyed by hash(attrs + 1-hop neighbor attrs + lang) so
+	// neighborhood changes naturally invalidate downstream entries while
+	// untouched resources reuse their findings across runs (5–10× speedup
+	// on incremental edits / CI re-runs).
 	var diskCache *aicache.DiskCache
-	var planHash string
 	if cfg.Cfg.LLM.Cache {
-		rawPlan, readErr := os.ReadFile(cfg.PlanPath)
-		if readErr != nil {
-			verbose("cache: failed to read plan %s: %v", cfg.PlanPath, readErr)
-		} else {
-			planHash = aicache.PlanHash(rawPlan)
-		}
 		ttl := cfg.Cfg.LLM.CacheTTLHours
 		if ttl <= 0 {
 			ttl = 24
 		}
 		diskCache = aicache.NewDiskCache(aicache.DiskCacheDir(), providerName, model, cfg.ScannerName, ttl)
+	}
 
-		if planHash != "" {
-			if cached, ok := diskCache.Get(planHash); ok {
-				verbose("cache hit for AI context analysis (%s/%s, hash=%s)", providerName, model, planHash[:12])
-				if monitor != nil {
-					monitor.Stop()
-				}
-				if ollamaCleanup != nil {
-					ollamaCleanup()
-				}
-				var cachedResult cachedAnalysis
-				if err := json.Unmarshal([]byte(cached), &cachedResult); err == nil {
-					return cachedResult.Findings, cachedResult.Summary, nil
-				}
-			}
+	// Apply the same active-resource filter the analyzer uses internally so
+	// the cache key set matches the prompt resource set. no-op/read resources
+	// are never cached because they are never analyzed.
+	activeForCache := make([]parser.NormalizedResource, 0, len(resources))
+	for _, r := range resources {
+		if r.Action == "no-op" || r.Action == "read" {
+			continue
 		}
+		activeForCache = append(activeForCache, r)
+	}
+
+	lookup := contextanalysis.LookupCache(diskCache, activeForCache, graph, cfg.Lang)
+	if diskCache != nil {
+		verbose("AI cache: %d/%d resources reused from disk (%s/%s)",
+			lookup.HitCount, len(activeForCache), providerName, model)
+	}
+
+	// Fast path: every active resource was cached → skip the AI call entirely.
+	if diskCache != nil && len(lookup.Uncached) == 0 && len(activeForCache) > 0 {
+		if monitor != nil {
+			monitor.Stop()
+		}
+		if ollamaCleanup != nil {
+			ollamaCleanup()
+		}
+		summary := fmt.Sprintf("All %d resource(s) reused from cache (no AI call required).", len(activeForCache))
+		return lookup.CachedFindings, summary, nil
 	}
 
 	displayModel := model
@@ -678,7 +681,13 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 		sp.Start()
 		stopSpinner = sp.Stop
 	}
-	result, analyzeErr := analyzer.Analyze(ctx, resources, graph)
+	// Send only uncached resources to the AI (with the full topology graph so
+	// cross-resource edges are still visible). Cached findings are merged after.
+	analyzerInput := lookup.Uncached
+	if diskCache == nil {
+		analyzerInput = resources
+	}
+	result, analyzeErr := analyzer.Analyze(ctx, analyzerInput, graph)
 	if stopSpinner != nil {
 		stopSpinner(analyzeErr == nil)
 	}
@@ -694,19 +703,31 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 		return nil, "", analyzeErr
 	}
 
-	if diskCache != nil && planHash != "" {
-		cached := cachedAnalysis{Findings: result.Findings, Summary: result.Summary}
-		if data, err := json.Marshal(cached); err == nil {
-			diskCache.Put(planHash, string(data))
-			verbose("AI analysis result cached (%s/%s, hash=%s)", providerName, model, planHash[:12])
+	if diskCache != nil {
+		contextanalysis.StoreCache(diskCache, lookup.Uncached, lookup.Hashes, result.Findings)
+		verbose("AI analysis cached %d resource entries (%s/%s)", len(lookup.Uncached), providerName, model)
+	}
+
+	mergedFindings := result.Findings
+	if diskCache != nil && len(lookup.CachedFindings) > 0 {
+		mergedFindings = append(mergedFindings, lookup.CachedFindings...)
+	}
+
+	summary := result.Summary
+	if diskCache != nil && lookup.HitCount > 0 {
+		if summary != "" {
+			summary = fmt.Sprintf("%s (+%d resource(s) reused from cache)", summary, lookup.HitCount)
+		} else {
+			summary = fmt.Sprintf("%d resource(s) reused from cache.", lookup.HitCount)
 		}
 	}
 
 	if result.ExcludedNoOp > 0 {
 		verbose("AI context: %d no-op/read resources excluded from analysis", result.ExcludedNoOp)
 	}
-	verbose("AI context (%s/%s): %d findings", providerName, model, len(result.Findings))
-	return result.Findings, result.Summary, nil
+	verbose("AI context (%s/%s): %d findings (%d new + %d cached)",
+		providerName, model, len(mergedFindings), len(result.Findings), len(lookup.CachedFindings))
+	return mergedFindings, summary, nil
 }
 
 // BuildResourceLimits constructs runtime limits from config and safe mode.
