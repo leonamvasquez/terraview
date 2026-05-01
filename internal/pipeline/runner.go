@@ -21,6 +21,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/aicache"
 	"github.com/leonamvasquez/terraview/internal/config"
 	"github.com/leonamvasquez/terraview/internal/contextanalysis"
+	"github.com/leonamvasquez/terraview/internal/debuglog"
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/importer"
 	"github.com/leonamvasquez/terraview/internal/meta"
@@ -549,6 +550,17 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 	defer cancel()
 	verbose("AI timeout: %ds (base %d + %d resources × 3s + %ds grace)",
 		scaledTimeout, baseTimeout, effectiveResources, util.ContextTimeoutGraceSecs)
+	debuglog.Log("pipeline.ai_setup", map[string]any{
+		"provider":            providerName,
+		"model":               model,
+		"timeout_total_secs":  scaledTimeout,
+		"timeout_base_secs":   baseTimeout,
+		"effective_resources": effectiveResources,
+		"max_resources":       maxResources,
+		"is_cli_provider":     isCLIProvider,
+		"temperature":         temp,
+		"num_ctx":             numCtx,
+	})
 
 	var monitor *runtime.Monitor
 	if providerName == "ollama" {
