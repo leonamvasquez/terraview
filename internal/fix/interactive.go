@@ -70,6 +70,29 @@ func (s *ApplySession) Preview(pending []PendingFix) {
 		s.col(ansiDim), s.col(ansiBold), s.col(ansiReset+ansiDim), s.col(ansiReset))
 }
 
+// markBatchDuplicates identifies PendingFix entries produced by the same batch
+// — i.e. multiple findings on the same resource sharing one merged HCL. The
+// first occurrence of a (resource, hcl) pair is the "primary" that should be
+// applied; subsequent entries are duplicates whose effect is already included.
+// Returns a slice of bools of len(pending) where true means "duplicate, skip
+// re-apply but report as covered".
+func markBatchDuplicates(pending []PendingFix) []bool {
+	seen := make(map[string]bool, len(pending))
+	dup := make([]bool, len(pending))
+	for i, pf := range pending {
+		if pf.Suggestion == nil || pf.Suggestion.HCL == "" {
+			continue
+		}
+		key := pf.Finding.Resource + "\x00" + strings.TrimSpace(pf.Suggestion.HCL)
+		if seen[key] {
+			dup[i] = true
+			continue
+		}
+		seen[key] = true
+	}
+	return dup
+}
+
 // ApplyAll applies every pending fix without prompting.
 // Fixes with no file location are skipped and reported.
 // Returns the count of applied and failed fixes.
@@ -77,7 +100,8 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 	total := len(pending)
 	fmt.Fprintf(s.out(), "\n  Applying %d fix(es) automatically...\n\n", total)
 
-	for _, pf := range pending {
+	dups := markBatchDuplicates(pending)
+	for i, pf := range pending {
 		sevColor := ansiYellow
 		if pf.Finding.Severity == "CRITICAL" {
 			sevColor = ansiRed
@@ -86,6 +110,14 @@ func (s *ApplySession) ApplyAll(pending []PendingFix) (applied, failed int) {
 			s.col(sevColor), pf.Finding.Severity, s.col(ansiReset),
 			pf.Finding.RuleID, pf.Finding.Resource,
 		)
+
+		if dups[i] {
+			fmt.Fprintf(s.out(), "  %s✓%s %s\n    %scoberto pelo batch anterior no mesmo recurso%s\n\n",
+				s.col(ansiGreen), s.col(ansiReset), label,
+				s.col(ansiDim), s.col(ansiReset))
+			applied++
+			continue
+		}
 
 		if pf.Location == nil {
 			fmt.Fprintf(s.out(), "  %s✗%s %s\n    %s⚠ .tf file not found — skipped%s\n\n",
@@ -134,8 +166,15 @@ func (s *ApplySession) Review(pending []PendingFix) (applied, rejected int) {
 
 	fmt.Fprintln(s.out())
 
+	dups := markBatchDuplicates(pending)
 	for i, pf := range pending {
 		s.printFindingHeader(i+1, total, pf)
+		if dups[i] {
+			fmt.Fprintf(s.out(), "  %s✓ coberto pelo batch anterior no mesmo recurso — não requer nova aplicação%s\n\n",
+				s.col(ansiGreen), s.col(ansiReset))
+			applied++
+			continue
+		}
 		s.printDiff(pf)
 		s.printWarnings(pf.Warnings)
 
@@ -357,6 +396,16 @@ func (s *ApplySession) applyFix(pf PendingFix) error {
 			if err := ValidateAttributes(pf.Suggestion.HCL, resourceType); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Refresh Location against the current file state. Earlier fixes may have
+	// shifted line offsets; using the stale StartLine/EndLine would corrupt
+	// neighbouring blocks. We re-locate by resource address right before the
+	// substitution so offsets always match the on-disk content.
+	if pf.Location != nil && s.WorkDir != "" && pf.Finding.Resource != "" {
+		if fresh, _ := FindResource(s.WorkDir, pf.Finding.Resource); fresh != nil {
+			pf.Location = fresh
 		}
 	}
 

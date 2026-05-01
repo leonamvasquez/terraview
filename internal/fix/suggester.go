@@ -120,6 +120,169 @@ func (s *Suggester) Suggest(ctx context.Context, req FixRequest) (*FixSuggestion
 	return suggestion, nil
 }
 
+// batchSystemPromptAddendum extends the base system prompt for batch requests.
+// The model receives several findings on the SAME resource and must return one
+// merged HCL plus a per-finding entry in the "fixes" array.
+const batchSystemPromptAddendum = `
+
+## Batch mode — multiple findings on the same resource
+
+When the user message contains a "findings" array (instead of a single "finding"),
+each entry targets the SAME resource. You MUST:
+
+- Produce ONE merged HCL that fixes ALL findings in the array.
+- Apply each individual fix on top of the previous one — the final HCL is the
+  cumulative correct state.
+- Return one entry per finding in the "fixes" array, in the SAME order.
+
+Batch response format (JSON, no markdown):
+{
+  "hcl": "<one merged corrected resource block — applies ALL fixes>",
+  "prerequisites": ["<full HCL for any new resource — omit if none>"],
+  "fixes": [
+    {"rule_id": "CKV_AWS_X", "explanation": "<one sentence>", "effort": "low|medium|high"},
+    ...
+  ]
+}`
+
+// SuggestBatch generates fixes for multiple findings on the SAME resource in a
+// single AI call. All requests must share the same ResourceAddr; the merged HCL
+// applies every fix cumulatively. Returns one suggestion per request, in order,
+// all sharing the same HCL/Prerequisites but each with its own RuleID,
+// Explanation, and Effort.
+func (s *Suggester) SuggestBatch(ctx context.Context, reqs []FixRequest) ([]*FixSuggestion, error) {
+	if len(reqs) == 0 {
+		return nil, fmt.Errorf("SuggestBatch requires at least one request")
+	}
+	if len(reqs) == 1 {
+		one, err := s.Suggest(ctx, reqs[0])
+		if err != nil {
+			return nil, err
+		}
+		return []*FixSuggestion{one}, nil
+	}
+
+	user := buildBatchUserMessage(reqs)
+	sys := systemPrompt + batchSystemPromptAddendum
+	if reqs[0].Lang == "pt-BR" {
+		sys += "\n\nIMPORTANT: Respond entirely in Brazilian Portuguese (pt-BR). Each \"explanation\" field must be in Portuguese."
+	}
+
+	text, err := s.provider.Complete(ctx, sys, user)
+	if err != nil {
+		return nil, fmt.Errorf("batch fix suggestion failed: %w", err)
+	}
+
+	return parseBatchFixResponse(text, reqs)
+}
+
+// buildBatchUserMessage serializes a batch of requests sharing the same resource
+// into a single JSON user message with a "findings" array.
+func buildBatchUserMessage(reqs []FixRequest) string {
+	type findingEntry struct {
+		RuleID   string `json:"rule_id"`
+		Severity string `json:"severity"`
+		Message  string `json:"message"`
+		Category string `json:"category"`
+	}
+	type payload struct {
+		Findings        []findingEntry         `json:"findings"`
+		ResourceType    string                 `json:"resource_type"`
+		ResourceAddr    string                 `json:"resource_addr"`
+		CurrentHCL      string                 `json:"current_hcl,omitempty"`
+		FileContext     string                 `json:"file_context,omitempty"`
+		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
+		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ValidAttributes []string               `json:"valid_attributes,omitempty"`
+	}
+
+	first := reqs[0]
+	var p payload
+	for _, r := range reqs {
+		p.Findings = append(p.Findings, findingEntry{
+			RuleID:   r.Finding.RuleID,
+			Severity: r.Finding.Severity,
+			Message:  r.Finding.Message,
+			Category: r.Finding.Category,
+		})
+	}
+	p.ResourceType = first.ResourceType
+	p.ResourceAddr = first.ResourceAddr
+	p.CurrentHCL = first.CurrentHCL
+	p.FileContext = first.FileContext
+	if first.CurrentHCL == "" {
+		p.CurrentConfig = TruncateConfig(first.ResourceConfig, first.Finding.RuleID)
+	}
+	if attrs := KnownAttributes(first.ResourceType); len(attrs) > 0 {
+		p.ValidAttributes = attrs
+	}
+	if first.PlanIndex != nil {
+		if pc := buildPlanContext(first); pc != nil {
+			p.PlanContext = pc
+		}
+	}
+
+	data, _ := json.MarshalIndent(p, "", "  ")
+	return string(data)
+}
+
+// parseBatchFixResponse turns the AI batch response into N FixSuggestions, one
+// per request, all sharing HCL/Prerequisites but each with its own metadata.
+func parseBatchFixResponse(text string, reqs []FixRequest) ([]*FixSuggestion, error) {
+	cleaned := extractJSON(text)
+	var raw struct {
+		HCL           string   `json:"hcl"`
+		Prerequisites []string `json:"prerequisites"`
+		Fixes         []struct {
+			RuleID      string `json:"rule_id"`
+			Explanation string `json:"explanation"`
+			Effort      string `json:"effort"`
+		} `json:"fixes"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse batch fix response as JSON: %w (raw: %s)", err, truncate(text, 200))
+	}
+	if raw.HCL == "" {
+		return nil, fmt.Errorf("batch fix response missing hcl field")
+	}
+	if len(raw.Fixes) == 0 {
+		return nil, fmt.Errorf("batch fix response missing fixes array")
+	}
+
+	// Index fixes by rule_id so order mismatches don't break association.
+	byRule := make(map[string]int, len(raw.Fixes))
+	for i, f := range raw.Fixes {
+		byRule[f.RuleID] = i
+	}
+
+	out := make([]*FixSuggestion, len(reqs))
+	for i, r := range reqs {
+		expl := ""
+		effort := "medium"
+		if idx, ok := byRule[r.Finding.RuleID]; ok {
+			expl = raw.Fixes[idx].Explanation
+			if e := raw.Fixes[idx].Effort; e == "low" || e == "medium" || e == "high" {
+				effort = e
+			}
+		} else if i < len(raw.Fixes) {
+			// Fallback: use positional match when rule_id absent in response.
+			expl = raw.Fixes[i].Explanation
+			if e := raw.Fixes[i].Effort; e == "low" || e == "medium" || e == "high" {
+				effort = e
+			}
+		}
+		out[i] = &FixSuggestion{
+			RuleID:        r.Finding.RuleID,
+			Resource:      r.ResourceAddr,
+			HCL:           raw.HCL,
+			Explanation:   expl,
+			Prerequisites: raw.Prerequisites,
+			Effort:        effort,
+		}
+	}
+	return out, nil
+}
+
 // isRetryableError returns true for errors that are likely caused by payload size
 // (timeouts, context-length exceeded).
 func isRetryableError(err error) bool {

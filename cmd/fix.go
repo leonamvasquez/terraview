@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,13 @@ import (
 	"github.com/leonamvasquez/terraview/internal/rules"
 )
 
+// fixWorkerPool is the number of concurrent suggester.Suggest calls during
+// `fix plan` / `fix apply`. 3 is a balance between throughput and avoiding
+// piling up parallel HTTP 429s on the same Gemini capacity pool. CLI providers
+// (gemini-cli, claude-code) carry ~2-3s of subprocess startup overhead each,
+// so memory pressure rises linearly with this constant.
+const fixWorkerPool = 3
+
 // ── flags ───────────────────────────────────────────────────────────────────
 
 var (
@@ -30,7 +38,8 @@ var (
 	fixFileFlag     string
 
 	// apply-only
-	fixAutoApproveFlag bool
+	fixAutoApproveFlag   bool
+	fixMaxIterationsFlag int
 )
 
 // ── commands ────────────────────────────────────────────────────────────────
@@ -104,6 +113,7 @@ func init() {
 	}
 
 	fixApplyCmd.Flags().BoolVar(&fixAutoApproveFlag, "auto-approve", false, "Apply all fixes without interactive confirmation")
+	fixApplyCmd.Flags().IntVar(&fixMaxIterationsFlag, "max-iterations", 5, "Maximum scan→fix iterations (loop stops earlier on convergence or stagnation)")
 }
 
 // ── run handlers ────────────────────────────────────────────────────────────
@@ -181,23 +191,74 @@ func writeFixPlanJSON(pending []fix.PendingFix) {
 	fmt.Println(string(data))
 }
 
-func runFixApply(_ *cobra.Command, args []string) error {
-	filter := fixFilter{
-		severity: strings.ToUpper(fixSeverityFlag),
-		file:     fixFileFlag,
-		max:      fixMaxFlag,
+// runFixApply runs scan→fix in a loop until HIGH/CRITICAL findings are zeroed,
+// stop dropping, or max-iterations is reached. The loop is the default because
+// prerequisites added by one fix often introduce new findings (e.g. a fresh KMS
+// key that needs a policy) — convergence typically takes 2–4 iterations.
+//
+// Iteration mode (auto vs interactive) follows --auto-approve.
+func runFixApply(cmd *cobra.Command, args []string) error {
+	maxIter := fixMaxIterationsFlag
+	if maxIter <= 0 {
+		maxIter = 5
 	}
-	if len(args) > 0 {
-		filter.findingID = args[0]
-	}
-
-	return generateAndHandleFixes(filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
-		if fixAutoApproveFlag {
-			session.ApplyAll(pending)
-		} else {
-			session.Review(pending)
+	prevHigh := -1
+	for iter := 1; iter <= maxIter; iter++ {
+		if maxIter > 1 {
+			fmt.Printf("\n%s ─── Iteration %d/%d ───\n", output.Prefix(), iter, maxIter)
 		}
-	})
+
+		// Step 1: rescan to see the current state.
+		if err := runScan(cmd, []string{}); err != nil {
+			return fmt.Errorf("scan in iteration %d: %w", iter, err)
+		}
+
+		// Step 2: count HIGH/CRITICAL findings.
+		ls, err := history.LoadLastScan(resolveProjectDir())
+		if err != nil || ls == nil {
+			return fmt.Errorf("could not load scan results in iteration %d", iter)
+		}
+		high := 0
+		for _, f := range ls.Findings {
+			if f.Severity == "HIGH" || f.Severity == "CRITICAL" {
+				high++
+			}
+		}
+		if maxIter > 1 {
+			fmt.Printf("%s iter %d: %d HIGH/CRITICAL finding(s)\n", output.Prefix(), iter, high)
+		}
+
+		if high == 0 {
+			fmt.Printf("%s ✓ converged: no HIGH/CRITICAL findings remaining.\n", output.Prefix())
+			return nil
+		}
+		if prevHigh != -1 && high >= prevHigh {
+			fmt.Printf("%s ⚠ no progress (prev=%d, now=%d) — stopping.\n", output.Prefix(), prevHigh, high)
+			return nil
+		}
+		prevHigh = high
+
+		// Step 3: apply fixes.
+		filter := fixFilter{
+			severity: strings.ToUpper(fixSeverityFlag),
+			file:     fixFileFlag,
+			max:      fixMaxFlag,
+		}
+		if len(args) > 0 {
+			filter.findingID = args[0]
+		}
+		if err := generateAndHandleFixes(filter, func(session *fix.ApplySession, pending []fix.PendingFix) {
+			if fixAutoApproveFlag {
+				session.ApplyAll(pending)
+			} else {
+				session.Review(pending)
+			}
+		}); err != nil {
+			return fmt.Errorf("fix apply in iteration %d: %w", iter, err)
+		}
+	}
+	fmt.Printf("%s ⚠ reached max iterations (%d) — re-run if more findings remain.\n", output.Prefix(), maxIter)
+	return nil
 }
 
 // ── core generator ──────────────────────────────────────────────────────────
@@ -302,7 +363,7 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 		TimeoutSecs: perCallTimeout,
 	}
 
-	globalCtx, cancel := context.WithTimeout(context.Background(),
+	globalCtx, cancel := context.WithTimeout(rootCtx,
 		time.Duration(perFindingBudget*len(targets)+30)*time.Second)
 	defer cancel()
 
@@ -322,29 +383,42 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 		planIndex = fix.BuildIndex(rawPlan, resources)
 	}
 
-	// Phase 1: generate suggestions
-	fmt.Printf("%s Generating %d fix suggestion(s)...\n", output.Prefix(), len(targets))
+	// Phase 1: generate suggestions (parallel worker pool).
+	// Findings are pre-built into jobs serially (file filtering, HCL/context
+	// reads), then dispatched to a small pool of workers that call the AI
+	// provider concurrently. Output stays labeled by [i/N] so the user can
+	// trace progress even though completion order may interleave.
+	fmt.Printf("%s Generating %d fix suggestion(s) (concurrency=%d)...\n", output.Prefix(), len(targets), fixWorkerPool)
 
-	pending := make([]fix.PendingFix, 0, len(targets))
+	type fixJob struct {
+		idx        int
+		finding    rules.Finding
+		req        fix.FixRequest
+		loc        *fix.Location
+		skipReason string // non-empty → skip without calling AI
+	}
+	type fixOutcome struct {
+		suggestion *fix.FixSuggestion
+		loc        *fix.Location
+		finding    rules.Finding
+		ok         bool
+	}
+
+	jobs := make([]fixJob, 0, len(targets))
 	for i, f := range targets {
-		fmt.Printf("  [%d/%d] %s on %s... ", i+1, len(targets), f.RuleID, f.Resource)
-
 		resourceType := extractType(f.Resource)
 		var resourceConfig map[string]interface{}
 		if pr, ok := resourceMap[f.Resource]; ok {
 			resourceType = pr.typ
 			resourceConfig = pr.values
 		}
-
 		loc, _ := fix.FindResource(searchDir, f.Resource)
-
-		// --file filter: skip if the located file doesn't match
+		job := fixJob{idx: i, finding: f, loc: loc}
 		if filter.file != "" && !locationMatchesFile(loc, filter.file, searchDir) {
-			fmt.Printf("⏩ skipped (file filter)\n")
+			job.skipReason = "file filter"
+			jobs = append(jobs, job)
 			continue
 		}
-
-		findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(perFindingBudget)*time.Second)
 		req := fix.FixRequest{
 			Finding: fix.FixFinding{
 				RuleID:   f.RuleID,
@@ -366,25 +440,146 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			}
 			req.FileContext = fix.ReadFileContext(loc, searchDir)
 		}
+		job.req = req
+		jobs = append(jobs, job)
+	}
 
-		suggestion, err := suggester.Suggest(findingCtx, req)
-		findingCancel()
+	outcomes := make([]fixOutcome, len(jobs))
+	sem := make(chan struct{}, fixWorkerPool)
+	var wg sync.WaitGroup
+	var printMu sync.Mutex
+	total := len(targets)
 
-		if err != nil {
-			if isTimeoutErr(err) {
-				fmt.Printf("⏩ skipped (timeout)\n")
-			} else {
-				fmt.Printf("✗ %v\n", err)
-			}
+	// Group eligible jobs (no skipReason) by ResourceAddr so multiple findings
+	// on the same resource can be batched into a single AI call. Resources with
+	// only one finding still go through the singleton path.
+	skippedIdxs := make([]int, 0)
+	groups := make(map[string][]int) // resourceAddr → []job index
+	groupOrder := make([]string, 0)
+	for j, job := range jobs {
+		if job.skipReason != "" {
+			skippedIdxs = append(skippedIdxs, j)
 			continue
 		}
-		fmt.Printf("✓\n")
+		addr := job.finding.Resource
+		if _, ok := groups[addr]; !ok {
+			groupOrder = append(groupOrder, addr)
+		}
+		groups[addr] = append(groups[addr], j)
+	}
 
+	// Drain skipped jobs first (no AI work).
+	for _, j := range skippedIdxs {
+		job := jobs[j]
+		label := fmt.Sprintf("  [%d/%d] %s on %s...", job.idx+1, total, job.finding.RuleID, job.finding.Resource)
+		fmt.Printf("%s ⏩ skipped (%s)\n", label, job.skipReason)
+		outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+	}
+
+	for _, addr := range groupOrder {
+		idxs := groups[addr]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Build the label set for this group up-front so progress stays readable.
+			labelOf := func(j int) string {
+				job := jobs[j]
+				return fmt.Sprintf("  [%d/%d] %s on %s...", job.idx+1, total, job.finding.RuleID, job.finding.Resource)
+			}
+
+			// Allow more time for batch (multiple findings) but cap so a single
+			// stuck resource cannot starve the global budget.
+			budget := perFindingBudget
+			if len(idxs) > 1 {
+				budget = perFindingBudget * 2
+				if cap := perFindingBudget * len(idxs); cap < budget {
+					budget = cap
+				}
+			}
+			findingCtx, findingCancel := context.WithTimeout(globalCtx, time.Duration(budget)*time.Second)
+			defer findingCancel()
+
+			if len(idxs) == 1 {
+				j := idxs[0]
+				job := jobs[j]
+				suggestion, err := suggester.Suggest(findingCtx, job.req)
+				printMu.Lock()
+				defer printMu.Unlock()
+				if err != nil {
+					if isTimeoutErr(err) {
+						fmt.Printf("%s ⏩ skipped (timeout)\n", labelOf(j))
+					} else {
+						fmt.Printf("%s ✗ %v\n", labelOf(j), err)
+					}
+					outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+					return
+				}
+				fmt.Printf("%s ✓\n", labelOf(j))
+				outcomes[j] = fixOutcome{suggestion: suggestion, loc: job.loc, finding: job.finding, ok: true}
+				return
+			}
+
+			// Batch path — N≥2 findings on the same resource.
+			reqs := make([]fix.FixRequest, len(idxs))
+			for k, j := range idxs {
+				reqs[k] = jobs[j].req
+			}
+			suggestions, err := suggester.SuggestBatch(findingCtx, reqs)
+			if err != nil {
+				// Fallback: per-finding on batch failure to preserve quality.
+				printMu.Lock()
+				fmt.Printf("  ⚠ batch failed for %s (%d findings) — falling back per-finding: %v\n", addr, len(idxs), err)
+				printMu.Unlock()
+				for _, j := range idxs {
+					job := jobs[j]
+					sugg, sErr := suggester.Suggest(findingCtx, job.req)
+					printMu.Lock()
+					if sErr != nil {
+						if isTimeoutErr(sErr) {
+							fmt.Printf("%s ⏩ skipped (timeout)\n", labelOf(j))
+						} else {
+							fmt.Printf("%s ✗ %v\n", labelOf(j), sErr)
+						}
+						outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+					} else {
+						fmt.Printf("%s ✓\n", labelOf(j))
+						outcomes[j] = fixOutcome{suggestion: sugg, loc: job.loc, finding: job.finding, ok: true}
+					}
+					printMu.Unlock()
+				}
+				return
+			}
+			printMu.Lock()
+			defer printMu.Unlock()
+			for k, j := range idxs {
+				job := jobs[j]
+				if k < len(suggestions) && suggestions[k] != nil {
+					fmt.Printf("%s ✓ (batch×%d)\n", labelOf(j), len(idxs))
+					outcomes[j] = fixOutcome{suggestion: suggestions[k], loc: job.loc, finding: job.finding, ok: true}
+				} else {
+					fmt.Printf("%s ✗ batch missing suggestion\n", labelOf(j))
+					outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Reassemble pending in original target order so downstream display is
+	// deterministic regardless of completion order.
+	pending := make([]fix.PendingFix, 0, len(jobs))
+	for _, oc := range outcomes {
+		if !oc.ok {
+			continue
+		}
 		pending = append(pending, fix.PendingFix{
-			Finding:    f,
-			Suggestion: suggestion,
-			Location:   loc,
-			Warnings:   fix.ValidateFix(suggestion),
+			Finding:    oc.finding,
+			Suggestion: oc.suggestion,
+			Location:   oc.loc,
+			Warnings:   fix.ValidateFix(oc.suggestion),
 		})
 	}
 
