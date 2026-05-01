@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -264,7 +263,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 	}
 
 	runner := pipeline.NewRunner(rc.toPipeline())
-	runResult, err := runner.Run(context.Background())
+	runResult, err := runner.Run(rootCtx)
 	if err != nil {
 		return rc.resolvedPlan, 0, err
 	}
@@ -380,7 +379,7 @@ func parsePlan(planPath string) (*parser.TerraformPlan, []parser.NormalizedResou
 // Thin wrapper around pipeline.RunScanPhase that preserves the cmd-level
 // reviewConfig/scanResult surface used by the existing test suite.
 func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph) (scanResult, error) {
-	sr, err := pipeline.RunScanPhase(context.Background(), rc.toPipeline(), resources, topoGraph)
+	sr, err := pipeline.RunScanPhase(rootCtx, rc.toPipeline(), resources, topoGraph)
 	result := scanResult{
 		hardFindings:    sr.HardFindings,
 		scannerResult:   sr.ScannerResult,

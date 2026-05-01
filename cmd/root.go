@@ -1,18 +1,29 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/leonamvasquez/terraview/internal/debuglog"
 	"github.com/leonamvasquez/terraview/internal/i18n"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/scanner"
 	"github.com/leonamvasquez/terraview/internal/terraformexec"
 	"github.com/leonamvasquez/terraview/internal/workspace"
 )
+
+// rootCtx is the cancellable context shared by all long-running subcommands.
+// It is wired up in Execute() with a SIGINT/SIGTERM handler so that Ctrl+C
+// cancels the pipeline and tears down child subprocesses (gemini-cli,
+// terragrunt, terraform) instead of leaving them orphaned in the background.
+// First signal triggers graceful cancellation; second signal forces exit(130).
+var rootCtx = context.Background()
 
 var (
 	// Global flags (persistent, inherited by all subcommands)
@@ -26,6 +37,7 @@ var (
 	activeProvider string
 	activeModel    string
 	terragruntFlag string // --terragrunt [config]: use terragrunt; optionally specify config file
+	debugFlag      bool
 )
 
 // Version is set at build time via ldflags.
@@ -98,6 +110,15 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&activeModel, "model", "", "AI model to use")
 	rootCmd.PersistentFlags().StringVar(&terragruntFlag, "terragrunt", "", "Use Terragrunt for plan generation (optionally specify config file path)")
 	rootCmd.PersistentFlags().Lookup("terragrunt").NoOptDefVal = "auto"
+	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Write detailed JSONL trace to ~/.terraview/debug.log (local-only; logs raw prompts/responses)")
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if debugFlag {
+			path := debuglog.Enable()
+			if path != "" {
+				fmt.Fprintf(os.Stderr, "[terraview] debug logging enabled → %s\n", path)
+			}
+		}
+	}
 
 	// Core commands
 	rootCmd.AddCommand(scanCmd)
@@ -599,14 +620,43 @@ func Execute(version string) {
 	// Ensure ~/.terraview/bin is in PATH so scanner binaries are discoverable
 	scanner.EnsureBinDirInPath()
 
+	// Wire up SIGINT/SIGTERM → cancel rootCtx. Long-running pipelines derive
+	// their context from rootCtx and propagate cancellation to subprocesses
+	// (Setpgid groups are killed via cmd.Cancel hooks). A second signal
+	// forces an immediate exit(130) so a hung subprocess can't keep us alive.
+	ctx, cancel := context.WithCancel(context.Background())
+	rootCtx = ctx
+	rootCmd.SetContext(ctx)
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		s, ok := <-sigCh
+		if !ok {
+			return
+		}
+		fmt.Fprintf(os.Stderr, "\n%s interrupt received (%s) — cancelling subprocesses (Ctrl+C again to force exit)\n", output.Prefix(), s)
+		cancel()
+		if _, ok := <-sigCh; ok {
+			fmt.Fprintf(os.Stderr, "%s forcing exit\n", output.Prefix())
+			os.Exit(130)
+		}
+	}()
+	cleanup := func() {
+		signal.Stop(sigCh)
+		cancel()
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		var exitErr *ExitError
 		if errors.As(err, &exitErr) {
+			cleanup()
 			os.Exit(exitErr.Code)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		cleanup()
 		os.Exit(1)
 	}
+	cleanup()
 }
 
 func logVerbose(format string, args ...interface{}) {
