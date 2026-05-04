@@ -23,6 +23,10 @@ import (
 // promoted to advisory by the Classifier.
 const PromotionThreshold = 2
 
+// EntryTTL is the maximum age of an entry. Entries older than this are dropped
+// on Load — a stale failure from months ago should not still gate auto-apply.
+const EntryTTL = 30 * 24 * time.Hour
+
 // Entry tracks failure state for a single (project, rule, resource) tuple.
 type Entry struct {
 	Count     int       `json:"count"`
@@ -84,6 +88,13 @@ func loadLocked() (*Log, error) {
 	if l.Entries == nil {
 		l.Entries = map[string]Entry{}
 	}
+	// Drop entries older than EntryTTL to keep the file bounded.
+	cutoff := time.Now().UTC().Add(-EntryTTL)
+	for k, e := range l.Entries {
+		if !e.LastSeen.IsZero() && e.LastSeen.Before(cutoff) {
+			delete(l.Entries, k)
+		}
+	}
 	return l, nil
 }
 
@@ -95,8 +106,27 @@ func saveLocked(l *Log) error {
 	if err != nil {
 		return fmt.Errorf("marshal failure log: %w", err)
 	}
-	if err := os.WriteFile(Path(), data, 0o644); err != nil {
-		return fmt.Errorf("write failure log: %w", err)
+	// Atomic write: temp file in the same directory + rename. Prevents
+	// torn writes (truncated JSON) when a process crashes mid-write or when
+	// two CI matrix jobs serialize on the same $HOME.
+	dir := filepath.Dir(Path())
+	tmp, err := os.CreateTemp(dir, ".failure_history-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create failure log temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("write failure log temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("close failure log temp: %w", err)
+	}
+	if err := os.Rename(tmpName, Path()); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("rename failure log: %w", err)
 	}
 	return nil
 }
