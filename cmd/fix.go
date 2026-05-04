@@ -230,8 +230,11 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 
 		// Step 2: count HIGH/CRITICAL findings.
 		ls, err := history.LoadLastScan(resolveProjectDir())
-		if err != nil || ls == nil {
-			return fmt.Errorf("could not load scan results in iteration %d", iter)
+		if err != nil {
+			return fmt.Errorf("iter %d: load scan results: %w (try `terraview scan checkov` to verify the scanner is working)", iter, err)
+		}
+		if ls == nil {
+			return fmt.Errorf("iter %d: scan completed but no findings were persisted to history. Verify history is enabled in .terraview.yaml (history.enabled: true) and that the scanner is producing output", iter)
 		}
 		high := 0
 		for _, f := range ls.Findings {
