@@ -109,6 +109,12 @@ func init() {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	// Print immediately so the user gets feedback even before config load,
+	// scanner detection, or terraform plan have a chance to write anything.
+	// Without this, a slow filesystem or large project gives the impression
+	// the command is hung.
+	fmt.Printf("%s scan starting...\n", output.Prefix())
+
 	// Handle --terragrunt <file> parsed as extra positional arg due to NoOptDefVal.
 	if terragruntFlag == "auto" && len(args) > 1 {
 		terragruntFlag = args[len(args)-1]

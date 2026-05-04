@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -128,15 +129,25 @@ func parseCheckovOutput(data []byte) ([]rules.Finding, error) {
 		return nil, nil
 	}
 
+	// Checkov sometimes mixes ERROR/WARNING log lines into stdout BEFORE the
+	// JSON payload (e.g. when --quiet doesn't suppress per-check tracebacks).
+	// CombinedOutput() then yields "[ERROR] ...\n{...}", which fails to parse
+	// as JSON and would silently report zero findings. Strip the log preamble
+	// by skipping to the first '{' or '[' character.
+	payload := extractJSON(data)
+	if len(payload) == 0 {
+		return nil, nil
+	}
+
 	// Checkov can return a single object or an array (multi-framework)
 	var single checkovReport
-	if err := json.Unmarshal(data, &single); err == nil && len(single.Results.FailedChecks) > 0 {
+	if err := json.Unmarshal(payload, &single); err == nil && len(single.Results.FailedChecks) > 0 {
 		return convertCheckovFindings(single.Results.FailedChecks), nil
 	}
 
 	// Try array format
 	var multi []checkovReport
-	if err := json.Unmarshal(data, &multi); err == nil {
+	if err := json.Unmarshal(payload, &multi); err == nil {
 		var allChecks []checkovCheck
 		for _, r := range multi {
 			allChecks = append(allChecks, r.Results.FailedChecks...)
@@ -146,8 +157,42 @@ func parseCheckovOutput(data []byte) ([]rules.Finding, error) {
 		}
 	}
 
-	// If the output doesn't parse as Checkov JSON, might just be warnings
 	return nil, nil
+}
+
+// extractJSON returns the JSON payload from a stream that may include log-line
+// preambles. Two checkov output styles must work:
+//
+//  1. Compact single line: {"results":{...}}
+//  2. Pretty-printed multi-line preceded by [ERROR]/[MainThread] log lines.
+//
+// We scan candidate start offsets — every line that, after trimming, begins
+// with '{' or '[' — and accept the first one whose tail parses as valid JSON.
+// json.Valid is the only reliable filter: line-shape heuristics break on
+// Python tracebacks that contain `{` inside source snippets.
+func extractJSON(data []byte) []byte {
+	offset := 0
+	for offset < len(data) {
+		nl := bytes.IndexByte(data[offset:], '\n')
+		var line []byte
+		if nl < 0 {
+			line = data[offset:]
+		} else {
+			line = data[offset : offset+nl]
+		}
+		trimmed := bytes.TrimLeft(line, " \t")
+		if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+			start := offset + (len(line) - len(trimmed))
+			if json.Valid(data[start:]) {
+				return data[start:]
+			}
+		}
+		if nl < 0 {
+			break
+		}
+		offset += nl + 1
+	}
+	return nil
 }
 
 func convertCheckovFindings(checks []checkovCheck) []rules.Finding {

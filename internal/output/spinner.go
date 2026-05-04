@@ -107,6 +107,14 @@ func (s *Spinner) Start() {
 	go s.loop()
 }
 
+// SetMessage atomically swaps the status text shown next to the animated frame.
+// Safe to call concurrently from any goroutine while the spinner is running.
+func (s *Spinner) SetMessage(msg string) {
+	s.mu.Lock()
+	s.message = msg
+	s.mu.Unlock()
+}
+
 // Stop halts the spinner and prints a final status line.
 func (s *Spinner) Stop(success bool) {
 	s.mu.Lock()
@@ -160,7 +168,10 @@ func (s *Spinner) loop() {
 			if ColorEnabled {
 				frame = colorize(bold+cyan, frame)
 			}
-			line := fmt.Sprintf("%s %s %s", Prefix(), frame, s.message)
+			s.mu.Lock()
+			msg := s.message
+			s.mu.Unlock()
+			line := fmt.Sprintf("%s %s %s", Prefix(), frame, msg)
 			line = truncateToTermWidth(line)
 
 			stderrMu.Lock()
