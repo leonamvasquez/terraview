@@ -29,6 +29,14 @@ Sprint 15: classificação de advisories, contexto de projeto no fix engine, his
 ### Fixed
 
 - **Panic em `fix apply` com advisories pré-classificadas** — acesso a `pf.Suggestion.Explanation` quando `Suggestion` era `nil` para findings promovidos antes da chamada à IA
+- **Diagnóstico em `fix apply` quando o scan não persiste findings** — em vez de "could not load scan results in iteration N", surfaces o erro real (`%w`) ou aponta `history.enabled: true` no `.terraview.yaml`
+
+### Hardening
+
+- **`failurelog` com escrita atômica** — `CreateTemp + rename` previne corrupção de JSON em escritas concorrentes (CI matrix) ou crash mid-write
+- **`failurelog` com GC** — entradas com `LastSeen > 30d` são dropadas no `Load`, mantendo o arquivo bounded
+- **Spinner em modo noop (CI/non-TTY)** — `SetMessage` agora emite uma linha por update; antes era silencioso após `Start`
+- **Sanitizer redige API keys em campos não-sensíveis** — patterns para OpenAI/OpenRouter/Anthropic (`sk-...`), Google (`AIza...`), GitHub (`ghp_/gho_/...`), AWS (`AKIA...`), Slack (`xox[abposr]-...`); cobre o caso em que credenciais vivem em `description`/`tags`/`user_data`. Testes de regressão garantem que não vazam pelo `--debug` JSONL nem pelo cache em disco
 
 ---
 
