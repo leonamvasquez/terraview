@@ -68,6 +68,23 @@ var (
 
 	// JWT tokens: header.payload (both base64url starting with eyJ)
 	jwtPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+`)
+
+	// AI provider API keys. These slip past the field-name filter when the
+	// value lives in a description/tag/metadata blob rather than a typed
+	// secret field. Patterns chosen to be strict enough to avoid redacting
+	// legitimate tokens (resource IDs, hashes) of similar shape.
+	apiKeyPatterns = []*regexp.Regexp{
+		// OpenAI/OpenRouter/DeepSeek-style: sk-... or sk-proj-... (40+ alnum)
+		regexp.MustCompile(`sk-(?:proj-|or-v1-|ant-)?[A-Za-z0-9_-]{30,}`),
+		// Google API key: AIza + 35 chars
+		regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
+		// GitHub token: ghp_/gho_/ghu_/ghs_/ghr_ + 36 alnum
+		regexp.MustCompile(`gh[psoru]_[A-Za-z0-9]{36}`),
+		// AWS access key id: AKIA + 16 upper/digits
+		regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
+		// Slack tokens: xox[abposr]-... (rotated formats)
+		regexp.MustCompile(`xox[abposr]-[A-Za-z0-9-]{10,}`),
+	}
 )
 
 // minBase64Length is the minimum length of a base64 blob to be redacted.
@@ -144,6 +161,11 @@ func isSensitiveValue(value string) bool {
 	}
 	if len(value) >= minBase64Length && base64Pattern.MatchString(value) {
 		return true
+	}
+	for _, p := range apiKeyPatterns {
+		if p.MatchString(value) {
+			return true
+		}
 	}
 	return false
 }
