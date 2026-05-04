@@ -3,11 +3,13 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -18,6 +20,7 @@ import (
 	"github.com/leonamvasquez/terraview/internal/history"
 	"github.com/leonamvasquez/terraview/internal/output"
 	"github.com/leonamvasquez/terraview/internal/rules"
+	"github.com/leonamvasquez/terraview/internal/topology"
 )
 
 // fixWorkerPool is the number of concurrent suggester.Suggest calls during
@@ -209,8 +212,20 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 		}
 
 		// Step 1: rescan to see the current state.
-		if err := runScan(cmd, []string{}); err != nil {
-			return fmt.Errorf("scan in iteration %d: %w", iter, err)
+		// runScan returns *ExitError when findings exist (exit 1/2). That's the
+		// expected case here — the loop's whole purpose is to react to findings,
+		// so unwrap and continue. Only fail on real errors (parser/scanner/IO).
+		//
+		// stdout is redirected to /dev/null so the user does NOT see the full
+		// verdict box / findings tables / scores during a fix loop — those are
+		// noise here, the user only cares about applied/failed counts. The
+		// scanner spinner (stderr) stays visible so progress is still felt, and
+		// the result is persisted to history for the next step to read.
+		if err := runScanQuiet(cmd, []string{}); err != nil {
+			var exitErr *ExitError
+			if !errors.As(err, &exitErr) {
+				return fmt.Errorf("scan in iteration %d: %w", iter, err)
+			}
 		}
 
 		// Step 2: count HIGH/CRITICAL findings.
@@ -233,7 +248,15 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		if prevHigh != -1 && high >= prevHigh {
-			fmt.Printf("%s ⚠ no progress (prev=%d, now=%d) — stopping.\n", output.Prefix(), prevHigh, high)
+			delta := high - prevHigh
+			switch {
+			case delta > 0:
+				fmt.Printf("%s ⚠ regressing (prev=%d, now=%d, +%d new) — stopping. The AI is introducing more findings than it fixes; rerun without --auto-approve to review each change.\n",
+					output.Prefix(), prevHigh, high, delta)
+			default:
+				fmt.Printf("%s ⚠ stalled at %d HIGH/CRITICAL — stopping. Remaining findings need manual review.\n",
+					output.Prefix(), high)
+			}
 			return nil
 		}
 		prevHigh = high
@@ -259,6 +282,23 @@ func runFixApply(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("%s ⚠ reached max iterations (%d) — re-run if more findings remain.\n", output.Prefix(), maxIter)
 	return nil
+}
+
+// runScanQuiet runs runScan with stdout redirected to /dev/null. The scanner
+// spinner (stderr) and the persisted history are unaffected — only the loud
+// verdict/findings/scores block is suppressed. Used inside the fix-apply loop
+// where the user already saw a full scan and now just wants the apply phase.
+func runScanQuiet(cmd *cobra.Command, args []string) error {
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		// Fallback: run normally if /dev/null is unavailable.
+		return runScan(cmd, args)
+	}
+	defer devNull.Close()
+	original := os.Stdout
+	os.Stdout = devNull
+	defer func() { os.Stdout = original }()
+	return runScan(cmd, args)
 }
 
 // ── core generator ──────────────────────────────────────────────────────────
@@ -383,24 +423,31 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 		planIndex = fix.BuildIndex(rawPlan, resources)
 	}
 
-	// Phase 1: generate suggestions (parallel worker pool).
-	// Findings are pre-built into jobs serially (file filtering, HCL/context
-	// reads), then dispatched to a small pool of workers that call the AI
-	// provider concurrently. Output stays labeled by [i/N] so the user can
-	// trace progress even though completion order may interleave.
-	fmt.Printf("%s Generating %d fix suggestion(s) (concurrency=%d)...\n", output.Prefix(), len(targets), fixWorkerPool)
+	// Build project-wide HCL context once. Every fix request gets this so the AI
+	// never re-declares an existing data source / variable / provider — the root
+	// cause of the iterative-loop "whack-a-mole" where one fix introduces the
+	// `Duplicate data ... configuration` error that the next iteration tries
+	// (and fails) to clean up.
+	projectCtx := fix.BuildProjectContext(searchDir)
 
+	// Phase 1: generate suggestions (parallel worker pool).
+	// Output is a single in-place spinner showing live `[done/total]` progress;
+	// per-finding success lines are suppressed because at high N (50+) they
+	// drown out everything else. Failures and skips are captured into a list
+	// printed once after wg.Wait so the user still sees what didn't generate.
 	type fixJob struct {
 		idx        int
 		finding    rules.Finding
 		req        fix.FixRequest
 		loc        *fix.Location
-		skipReason string // non-empty → skip without calling AI
+		skipReason string        // non-empty → skip without calling AI
+		advisory   *fix.Advisory // non-nil → pre-classified advisory; AI call is skipped
 	}
 	type fixOutcome struct {
 		suggestion *fix.FixSuggestion
 		loc        *fix.Location
 		finding    rules.Finding
+		advisory   *fix.Advisory
 		ok         bool
 	}
 
@@ -419,6 +466,15 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			jobs = append(jobs, job)
 			continue
 		}
+		// Pre-classify by static signals (rule catalog + architectural
+		// category) before paying for an AI call. Findings that are
+		// fundamentally human decisions don't need a generated patch — they
+		// just need to surface as advisories.
+		if adv := fix.PreClassifyFindingForProject(f, projectDir); adv != nil {
+			job.advisory = adv
+			jobs = append(jobs, job)
+			continue
+		}
 		req := fix.FixRequest{
 			Finding: fix.FixFinding{
 				RuleID:   f.RuleID,
@@ -430,6 +486,7 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			ResourceType:   resourceType,
 			ResourceConfig: resourceConfig,
 			PlanIndex:      planIndex,
+			ProjectContext: projectCtx,
 		}
 		if brFlag {
 			req.Lang = "pt-BR"
@@ -447,18 +504,47 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 	outcomes := make([]fixOutcome, len(jobs))
 	sem := make(chan struct{}, fixWorkerPool)
 	var wg sync.WaitGroup
-	var printMu sync.Mutex
+	var failuresMu sync.Mutex
+	type genFailure struct {
+		ruleID, resource, reason string
+		skipped                  bool // true → "skipped (reason)"; false → "✗ reason"
+	}
+	failures := make([]genFailure, 0)
 	total := len(targets)
+	var doneCount atomic.Int64
+	spinner := output.NewSpinner(fmt.Sprintf("Generating fix suggestions [0/%d]", total))
+	spinner.Start()
+	tick := func() {
+		n := doneCount.Add(1)
+		spinner.SetMessage(fmt.Sprintf("Generating fix suggestions [%d/%d]", n, total))
+	}
+	recordFailure := func(job fixJob, reason string, skipped bool) {
+		failuresMu.Lock()
+		failures = append(failures, genFailure{
+			ruleID:   job.finding.RuleID,
+			resource: job.finding.Resource,
+			reason:   reason,
+			skipped:  skipped,
+		})
+		failuresMu.Unlock()
+	}
 
-	// Group eligible jobs (no skipReason) by ResourceAddr so multiple findings
-	// on the same resource can be batched into a single AI call. Resources with
-	// only one finding still go through the singleton path.
+	// Group eligible jobs (no skipReason, no advisory) by ResourceAddr so
+	// multiple findings on the same resource can be batched into a single AI
+	// call. Resources with only one finding still go through the singleton
+	// path. Pre-classified advisories are drained directly into outcomes
+	// without paying for an AI call.
 	skippedIdxs := make([]int, 0)
+	advisoryIdxs := make([]int, 0)
 	groups := make(map[string][]int) // resourceAddr → []job index
 	groupOrder := make([]string, 0)
 	for j, job := range jobs {
 		if job.skipReason != "" {
 			skippedIdxs = append(skippedIdxs, j)
+			continue
+		}
+		if job.advisory != nil {
+			advisoryIdxs = append(advisoryIdxs, j)
 			continue
 		}
 		addr := job.finding.Resource
@@ -471,9 +557,22 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 	// Drain skipped jobs first (no AI work).
 	for _, j := range skippedIdxs {
 		job := jobs[j]
-		label := fmt.Sprintf("  [%d/%d] %s on %s...", job.idx+1, total, job.finding.RuleID, job.finding.Resource)
-		fmt.Printf("%s ⏩ skipped (%s)\n", label, job.skipReason)
+		recordFailure(job, job.skipReason, true)
 		outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+		tick()
+	}
+
+	// Drain advisory jobs — they bypass AI generation and flow directly into
+	// pending as advisories. Marked ok=true so they show up downstream.
+	for _, j := range advisoryIdxs {
+		job := jobs[j]
+		outcomes[j] = fixOutcome{
+			finding:  job.finding,
+			loc:      job.loc,
+			advisory: job.advisory,
+			ok:       true,
+		}
+		tick()
 	}
 
 	for _, addr := range groupOrder {
@@ -483,12 +582,6 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-
-			// Build the label set for this group up-front so progress stays readable.
-			labelOf := func(j int) string {
-				job := jobs[j]
-				return fmt.Sprintf("  [%d/%d] %s on %s...", job.idx+1, total, job.finding.RuleID, job.finding.Resource)
-			}
 
 			// Allow more time for batch (multiple findings) but cap so a single
 			// stuck resource cannot starve the global budget.
@@ -506,19 +599,18 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 				j := idxs[0]
 				job := jobs[j]
 				suggestion, err := suggester.Suggest(findingCtx, job.req)
-				printMu.Lock()
-				defer printMu.Unlock()
 				if err != nil {
 					if isTimeoutErr(err) {
-						fmt.Printf("%s ⏩ skipped (timeout)\n", labelOf(j))
+						recordFailure(job, "timeout", true)
 					} else {
-						fmt.Printf("%s ✗ %v\n", labelOf(j), err)
+						recordFailure(job, err.Error(), false)
 					}
 					outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
+					tick()
 					return
 				}
-				fmt.Printf("%s ✓\n", labelOf(j))
 				outcomes[j] = fixOutcome{suggestion: suggestion, loc: job.loc, finding: job.finding, ok: true}
+				tick()
 				return
 			}
 
@@ -530,57 +622,84 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 			suggestions, err := suggester.SuggestBatch(findingCtx, reqs)
 			if err != nil {
 				// Fallback: per-finding on batch failure to preserve quality.
-				printMu.Lock()
-				fmt.Printf("  ⚠ batch failed for %s (%d findings) — falling back per-finding: %v\n", addr, len(idxs), err)
-				printMu.Unlock()
 				for _, j := range idxs {
 					job := jobs[j]
 					sugg, sErr := suggester.Suggest(findingCtx, job.req)
-					printMu.Lock()
 					if sErr != nil {
 						if isTimeoutErr(sErr) {
-							fmt.Printf("%s ⏩ skipped (timeout)\n", labelOf(j))
+							recordFailure(job, "timeout", true)
 						} else {
-							fmt.Printf("%s ✗ %v\n", labelOf(j), sErr)
+							recordFailure(job, sErr.Error(), false)
 						}
 						outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
 					} else {
-						fmt.Printf("%s ✓\n", labelOf(j))
 						outcomes[j] = fixOutcome{suggestion: sugg, loc: job.loc, finding: job.finding, ok: true}
 					}
-					printMu.Unlock()
+					tick()
 				}
 				return
 			}
-			printMu.Lock()
-			defer printMu.Unlock()
 			for k, j := range idxs {
 				job := jobs[j]
 				if k < len(suggestions) && suggestions[k] != nil {
-					fmt.Printf("%s ✓ (batch×%d)\n", labelOf(j), len(idxs))
 					outcomes[j] = fixOutcome{suggestion: suggestions[k], loc: job.loc, finding: job.finding, ok: true}
 				} else {
-					fmt.Printf("%s ✗ batch missing suggestion\n", labelOf(j))
+					recordFailure(job, "batch missing suggestion", false)
 					outcomes[j] = fixOutcome{finding: job.finding, loc: job.loc}
 				}
+				tick()
 			}
 		}()
 	}
 	wg.Wait()
+	spinner.Stop(len(failures) == 0)
+
+	if len(failures) > 0 {
+		fmt.Fprintln(os.Stderr)
+		for _, f := range failures {
+			marker := "✗"
+			if f.skipped {
+				marker = "⏩"
+			}
+			// Truncate noisy multi-line errors to the first line for readability.
+			reason := f.reason
+			if i := strings.IndexByte(reason, '\n'); i > 0 {
+				reason = reason[:i]
+			}
+			fmt.Fprintf(os.Stderr, "  %s %s on %s — %s\n", marker, f.ruleID, f.resource, reason)
+		}
+	}
+
+	// Build the dependency graph once so the Classifier can detect when a
+	// proposed deletion would orphan inbound references — the most common
+	// reason iterative fixes fail with "Reference to undeclared resource".
+	graph := topology.BuildGraph(resources)
+	classifier := fix.NewClassifierWithProject(graph, projectDir)
 
 	// Reassemble pending in original target order so downstream display is
-	// deterministic regardless of completion order.
+	// deterministic regardless of completion order. Pre-classified advisories
+	// (no suggestion generated) flow through; suggestions get the full
+	// Classifier pass to pick up the graph signal on top of catalog/category.
 	pending := make([]fix.PendingFix, 0, len(jobs))
 	for _, oc := range outcomes {
 		if !oc.ok {
 			continue
 		}
-		pending = append(pending, fix.PendingFix{
+		pf := fix.PendingFix{
 			Finding:    oc.finding,
 			Suggestion: oc.suggestion,
 			Location:   oc.loc,
-			Warnings:   fix.ValidateFix(oc.suggestion),
-		})
+		}
+		if oc.suggestion != nil {
+			pf.Warnings = fix.ValidateFix(oc.suggestion)
+		}
+		switch {
+		case oc.advisory != nil:
+			pf.Advisory = oc.advisory
+		default:
+			pf.Advisory = classifier.Classify(pf)
+		}
+		pending = append(pending, pf)
 	}
 
 	if len(pending) == 0 {
@@ -588,7 +707,11 @@ func generateAndHandleFixes(filter fixFilter, handler func(*fix.ApplySession, []
 		return nil
 	}
 
-	session := &fix.ApplySession{WorkDir: searchDir, NoColor: noColor}
+	session := &fix.ApplySession{
+		WorkDir:    searchDir,
+		ProjectDir: projectDir,
+		NoColor:    noColor,
+	}
 	handler(session, pending)
 	return nil
 }

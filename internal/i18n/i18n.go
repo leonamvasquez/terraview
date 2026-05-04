@@ -57,7 +57,26 @@ type Messages struct {
 	CompareColNow  string // "Now" / "Agora"
 
 	// Fix
-	FixEffort string // "Effort" / "Esforço"
+	FixEffort           string // "Effort" / "Esforço"
+	FixActionApply      string // "Apply" / "Aplicar"
+	FixActionReject     string // "Reject" / "Rejeitar"
+	FixActionSkip       string // "Skip" / "Pular"
+	FixActionQuit       string // "Quit" / "Sair"
+	FixAppliedTo        string // "Applied to" / "Aplicado em"
+	FixRejected         string // "Rejected" / "Rejeitado"
+	FixSkipped          string // "Skipped" / "Ignorado"
+	FixSessionEnded     string // "Session ended." / "Sessão encerrada."
+	FixApplyError       string // "Error applying fix" / "Erro ao aplicar"
+	FixCannotLocateFile string // "Could not locate .tf file — copy the HCL manually." / "Não foi possível localizar o arquivo .tf — copie o HCL manualmente."
+	FixCoveredByBatch   string // "covered by previous batch on the same resource — no new application required" / "coberto pelo batch anterior no mesmo recurso — não requer nova aplicação"
+	FixAdvisoryHeader   string // "Points of attention (manual review recommended):" / "Pontos de atenção (revisão manual recomendada):"
+	FixFileNotFound     string // "⚠ .tf file not found in %s" / "⚠ arquivo .tf não localizado em %s"
+	FixNoChanges        string // "(no changes detected)" / "(sem alterações detectadas)"
+	FixSummaryApplied   string // "applied" / "aplicado(s)"
+	FixSummaryRejected  string // "rejected" / "rejeitado(s)"
+	FixSummarySkipped   string // "skipped" / "ignorado(s)"
+	FixSummaryHint      string // "Tip: run %s to validate modified files." / "Dica: execute %s para verificar os arquivos modificados."
+	FixHCLUnbalanced    string // "generated HCL has unbalanced delimiters ({}, [] or ()) — fix rejected to avoid file corruption" / pt-BR equiv
 
 	// Status
 	StatusOnProject    string // "On project:" / "No projeto:"
@@ -111,7 +130,26 @@ var en = Messages{
 	CompareTitle:   "Comparison — %s",
 	CompareColNow:  "Now",
 
-	FixEffort: "Effort",
+	FixEffort:           "Effort",
+	FixActionApply:      "Apply",
+	FixActionReject:     "Reject",
+	FixActionSkip:       "Skip",
+	FixActionQuit:       "Quit",
+	FixAppliedTo:        "Applied to",
+	FixRejected:         "Rejected",
+	FixSkipped:          "Skipped",
+	FixSessionEnded:     "Session ended.",
+	FixApplyError:       "Error applying fix",
+	FixCannotLocateFile: "Could not locate .tf file — copy the HCL manually.",
+	FixCoveredByBatch:   "covered by previous batch on the same resource — no new application required",
+	FixAdvisoryHeader:   "Points of attention (manual review recommended):",
+	FixFileNotFound:     "⚠ .tf file not found in %s",
+	FixNoChanges:        "(no changes detected)",
+	FixSummaryApplied:   "applied",
+	FixSummaryRejected:  "rejected",
+	FixSummarySkipped:   "skipped",
+	FixSummaryHint:      "Tip: run %s to validate modified files.",
+	FixHCLUnbalanced:    "generated HCL has unbalanced delimiters ({}, [] or ()) — fix rejected to avoid file corruption",
 
 	StatusOnProject:    "On project:",
 	StatusLastScan:     "Last scan:",
@@ -161,7 +199,26 @@ var br = Messages{
 	CompareTitle:   "Comparação — %s",
 	CompareColNow:  "Agora",
 
-	FixEffort: "Esforço",
+	FixEffort:           "Esforço",
+	FixActionApply:      "Aplicar",
+	FixActionReject:     "Rejeitar",
+	FixActionSkip:       "Pular",
+	FixActionQuit:       "Sair",
+	FixAppliedTo:        "Aplicado em",
+	FixRejected:         "Rejeitado",
+	FixSkipped:          "Ignorado",
+	FixSessionEnded:     "Sessão encerrada.",
+	FixApplyError:       "Erro ao aplicar",
+	FixCannotLocateFile: "Não foi possível localizar o arquivo .tf — copie o HCL manualmente.",
+	FixCoveredByBatch:   "coberto pelo batch anterior no mesmo recurso — não requer nova aplicação",
+	FixAdvisoryHeader:   "Pontos de atenção (revisão manual recomendada):",
+	FixFileNotFound:     "⚠ arquivo .tf não localizado em %s",
+	FixNoChanges:        "(sem alterações detectadas)",
+	FixSummaryApplied:   "aplicado(s)",
+	FixSummaryRejected:  "rejeitado(s)",
+	FixSummarySkipped:   "ignorado(s)",
+	FixSummaryHint:      "Dica: execute %s para verificar os arquivos modificados.",
+	FixHCLUnbalanced:    "HCL gerado tem delimitadores desbalanceados ({}, [] ou ()) — fix rejeitado para evitar corrupção do arquivo",
 
 	StatusOnProject:    "No projeto:",
 	StatusLastScan:     "Último scan:",
