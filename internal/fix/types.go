@@ -24,6 +24,14 @@ type FixRequest struct {
 	// Not serialized — used internally to build the AI user message.
 	PlanIndex *PlanIndex `json:"-"`
 
+	// ProjectContext lists declarations already present in the project's .tf
+	// files (providers, variables, data sources, resources, locals). Sent to
+	// the AI so it never re-declares an existing data source / variable /
+	// provider — the leading cause of `terraform validate` failures and the
+	// fix-loop "whack-a-mole" effect. Not serialized — flattened into the user
+	// message JSON by buildUserMessage.
+	ProjectContext *ProjectContext `json:"-"`
+
 	// Lang sets the response language. "pt-BR" instructs the AI to respond in
 	// Brazilian Portuguese. Empty means English (default).
 	Lang string `json:"-"`

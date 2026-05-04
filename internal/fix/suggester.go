@@ -72,6 +72,34 @@ prerequisite resource block instead of inventing an argument.
 - file_context shows all other resources in the same file — check it before creating a new resource
 - If an existing resource of the needed type is listed, reference it instead of creating a new one
 
+## Project-wide context — read before generating prerequisites
+
+When the user message contains "project_context", it lists declarations that
+already exist somewhere in the project's .tf files:
+
+- "providers": short provider names already configured (e.g. "aws", "random")
+- "variables": variable names already declared
+- "data_sources": data source addresses already declared (e.g. "data.aws_caller_identity.current")
+- "resources_by_type": map of type → existing addresses
+- "locals": names declared inside any locals { } block
+
+You MUST:
+- Never emit a "data" block for a data source already in "data_sources" — that
+  causes "Duplicate data ... configuration" and reverts the fix
+- Never reference var.NAME if NAME is not in "variables" — declare it as a
+  prerequisite ("variable \"NAME\" {}") if you truly need it, or use a literal
+- If your fix introduces a NEW provider (e.g. "random" for random_password),
+  AND that provider is not in "providers", emit a prerequisite that adds it to
+  required_providers. Format the prerequisite as a complete terraform block:
+    terraform {
+      required_providers {
+        random = { source = "hashicorp/random", version = "~> 3.0" }
+      }
+    }
+  The patcher recognizes terraform/required_providers blocks and merges them.
+- Reuse resources from "resources_by_type" instead of creating duplicates
+  (e.g. reference an existing aws_kms_key.main rather than declaring a new one)
+
 ## Effort guide
 
 - low: add/change one attribute (e.g. enable_key_rotation = true)
@@ -193,6 +221,7 @@ func buildBatchUserMessage(reqs []FixRequest) string {
 		FileContext     string                 `json:"file_context,omitempty"`
 		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
 		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ProjectContext  *projectContextDTO     `json:"project_context,omitempty"`
 		ValidAttributes []string               `json:"valid_attributes,omitempty"`
 	}
 
@@ -220,6 +249,9 @@ func buildBatchUserMessage(reqs []FixRequest) string {
 		if pc := buildPlanContext(first); pc != nil {
 			p.PlanContext = pc
 		}
+	}
+	if dto := projectContextDTOFrom(first.ProjectContext); dto != nil {
+		p.ProjectContext = dto
 	}
 
 	data, _ := json.MarshalIndent(p, "", "  ")
@@ -333,6 +365,7 @@ func buildUserMessage(req FixRequest) string {
 		FileContext     string                 `json:"file_context,omitempty"`
 		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
 		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ProjectContext  *projectContextDTO     `json:"project_context,omitempty"`
 		ValidAttributes []string               `json:"valid_attributes,omitempty"`
 	}
 
@@ -368,8 +401,39 @@ func buildUserMessage(req FixRequest) string {
 		}
 	}
 
+	if dto := projectContextDTOFrom(req.ProjectContext); dto != nil {
+		p.ProjectContext = dto
+	}
+
 	data, _ := json.MarshalIndent(p, "", "  ")
 	return string(data)
+}
+
+// projectContextDTO is the JSON shape sent to the AI. Field names are
+// snake_case so the prompt rules ("project_context.providers", etc.) match.
+type projectContextDTO struct {
+	Providers       []string            `json:"providers,omitempty"`
+	Variables       []string            `json:"variables,omitempty"`
+	DataSources     []string            `json:"data_sources,omitempty"`
+	ResourcesByType map[string][]string `json:"resources_by_type,omitempty"`
+	Locals          []string            `json:"locals,omitempty"`
+}
+
+func projectContextDTOFrom(pc *ProjectContext) *projectContextDTO {
+	if pc == nil {
+		return nil
+	}
+	if len(pc.Providers) == 0 && len(pc.Variables) == 0 && len(pc.DataSources) == 0 &&
+		len(pc.ResourcesByType) == 0 && len(pc.Locals) == 0 {
+		return nil
+	}
+	return &projectContextDTO{
+		Providers:       pc.Providers,
+		Variables:       pc.Variables,
+		DataSources:     pc.DataSources,
+		ResourcesByType: pc.ResourcesByType,
+		Locals:          pc.Locals,
+	}
 }
 
 // buildPlanContext constructs the planContext section of the user message using
