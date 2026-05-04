@@ -109,10 +109,19 @@ func (s *Spinner) Start() {
 
 // SetMessage atomically swaps the status text shown next to the animated frame.
 // Safe to call concurrently from any goroutine while the spinner is running.
+//
+// In noop mode (non-TTY/CI), prints a fresh log line so the user still gets
+// progress feedback — without this, long-running ops in CI look hung.
 func (s *Spinner) SetMessage(msg string) {
 	s.mu.Lock()
 	s.message = msg
+	noop := s.noop
+	running := s.running
 	s.mu.Unlock()
+
+	if noop && running {
+		fmt.Fprintf(os.Stderr, "%s %s\n", Prefix(), msg)
+	}
 }
 
 // Stop halts the spinner and prints a final status line.
