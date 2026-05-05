@@ -11,7 +11,7 @@ with [SemVer](https://semver.org/) versioning.
 
 ## [0.10.0] — 2026-05-04
 
-Sprint 15: classificador multi-sinal de advisories (5 sinais incluindo auto-avaliação da IA), performance do `contextanalysis`, hardening de operações críticas e flag `--debug` para troubleshooting.
+Classificador multi-sinal de advisories (5 sinais incluindo auto-avaliação da IA), performance do `contextanalysis`, hardening de operações críticas e flag `--debug` para troubleshooting.
 
 ### Added
 
@@ -36,7 +36,7 @@ Sprint 15: classificador multi-sinal de advisories (5 sinais incluindo auto-aval
 - **Batch de sugestões por recurso no `fix`** — múltiplos findings do mesmo recurso são consolidados em uma chamada à IA; loop iterativo passa a ser default
 - **`fix` interactive prompts em inglês por padrão** (`[a] Apply [r] Reject [s] Skip [q] Quit`); pt-BR só com `--br`. 18+ strings movidas para `internal/i18n/i18n.go`
 - **`Review()` do `ApplySession` separa applicable de advisories** — espelha `Preview()` e protege contra `pf.Suggestion == nil` em fixes pré-classificados
-- **Timeout base maior para CLI providers no `scan`** — `gemini-cli` e `claude-code` usam 300s base (mesmo padrão da Sprint 14 em `cmd/fix.go`)
+- **Timeout base maior para CLI providers no `scan`** — `gemini-cli` e `claude-code` usam 300s base (mesmo padrão já aplicado em `cmd/fix.go`)
 - **`scanner.checkov` resiliente a log preamble** — `extractJSON()` ignora linhas `[ERROR]`/`[MainThread]` antes do payload JSON
 
 ### Fixed
@@ -59,7 +59,7 @@ Sprint 15: classificador multi-sinal de advisories (5 sinais incluindo auto-aval
 
 ## [0.9.0] — 2026-04-29
 
-Sprints 6–14: hardening do core (cobertura, qualidade do fix engine, scanner standalone expandido, eval framework de IA e correções de UX). Foco em estabilidade pré-release público.
+Hardening do core (cobertura, qualidade do fix engine, scanner standalone expandido, eval framework de IA e correções de UX). Foco em estabilidade pré-release público.
 
 ### Added
 
@@ -107,7 +107,7 @@ Sprints 6–14: hardening do core (cobertura, qualidade do fix engine, scanner s
 
 ## [0.8.0] — 2026-04-19
 
-Sprint 5: polimento do core loop, qualidade de IA e scanner standalone sem dependências externas. Score geral: 8.1 → **8.8/10**.
+Polimento do core loop, qualidade de IA e scanner standalone sem dependências externas. Score geral: 8.1 → **8.8/10**.
 
 ### Added
 
@@ -139,7 +139,7 @@ Sprint 5: polimento do core loop, qualidade de IA e scanner standalone sem depen
 
 ## [0.7.0] — 2026-04-14
 
-Release marca a conclusão do **Decommission Plan** (Sprints 1–4): remoção de escopo desnecessário, refactor do `fix` como parent command com subcommands, limpeza completa de código morto e paridade de documentação pt-BR/EN. Core loop final: **scan → diagram → explain → fix**.
+Release marca a conclusão do **Decommission Plan**: remoção de escopo desnecessário, refactor do `fix` como parent command com subcommands, limpeza completa de código morto e paridade de documentação pt-BR/EN. Core loop final: **scan → diagram → explain → fix**.
 
 ### Removed
 
@@ -199,8 +199,6 @@ Release marca a conclusão do **Decommission Plan** (Sprints 1–4): remoção d
 
 ### Notas
 
-- Branch `chore/decommission-sprint-1` fundida via `--no-ff` (commit `e5aa984`)
-- Sprints 1–4 concluídas entre 2026-04-13 e 2026-04-14
 - Safeguards do fix preservados: brace-balance pre-flight, backup `.tvfix.bak`, `terraform validate` após apply, rollback automático em falha
 
 ---

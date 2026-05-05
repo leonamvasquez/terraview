@@ -7,8 +7,7 @@ import (
 )
 
 // syntheticPlan builds a TerraformPlan with 3 resources and configuration
-// expressions for aws_api_gateway_method.proxy, as required by the Sprint 6
-// test specification.
+// expressions for aws_api_gateway_method.proxy used by plan-index tests.
 func syntheticPlan() *parser.TerraformPlan {
 	return &parser.TerraformPlan{
 		Configuration: parser.Configuration{
