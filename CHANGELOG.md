@@ -9,27 +9,43 @@ with [SemVer](https://semver.org/) versioning.
 
 ## [Unreleased]
 
-Sprint 15: classificação de advisories, contexto de projeto no fix engine, histórico de falhas e correções de UX no comando `fix`.
+## [0.10.0] — 2026-05-04
+
+Sprint 15: classificador multi-sinal de advisories (5 sinais incluindo auto-avaliação da IA), performance do `contextanalysis`, hardening de operações críticas e flag `--debug` para troubleshooting.
 
 ### Added
 
-- **Classificador de advisories multi-sinal** (`internal/fix/classifier.go`) — promove fixes para "advisory" (revisão manual) quando: (1) o RuleID está no catálogo estático de remediações que exigem decisão humana; (2) a categoria é arquitetural; (3) a sugestão da IA propõe deletar um recurso com referências de entrada no grafo de topologia; (4) o tuplo `(projeto, regra, recurso)` falhou ≥ N tentativas consecutivas
-- **Catálogo estático de regras advisory** (`internal/rules/classification.go`) — ~30 IDs Checkov + 17 padrões regex cross-scanner cobrindo IAM identity changes, RDS engine upgrades, public access removal, secrets rotation. `AdvisoryReasonForFinding` consultado antes de chamar a IA, evitando custo desnecessário
-- **Histórico de falhas persistente** (`internal/fix/failurelog/`) — JSON em `~/.terraview/failure_history.json` com `Count` e `LastError` por chave `(projeto, regra, recurso)`. Após `PromotionThreshold` (=2) falhas consecutivas, a próxima execução promove para advisory. Aplicações bem-sucedidas zeram o contador, permitindo recuperação automática de falhas transitórias
-- **Project context no prompt de fix** (`internal/fix/project_context.go`) — coleta de declarações já existentes nos `.tf` (providers, variables, data sources, resources, locals) para o prompt do fix. Elimina o efeito "whack-a-mole" de a IA re-declarar variáveis/data sources e quebrar `terraform validate`
+- **Classificador de advisories multi-sinal** (`internal/fix/classifier.go`) — promove fixes para "advisory" (revisão manual) quando:
+  1. **Catálogo estático** — RuleID conhecido por exigir decisão humana
+  2. **Categoria arquitetural** — design decisions, não patches textuais
+  3. **Deleção com referências** — sugestão da IA remove recurso com dependentes no grafo de topologia
+  4. **Histórico de falhas** — tuplo `(projeto, regra, recurso)` falhou ≥ 2 tentativas
+  5. **AI self-assessment** — IA preenche `manual_review_reason` ou `blast_radius=high` no JSON de resposta
+- **AI self-assessment no prompt do fix** (`internal/fix/suggester.go`) — campos opcionais `manual_review_reason` e `blast_radius` (`none|low|medium|high`) no contrato JSON de resposta. Permite cobertura para regras fora do catálogo estático sem release de código (ex.: `CKV_AWS_336` promovido pela IA mesmo sem entrada estática)
+- **Catálogo estático de regras advisory** (`internal/rules/classification.go`) — ~30 IDs Checkov + 17 padrões regex cross-scanner (IAM identity changes, RDS engine upgrades, public access removal, secrets rotation). `AdvisoryReasonForFinding` consultado antes de chamar a IA, evitando custo desnecessário
+- **Histórico de falhas persistente** (`internal/fix/failurelog/`) — JSON em `~/.terraview/failure_history.json` com `Count` e `LastError` por chave `(projeto, regra, recurso)`. Após `PromotionThreshold` (=2) falhas consecutivas, próxima execução promove para advisory. Aplicações bem-sucedidas zeram o contador
+- **Project context no prompt de fix** (`internal/fix/project_context.go`) — coleta declarações já existentes nos `.tf` (providers, variables, data sources, resources, locals). Elimina o efeito "whack-a-mole" de a IA re-declarar variáveis/data sources e quebrar `terraform validate`
+- **Flag `--debug`** (`cmd/root.go`, `internal/debuglog`) — logger JSONL local em `~/.terraview/debug.log` com payload sanitizado em pontos-chave do pipeline (scan, AI setup, fix). Cancelamento gracioso via SIGINT/SIGTERM
 - **Spinner com `SetMessage` concorrente** (`internal/output/spinner.go`) — troca atômica de texto durante operações longas (mutex-guarded)
-- **Feedback imediato no `terraview scan`** — imprime "scan starting…" antes de carregar config/scanner, evitando impressão de processo travado em projetos grandes
+- **Feedback imediato no `terraview scan`** — imprime "scan starting…" antes de carregar config/scanner
 
 ### Changed
 
+- **`contextanalysis` paralelo** (`internal/contextanalysis`) — batches executam em paralelo (cap de concorrência), com whitelist por tipo de recurso e topology filtrada para reduzir tokens (CTXPERF-003)
+- **Cache de IA por recurso** (`internal/aicache`) — invalidação por vizinhança em vez de plan-hash inteiro: editar 1 recurso não invalida o cache dos demais (CTXPERF-004)
+- **Batch de sugestões por recurso no `fix`** — múltiplos findings do mesmo recurso são consolidados em uma chamada à IA; loop iterativo passa a ser default
 - **`fix` interactive prompts em inglês por padrão** (`[a] Apply [r] Reject [s] Skip [q] Quit`); pt-BR só com `--br`. 18+ strings movidas para `internal/i18n/i18n.go`
-- **`Review()` do `ApplySession` separa applicable de advisories** — espelha o fluxo de `Preview()` e protege contra `pf.Suggestion == nil` em fixes pré-classificados como advisory
-- **`scanner.checkov` resiliente a log preamble** — `extractJSON()` ignora linhas `[ERROR]`/`[MainThread]` antes do payload JSON, problema observado quando `--quiet` não suprime tracebacks por-check
+- **`Review()` do `ApplySession` separa applicable de advisories** — espelha `Preview()` e protege contra `pf.Suggestion == nil` em fixes pré-classificados
+- **Timeout base maior para CLI providers no `scan`** — `gemini-cli` e `claude-code` usam 300s base (mesmo padrão da Sprint 14 em `cmd/fix.go`)
+- **`scanner.checkov` resiliente a log preamble** — `extractJSON()` ignora linhas `[ERROR]`/`[MainThread]` antes do payload JSON
 
 ### Fixed
 
-- **Panic em `fix apply` com advisories pré-classificadas** — acesso a `pf.Suggestion.Explanation` quando `Suggestion` era `nil` para findings promovidos antes da chamada à IA
-- **Diagnóstico em `fix apply` quando o scan não persiste findings** — em vez de "could not load scan results in iteration N", surfaces o erro real (`%w`) ou aponta `history.enabled: true` no `.terraview.yaml`
+- **Panic em `fix apply` com advisories pré-classificadas** — acesso a `pf.Suggestion.Explanation` quando `Suggestion` era `nil`
+- **Panic em `writeFixPlanJSON`** — guarda `p.Suggestion != nil` e `p.Advisory != nil` para emitir JSON válido em entradas advisory-only
+- **Diagnóstico em `fix apply` quando o scan não persiste findings** — em vez de "could not load scan results in iteration N", surfaces o erro real (`%w`) ou aponta `history.enabled: true`
+- **Detecção de quota 429/RESOURCE_EXHAUSTED no gemini-cli** — `quotaWatcher` faz fallback automático para gemini-3 v3 quando o tier preview é exausto
+- **Extração de JSON em respostas de IA com prosa** — parser tolera fenced blocks e prefácios em texto livre antes do payload
 
 ### Hardening
 
@@ -37,6 +53,7 @@ Sprint 15: classificação de advisories, contexto de projeto no fix engine, his
 - **`failurelog` com GC** — entradas com `LastSeen > 30d` são dropadas no `Load`, mantendo o arquivo bounded
 - **Spinner em modo noop (CI/non-TTY)** — `SetMessage` agora emite uma linha por update; antes era silencioso após `Start`
 - **Sanitizer redige API keys em campos não-sensíveis** — patterns para OpenAI/OpenRouter/Anthropic (`sk-...`), Google (`AIza...`), GitHub (`ghp_/gho_/...`), AWS (`AKIA...`), Slack (`xox[abposr]-...`); cobre o caso em que credenciais vivem em `description`/`tags`/`user_data`. Testes de regressão garantem que não vazam pelo `--debug` JSONL nem pelo cache em disco
+- **`.gitleaks.toml`** — allowlist do `sanitizer_test.go` para fixtures sintéticas (não bloqueia push/CI)
 
 ---
 

@@ -40,6 +40,7 @@ Flags:
       --model string      AI model to use
       --br                Output in Brazilian Portuguese (pt-BR)
       --no-color          Disable colored output
+      --debug             Write JSONL debug log to ~/.terraview/debug.log
   -v, --verbose           Enable verbose output
 ```
 
@@ -134,6 +135,7 @@ Um fix é promovido para advisory quando:
 2. **Categoria arquitetural** — design decisions, não patches textuais
 3. **Deleção com referências** — a sugestão da IA remove um recurso que tem dependentes no grafo de topologia
 4. **Histórico de falhas** — o tuplo `(projeto, regra, recurso)` falhou ≥ 2 tentativas consecutivas (registrado em `~/.terraview/failure_history.json`)
+5. **AI self-assessment** — a IA preenche `manual_review_reason` (texto livre explicando o risco) ou retorna `blast_radius=high` no JSON de resposta. Permite cobertura para regras fora do catálogo estático sem release de código
 
 Aplicações bem-sucedidas zeram o contador de falhas, permitindo recuperação automática de falhas transitórias.
 

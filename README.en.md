@@ -65,7 +65,7 @@ Terraview runs as a single binary with no external dependencies. When an AI prov
   - **CLI (subscription)**: Gemini CLI and Claude Code — use your personal subscription, no API key required
   - **Custom**: any OpenAI-compatible API (Grok/xAI, Groq, Mistral, Together AI, Fireworks, etc.)
 - **Finding Suppression** — `.terraview-ignore` file to permanently suppress accepted risks and false positives, with AND-logic scoping by rule, resource, or source (`--ignore-file`)
-- **AI Fix suggestions** — `terraview fix plan` (dry-run) / `terraview fix apply` (interactive or `--auto-approve`) generate and apply corrected HCL for CRITICAL/HIGH findings with validation, backup, and diff preview
+- **AI Fix suggestions with advisory classifier** — `terraview fix plan` (dry-run) / `terraview fix apply` (interactive or `--auto-approve`) generate and apply corrected HCL for CRITICAL/HIGH findings with validation, backup, and diff preview. A multi-signal classifier (5 signals: static catalog, architectural category, graph-aware deletion, persistent failure history, AI self-assessment via `manual_review_reason`/`blast_radius`) promotes risky fixes to manual review before applying
 - **Automatic integration test** — when selecting a provider via `provider list`, terraview tests connectivity and returns type-specific feedback (CLI installed, API key valid, service reachable)
 - **Conflict Resolution** — scanner × AI: scanner wins on disagreement (confidence 0.80); agreement boosts confidence to 1.00
 - **Unified Scorecard** with Security, Compliance, Maintainability scores (0–10)

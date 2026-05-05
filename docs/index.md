@@ -28,6 +28,7 @@ terraview scan checkov
 
 - **Scanners de segurança** — Checkov, tfsec e Terrascan integrados automaticamente
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
+- **AI Fix com classificador de advisories** — `fix plan`/`fix apply` geram HCL corrigido e separam fixes seguros de fixes que exigem revisão manual via 5 sinais (catálogo, arquitetura, grafo, histórico de falhas, auto-avaliação da IA)
 - **Scorecard unificado** — scores de Segurança, Compliance, Manutenibilidade e Overall (0–10)
 - **Vetores de risco** — análise em 5 eixos por recurso: rede, criptografia, identidade, governança, observabilidade
 - **Diagrama ASCII (AWS)** — visualização topológica da infraestrutura no terminal com aninhamento VPC, tiers de subnet e setas de conexão
