@@ -38,7 +38,7 @@ var ruleRequiredResources = map[string]string{
 
 // ruleRelevantAttrs maps a rule ID to the subset of resource attributes that
 // are meaningful for generating a fix. Used to truncate large current_config
-// payloads before sending to the AI provider (Sprint 4).
+// payloads before sending to the AI provider.
 var ruleRelevantAttrs = map[string][]string{
 	"CKV_AWS_7":   {"kms_key_id", "name", "s3_bucket_name"},
 	"CKV_AWS_18":  {"server_side_encryption_configuration", "bucket"},

@@ -531,8 +531,7 @@ func RunContextAnalysis(cfg Config, resources []parser.NormalizedResource, graph
 	}
 	// CLI-based providers (gemini-cli, claude-code) spawn a subprocess that
 	// loads its own model context and frequently exceeds the default 120s.
-	// Apply a higher base timeout to match the Sprint 14 fix pattern used
-	// in `terraview fix`.
+	// Apply a higher base timeout to match the pattern used in `terraview fix`.
 	isCLIProvider := providerName == "gemini-cli" || providerName == "claude-code"
 	baseTimeout := timeoutSecs
 	if isCLIProvider && baseTimeout < 300 {

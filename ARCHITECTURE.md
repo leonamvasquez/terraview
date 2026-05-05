@@ -84,8 +84,8 @@ no duplication, no drift. If you need to change scan behavior, change it in
 
 ## ADR-001 — Extract pipeline.Runner from cmd/scan.go
 
-**Context.** Before Sprint 1 (April 2026), the entire scan pipeline lived
-inside `runScan()` in `cmd/scan.go`. When the MCP server needed to offer
+**Context.** Originally, the entire scan pipeline lived inside `runScan()`
+in `cmd/scan.go`. When the MCP server needed to offer
 `terraview_scan` as a tool, the only option was to duplicate that logic in
 `internal/mcp/handler_scan.go`.
 
