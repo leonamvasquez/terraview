@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,6 +109,12 @@ func init() {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	// Print immediately so the user gets feedback even before config load,
+	// scanner detection, or terraform plan have a chance to write anything.
+	// Without this, a slow filesystem or large project gives the impression
+	// the command is hung.
+	fmt.Printf("%s scan starting...\n", output.Prefix())
+
 	// Handle --terragrunt <file> parsed as extra positional arg due to NoOptDefVal.
 	if terragruntFlag == "auto" && len(args) > 1 {
 		terragruntFlag = args[len(args)-1]
@@ -264,7 +269,7 @@ func executeReview(scannerName string) (string, int, error) { //nolint:unparam /
 	}
 
 	runner := pipeline.NewRunner(rc.toPipeline())
-	runResult, err := runner.Run(context.Background())
+	runResult, err := runner.Run(rootCtx)
 	if err != nil {
 		return rc.resolvedPlan, 0, err
 	}
@@ -380,7 +385,7 @@ func parsePlan(planPath string) (*parser.TerraformPlan, []parser.NormalizedResou
 // Thin wrapper around pipeline.RunScanPhase that preserves the cmd-level
 // reviewConfig/scanResult surface used by the existing test suite.
 func runScanners(rc reviewConfig, resources []parser.NormalizedResource, topoGraph *topology.Graph) (scanResult, error) {
-	sr, err := pipeline.RunScanPhase(context.Background(), rc.toPipeline(), resources, topoGraph)
+	sr, err := pipeline.RunScanPhase(rootCtx, rc.toPipeline(), resources, topoGraph)
 	result := scanResult{
 		hardFindings:    sr.HardFindings,
 		scannerResult:   sr.ScannerResult,

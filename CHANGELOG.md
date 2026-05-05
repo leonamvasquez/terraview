@@ -7,6 +7,39 @@ with [SemVer](https://semver.org/) versioning.
 
 ---
 
+## [Unreleased]
+
+Sprint 15: classificação de advisories, contexto de projeto no fix engine, histórico de falhas e correções de UX no comando `fix`.
+
+### Added
+
+- **Classificador de advisories multi-sinal** (`internal/fix/classifier.go`) — promove fixes para "advisory" (revisão manual) quando: (1) o RuleID está no catálogo estático de remediações que exigem decisão humana; (2) a categoria é arquitetural; (3) a sugestão da IA propõe deletar um recurso com referências de entrada no grafo de topologia; (4) o tuplo `(projeto, regra, recurso)` falhou ≥ N tentativas consecutivas
+- **Catálogo estático de regras advisory** (`internal/rules/classification.go`) — ~30 IDs Checkov + 17 padrões regex cross-scanner cobrindo IAM identity changes, RDS engine upgrades, public access removal, secrets rotation. `AdvisoryReasonForFinding` consultado antes de chamar a IA, evitando custo desnecessário
+- **Histórico de falhas persistente** (`internal/fix/failurelog/`) — JSON em `~/.terraview/failure_history.json` com `Count` e `LastError` por chave `(projeto, regra, recurso)`. Após `PromotionThreshold` (=2) falhas consecutivas, a próxima execução promove para advisory. Aplicações bem-sucedidas zeram o contador, permitindo recuperação automática de falhas transitórias
+- **Project context no prompt de fix** (`internal/fix/project_context.go`) — coleta de declarações já existentes nos `.tf` (providers, variables, data sources, resources, locals) para o prompt do fix. Elimina o efeito "whack-a-mole" de a IA re-declarar variáveis/data sources e quebrar `terraform validate`
+- **Spinner com `SetMessage` concorrente** (`internal/output/spinner.go`) — troca atômica de texto durante operações longas (mutex-guarded)
+- **Feedback imediato no `terraview scan`** — imprime "scan starting…" antes de carregar config/scanner, evitando impressão de processo travado em projetos grandes
+
+### Changed
+
+- **`fix` interactive prompts em inglês por padrão** (`[a] Apply [r] Reject [s] Skip [q] Quit`); pt-BR só com `--br`. 18+ strings movidas para `internal/i18n/i18n.go`
+- **`Review()` do `ApplySession` separa applicable de advisories** — espelha o fluxo de `Preview()` e protege contra `pf.Suggestion == nil` em fixes pré-classificados como advisory
+- **`scanner.checkov` resiliente a log preamble** — `extractJSON()` ignora linhas `[ERROR]`/`[MainThread]` antes do payload JSON, problema observado quando `--quiet` não suprime tracebacks por-check
+
+### Fixed
+
+- **Panic em `fix apply` com advisories pré-classificadas** — acesso a `pf.Suggestion.Explanation` quando `Suggestion` era `nil` para findings promovidos antes da chamada à IA
+- **Diagnóstico em `fix apply` quando o scan não persiste findings** — em vez de "could not load scan results in iteration N", surfaces o erro real (`%w`) ou aponta `history.enabled: true` no `.terraview.yaml`
+
+### Hardening
+
+- **`failurelog` com escrita atômica** — `CreateTemp + rename` previne corrupção de JSON em escritas concorrentes (CI matrix) ou crash mid-write
+- **`failurelog` com GC** — entradas com `LastSeen > 30d` são dropadas no `Load`, mantendo o arquivo bounded
+- **Spinner em modo noop (CI/non-TTY)** — `SetMessage` agora emite uma linha por update; antes era silencioso após `Start`
+- **Sanitizer redige API keys em campos não-sensíveis** — patterns para OpenAI/OpenRouter/Anthropic (`sk-...`), Google (`AIza...`), GitHub (`ghp_/gho_/...`), AWS (`AKIA...`), Slack (`xox[abposr]-...`); cobre o caso em que credenciais vivem em `description`/`tags`/`user_data`. Testes de regressão garantem que não vazam pelo `--debug` JSONL nem pelo cache em disco
+
+---
+
 ## [0.9.0] — 2026-04-29
 
 Sprints 6–14: hardening do core (cobertura, qualidade do fix engine, scanner standalone expandido, eval framework de IA e correções de UX). Foco em estabilidade pré-release público.

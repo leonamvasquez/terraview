@@ -14,12 +14,20 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
 	"github.com/leonamvasquez/terraview/internal/rules"
 	"github.com/leonamvasquez/terraview/internal/topology"
 )
+
+// batchConcurrency caps the number of in-flight runSingle calls during
+// runBatched. Kept conservative (3) to respect provider rate limits across
+// gemini-cli, claude-code, openai and ollama without empirical tuning per
+// provider. Each batch is independent (results are merged at the end), so
+// total wall-time drops from sum(batches) to ceil(N/concurrency)*max(batch).
+const batchConcurrency = 3
 
 // defaultContextBatchSize is the resource cap per contextanalysis call when
 // no explicit limit is configured. Lower than the standard defaultMaxResources
@@ -195,33 +203,66 @@ func (a *Analyzer) runBatched(ctx context.Context, resources []parser.Normalized
 	totalResources := len(sorted)
 	totalBatches := (totalResources + batchSize - 1) / batchSize
 
-	var allFindings []rules.Finding
-	var summaries []string
-	var lastModel, lastProvider string
-
+	// Build batch slices up-front so each goroutine receives an immutable view
+	// and the index → priority order is preserved for deterministic merging.
+	type batchJob struct {
+		num       int
+		resources []parser.NormalizedResource
+	}
+	jobs := make([]batchJob, 0, totalBatches)
 	for i := 0; i < len(sorted); i += batchSize {
-		if ctx.Err() != nil {
-			break
-		}
-
 		end := i + batchSize
 		if end > len(sorted) {
 			end = len(sorted)
 		}
+		jobs = append(jobs, batchJob{num: i/batchSize + 1, resources: sorted[i:end]})
+	}
 
-		batchNum := i/batchSize + 1
-		result, err := a.runSingle(ctx, sorted[i:end], graph, batchNum, totalBatches, totalResources)
-		if err != nil {
-			// Soft failure: skip failed batch, continue with remaining
+	// Run batches in parallel with a small worker cap (batchConcurrency).
+	// Each batch is independent: findings and summaries are stored at their
+	// batch index, then merged in priority order after all goroutines finish.
+	// This keeps summaries[0] = highest-priority batch (deterministic) and
+	// turns wall-time from t1+t2+...+tn into ~ceil(n/concurrency)*max(ti).
+	results := make([]*Result, len(jobs))
+	sem := make(chan struct{}, batchConcurrency)
+	var wg sync.WaitGroup
+
+	for idx, job := range jobs {
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, job batchJob) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
+			res, err := a.runSingle(ctx, job.resources, graph, job.num, totalBatches, totalResources)
+			if err != nil {
+				// Soft failure: leave results[idx] nil so the merge step skips it.
+				return
+			}
+			results[idx] = res
+		}(idx, job)
+	}
+	wg.Wait()
+
+	var allFindings []rules.Finding
+	var summaries []string
+	var lastModel, lastProvider string
+
+	for _, res := range results {
+		if res == nil {
 			continue
 		}
-
-		allFindings = append(allFindings, result.Findings...)
-		if result.Summary != "" {
-			summaries = append(summaries, result.Summary)
+		allFindings = append(allFindings, res.Findings...)
+		if res.Summary != "" {
+			summaries = append(summaries, res.Summary)
 		}
-		lastModel = result.Model
-		lastProvider = result.Provider
+		lastModel = res.Model
+		lastProvider = res.Provider
 	}
 
 	summary := ""
@@ -464,8 +505,10 @@ func (a *Analyzer) buildPrompt(resources []parser.NormalizedResource, graph *top
 		sb.WriteString(fmt.Sprintf("Type: %s | Provider: %s\n", r.Type, r.Provider))
 
 		if len(r.Values) > 0 {
-			// Include security-relevant attributes
-			relevant := extractRelevantAttributes(r.Values)
+			// Per-type whitelist (CTXPERF-002): aws_iam_role no longer carries
+			// multi_az/backup_retention_period, while unmapped types still get
+			// the universal fallback (tags, kms_key_id, policy, vpc_id, ...).
+			relevant := extractRelevantAttributesForType(r.Type, r.Values)
 			if len(relevant) > 0 {
 				for k, v := range relevant {
 					sb.WriteString(fmt.Sprintf("  %s: %v\n", k, v))
@@ -476,30 +519,27 @@ func (a *Analyzer) buildPrompt(resources []parser.NormalizedResource, graph *top
 
 	sb.WriteString("\n")
 
-	// Topology context.
-	// In batched mode (totalBatches > 1), emit only the edges that touch at least
-	// one resource in this batch — the full graph would repeat ~10k tokens of overhead
-	// per call with diminishing benefit for lower-priority batches.
-	// In single-call mode, emit the full FormatContext for complete topology view.
+	// Topology context (CTXPERF-001): always emit only the edges that touch
+	// at least one resource currently being analyzed. Previously the single-
+	// call branch dumped the full FormatContext (Layers + all Edges + Impact
+	// chains) which is 3–5k tokens of overhead the model rarely uses
+	// transitively. Edge-adjacency carries the same cross-resource signal at
+	// a fraction of the prompt cost, and is consistent across both code paths.
 	if graph != nil {
 		sb.WriteString("### Topology\n")
-		if totalBatches > 1 {
-			batchAddrs := make(map[string]bool, len(resources))
-			for _, r := range resources {
-				batchAddrs[r.Address] = true
+		batchAddrs := make(map[string]bool, len(resources))
+		for _, r := range resources {
+			batchAddrs[r.Address] = true
+		}
+		edgeCount := 0
+		for _, e := range graph.Edges {
+			if batchAddrs[e.From] || batchAddrs[e.To] {
+				sb.WriteString(fmt.Sprintf("  %s --[%s]--> %s\n", e.From, e.Via, e.To))
+				edgeCount++
 			}
-			edgeCount := 0
-			for _, e := range graph.Edges {
-				if batchAddrs[e.From] || batchAddrs[e.To] {
-					sb.WriteString(fmt.Sprintf("  %s --[%s]--> %s\n", e.From, e.Via, e.To))
-					edgeCount++
-				}
-			}
-			if edgeCount == 0 {
-				sb.WriteString("  (no cross-resource dependencies in this batch)\n")
-			}
-		} else {
-			sb.WriteString(graph.FormatContext())
+		}
+		if edgeCount == 0 {
+			sb.WriteString("  (no cross-resource dependencies relevant to these resources)\n")
 		}
 	}
 
@@ -510,7 +550,10 @@ func (a *Analyzer) buildPrompt(resources []parser.NormalizedResource, graph *top
 	}
 }
 
-// extractRelevantAttributes filters resource values to security/architecture-relevant ones.
+// extractRelevantAttributes is the legacy flat-whitelist extractor kept for
+// backward-compatible tests. Production code now uses
+// extractRelevantAttributesForType (CTXPERF-002), which scopes keys per resource
+// type and falls back to the universal set for unmapped types.
 func extractRelevantAttributes(values map[string]interface{}) map[string]interface{} {
 	relevant := make(map[string]interface{})
 

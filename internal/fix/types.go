@@ -24,6 +24,14 @@ type FixRequest struct {
 	// Not serialized — used internally to build the AI user message.
 	PlanIndex *PlanIndex `json:"-"`
 
+	// ProjectContext lists declarations already present in the project's .tf
+	// files (providers, variables, data sources, resources, locals). Sent to
+	// the AI so it never re-declares an existing data source / variable /
+	// provider — the leading cause of `terraform validate` failures and the
+	// fix-loop "whack-a-mole" effect. Not serialized — flattened into the user
+	// message JSON by buildUserMessage.
+	ProjectContext *ProjectContext `json:"-"`
+
 	// Lang sets the response language. "pt-BR" instructs the AI to respond in
 	// Brazilian Portuguese. Empty means English (default).
 	Lang string `json:"-"`
@@ -45,4 +53,17 @@ type FixSuggestion struct {
 	Explanation   string   `json:"explanation"`
 	Prerequisites []string `json:"prerequisites,omitempty"`
 	Effort        string   `json:"effort"` // "low" | "medium" | "high"
+
+	// ManualReviewReason is the AI's self-assessment that this fix should NOT
+	// be auto-applied. Empty string means the AI considers it safe to apply.
+	// When non-empty, the Classifier promotes the fix to advisory regardless
+	// of the catalog/graph/history signals. This lets new rules and
+	// context-specific risk be flagged without code changes.
+	ManualReviewReason string `json:"manual_review_reason,omitempty"`
+
+	// BlastRadius is the AI's estimate of the impact of applying this fix:
+	// "none" | "low" | "medium" | "high". A "high" rating promotes the fix to
+	// advisory even when ManualReviewReason is empty. Empty/unknown values are
+	// treated as "low" to avoid false positives.
+	BlastRadius string `json:"blast_radius,omitempty"`
 }

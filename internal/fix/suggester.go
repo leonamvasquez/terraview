@@ -19,8 +19,15 @@ Respond ONLY with a JSON object — no markdown, no code fences, no text outside
   "hcl": "<the complete corrected resource block — must be valid Terraform HCL>",
   "explanation": "<one sentence: what changed and why it fixes the issue>",
   "prerequisites": ["<full HCL block for any NEW resource that must be created — omit if nothing new is needed>"],
-  "effort": "<low|medium|high>"
+  "effort": "<low|medium|high>",
+  "manual_review_reason": "<OPTIONAL: one short sentence explaining why this fix should NOT be auto-applied. Leave empty string when the fix is safe to apply automatically. Set when: removing access that may be load-bearing for production traffic, rotating credentials in use, changing IAM identity, upgrading database engine, or any change whose blast radius extends beyond the single resource>",
+  "blast_radius": "<OPTIONAL: one of none|low|medium|high. Estimates the impact of applying this fix. Use 'high' for: deletions of resources with dependents, changes to public network entry points, IAM policy/identity rewrites, database engine/version changes, anything that interrupts production traffic. 'medium' for cross-resource changes (new SG ingress rule, KMS key rotation). 'low' for in-place attribute toggles (encryption=true, versioning=enabled). 'none' for tag-only or comment-only changes. Default to 'low' when unsure>"
 }
+
+The terraview classifier uses manual_review_reason and blast_radius to decide
+whether to auto-apply or surface for human review. Be HONEST and CONSERVATIVE:
+under-flagging is worse than over-flagging — a wrongly auto-applied fix may
+break production. When in doubt, set manual_review_reason.
 
 ## GOLDEN RULE: preserve the source, patch the minimum
 
@@ -72,6 +79,34 @@ prerequisite resource block instead of inventing an argument.
 - file_context shows all other resources in the same file — check it before creating a new resource
 - If an existing resource of the needed type is listed, reference it instead of creating a new one
 
+## Project-wide context — read before generating prerequisites
+
+When the user message contains "project_context", it lists declarations that
+already exist somewhere in the project's .tf files:
+
+- "providers": short provider names already configured (e.g. "aws", "random")
+- "variables": variable names already declared
+- "data_sources": data source addresses already declared (e.g. "data.aws_caller_identity.current")
+- "resources_by_type": map of type → existing addresses
+- "locals": names declared inside any locals { } block
+
+You MUST:
+- Never emit a "data" block for a data source already in "data_sources" — that
+  causes "Duplicate data ... configuration" and reverts the fix
+- Never reference var.NAME if NAME is not in "variables" — declare it as a
+  prerequisite ("variable \"NAME\" {}") if you truly need it, or use a literal
+- If your fix introduces a NEW provider (e.g. "random" for random_password),
+  AND that provider is not in "providers", emit a prerequisite that adds it to
+  required_providers. Format the prerequisite as a complete terraform block:
+    terraform {
+      required_providers {
+        random = { source = "hashicorp/random", version = "~> 3.0" }
+      }
+    }
+  The patcher recognizes terraform/required_providers blocks and merges them.
+- Reuse resources from "resources_by_type" instead of creating duplicates
+  (e.g. reference an existing aws_kms_key.main rather than declaring a new one)
+
 ## Effort guide
 
 - low: add/change one attribute (e.g. enable_key_rotation = true)
@@ -118,6 +153,205 @@ func (s *Suggester) Suggest(ctx context.Context, req FixRequest) (*FixSuggestion
 	}
 
 	return suggestion, nil
+}
+
+// batchSystemPromptAddendum extends the base system prompt for batch requests.
+// The model receives several findings on the SAME resource and must return one
+// merged HCL plus a per-finding entry in the "fixes" array.
+const batchSystemPromptAddendum = `
+
+## Batch mode — multiple findings on the same resource
+
+When the user message contains a "findings" array (instead of a single "finding"),
+each entry targets the SAME resource. You MUST:
+
+- Produce ONE merged HCL that fixes ALL findings in the array.
+- Apply each individual fix on top of the previous one — the final HCL is the
+  cumulative correct state.
+- Return one entry per finding in the "fixes" array, in the SAME order.
+
+Batch response format (JSON, no markdown):
+{
+  "hcl": "<one merged corrected resource block — applies ALL fixes>",
+  "prerequisites": ["<full HCL for any new resource — omit if none>"],
+  "fixes": [
+    {
+      "rule_id": "CKV_AWS_X",
+      "explanation": "<one sentence>",
+      "effort": "low|medium|high",
+      "manual_review_reason": "<OPTIONAL: short sentence — set when this specific fix should NOT be auto-applied (load-bearing change, IAM identity, engine upgrade, anything with cross-resource impact). Empty string when safe.>",
+      "blast_radius": "<OPTIONAL: none|low|medium|high — estimated impact of this specific fix>"
+    },
+    ...
+  ]
+}
+
+The terraview classifier promotes a fix to advisory when manual_review_reason
+is non-empty OR blast_radius is "high". Be conservative — under-flagging may
+break production.`
+
+// SuggestBatch generates fixes for multiple findings on the SAME resource in a
+// single AI call. All requests must share the same ResourceAddr; the merged HCL
+// applies every fix cumulatively. Returns one suggestion per request, in order,
+// all sharing the same HCL/Prerequisites but each with its own RuleID,
+// Explanation, and Effort.
+func (s *Suggester) SuggestBatch(ctx context.Context, reqs []FixRequest) ([]*FixSuggestion, error) {
+	if len(reqs) == 0 {
+		return nil, fmt.Errorf("SuggestBatch requires at least one request")
+	}
+	if len(reqs) == 1 {
+		one, err := s.Suggest(ctx, reqs[0])
+		if err != nil {
+			return nil, err
+		}
+		return []*FixSuggestion{one}, nil
+	}
+
+	user := buildBatchUserMessage(reqs)
+	sys := systemPrompt + batchSystemPromptAddendum
+	if reqs[0].Lang == "pt-BR" {
+		sys += "\n\nIMPORTANT: Respond entirely in Brazilian Portuguese (pt-BR). Each \"explanation\" field must be in Portuguese."
+	}
+
+	text, err := s.provider.Complete(ctx, sys, user)
+	if err != nil {
+		return nil, fmt.Errorf("batch fix suggestion failed: %w", err)
+	}
+
+	return parseBatchFixResponse(text, reqs)
+}
+
+// buildBatchUserMessage serializes a batch of requests sharing the same resource
+// into a single JSON user message with a "findings" array.
+func buildBatchUserMessage(reqs []FixRequest) string {
+	type findingEntry struct {
+		RuleID   string `json:"rule_id"`
+		Severity string `json:"severity"`
+		Message  string `json:"message"`
+		Category string `json:"category"`
+	}
+	type payload struct {
+		Findings        []findingEntry         `json:"findings"`
+		ResourceType    string                 `json:"resource_type"`
+		ResourceAddr    string                 `json:"resource_addr"`
+		CurrentHCL      string                 `json:"current_hcl,omitempty"`
+		FileContext     string                 `json:"file_context,omitempty"`
+		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
+		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ProjectContext  *projectContextDTO     `json:"project_context,omitempty"`
+		ValidAttributes []string               `json:"valid_attributes,omitempty"`
+	}
+
+	first := reqs[0]
+	var p payload
+	for _, r := range reqs {
+		p.Findings = append(p.Findings, findingEntry{
+			RuleID:   r.Finding.RuleID,
+			Severity: r.Finding.Severity,
+			Message:  r.Finding.Message,
+			Category: r.Finding.Category,
+		})
+	}
+	p.ResourceType = first.ResourceType
+	p.ResourceAddr = first.ResourceAddr
+	p.CurrentHCL = first.CurrentHCL
+	p.FileContext = first.FileContext
+	if first.CurrentHCL == "" {
+		p.CurrentConfig = TruncateConfig(first.ResourceConfig, first.Finding.RuleID)
+	}
+	if attrs := KnownAttributes(first.ResourceType); len(attrs) > 0 {
+		p.ValidAttributes = attrs
+	}
+	if first.PlanIndex != nil {
+		if pc := buildPlanContext(first); pc != nil {
+			p.PlanContext = pc
+		}
+	}
+	if dto := projectContextDTOFrom(first.ProjectContext); dto != nil {
+		p.ProjectContext = dto
+	}
+
+	data, _ := json.MarshalIndent(p, "", "  ")
+	return string(data)
+}
+
+// parseBatchFixResponse turns the AI batch response into N FixSuggestions, one
+// per request, all sharing HCL/Prerequisites but each with its own metadata.
+func parseBatchFixResponse(text string, reqs []FixRequest) ([]*FixSuggestion, error) {
+	cleaned := extractJSON(text)
+	var raw struct {
+		HCL           string   `json:"hcl"`
+		Prerequisites []string `json:"prerequisites"`
+		Fixes         []struct {
+			RuleID             string `json:"rule_id"`
+			Explanation        string `json:"explanation"`
+			Effort             string `json:"effort"`
+			ManualReviewReason string `json:"manual_review_reason,omitempty"`
+			BlastRadius        string `json:"blast_radius,omitempty"`
+		} `json:"fixes"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse batch fix response as JSON: %w (raw: %s)", err, truncate(text, 200))
+	}
+	if raw.HCL == "" {
+		return nil, fmt.Errorf("batch fix response missing hcl field")
+	}
+	if len(raw.Fixes) == 0 {
+		return nil, fmt.Errorf("batch fix response missing fixes array")
+	}
+
+	// Index fixes by rule_id so order mismatches don't break association.
+	byRule := make(map[string]int, len(raw.Fixes))
+	for i, f := range raw.Fixes {
+		byRule[f.RuleID] = i
+	}
+
+	out := make([]*FixSuggestion, len(reqs))
+	for i, r := range reqs {
+		expl := ""
+		effort := "medium"
+		var mrr, blast string
+		if idx, ok := byRule[r.Finding.RuleID]; ok {
+			expl = raw.Fixes[idx].Explanation
+			if e := raw.Fixes[idx].Effort; e == "low" || e == "medium" || e == "high" {
+				effort = e
+			}
+			mrr = raw.Fixes[idx].ManualReviewReason
+			blast = normalizeBlastRadius(raw.Fixes[idx].BlastRadius)
+		} else if i < len(raw.Fixes) {
+			// Fallback: use positional match when rule_id absent in response.
+			expl = raw.Fixes[i].Explanation
+			if e := raw.Fixes[i].Effort; e == "low" || e == "medium" || e == "high" {
+				effort = e
+			}
+			mrr = raw.Fixes[i].ManualReviewReason
+			blast = normalizeBlastRadius(raw.Fixes[i].BlastRadius)
+		}
+		out[i] = &FixSuggestion{
+			RuleID:             r.Finding.RuleID,
+			Resource:           r.ResourceAddr,
+			HCL:                raw.HCL,
+			Explanation:        expl,
+			Prerequisites:      raw.Prerequisites,
+			Effort:             effort,
+			ManualReviewReason: mrr,
+			BlastRadius:        blast,
+		}
+	}
+	return out, nil
+}
+
+// normalizeBlastRadius coerces the AI-provided value to a known set. Unknown
+// or empty strings collapse to "low" so the classifier never promotes on a
+// hallucinated label — promotion still requires "high" or a non-empty
+// ManualReviewReason.
+func normalizeBlastRadius(v string) string {
+	switch v {
+	case "none", "low", "medium", "high":
+		return v
+	default:
+		return "low"
+	}
 }
 
 // isRetryableError returns true for errors that are likely caused by payload size
@@ -170,6 +404,7 @@ func buildUserMessage(req FixRequest) string {
 		FileContext     string                 `json:"file_context,omitempty"`
 		CurrentConfig   map[string]interface{} `json:"current_config,omitempty"`
 		PlanContext     *planContext           `json:"plan_context,omitempty"`
+		ProjectContext  *projectContextDTO     `json:"project_context,omitempty"`
 		ValidAttributes []string               `json:"valid_attributes,omitempty"`
 	}
 
@@ -205,8 +440,39 @@ func buildUserMessage(req FixRequest) string {
 		}
 	}
 
+	if dto := projectContextDTOFrom(req.ProjectContext); dto != nil {
+		p.ProjectContext = dto
+	}
+
 	data, _ := json.MarshalIndent(p, "", "  ")
 	return string(data)
+}
+
+// projectContextDTO is the JSON shape sent to the AI. Field names are
+// snake_case so the prompt rules ("project_context.providers", etc.) match.
+type projectContextDTO struct {
+	Providers       []string            `json:"providers,omitempty"`
+	Variables       []string            `json:"variables,omitempty"`
+	DataSources     []string            `json:"data_sources,omitempty"`
+	ResourcesByType map[string][]string `json:"resources_by_type,omitempty"`
+	Locals          []string            `json:"locals,omitempty"`
+}
+
+func projectContextDTOFrom(pc *ProjectContext) *projectContextDTO {
+	if pc == nil {
+		return nil
+	}
+	if len(pc.Providers) == 0 && len(pc.Variables) == 0 && len(pc.DataSources) == 0 &&
+		len(pc.ResourcesByType) == 0 && len(pc.Locals) == 0 {
+		return nil
+	}
+	return &projectContextDTO{
+		Providers:       pc.Providers,
+		Variables:       pc.Variables,
+		DataSources:     pc.DataSources,
+		ResourcesByType: pc.ResourcesByType,
+		Locals:          pc.Locals,
+	}
 }
 
 // buildPlanContext constructs the planContext section of the user message using
@@ -249,10 +515,12 @@ func parseFixResponse(text string, req FixRequest) (*FixSuggestion, error) {
 	cleaned := extractJSON(text)
 
 	var raw struct {
-		HCL           string   `json:"hcl"`
-		Explanation   string   `json:"explanation"`
-		Prerequisites []string `json:"prerequisites"`
-		Effort        string   `json:"effort"`
+		HCL                string   `json:"hcl"`
+		Explanation        string   `json:"explanation"`
+		Prerequisites      []string `json:"prerequisites"`
+		Effort             string   `json:"effort"`
+		ManualReviewReason string   `json:"manual_review_reason,omitempty"`
+		BlastRadius        string   `json:"blast_radius,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse fix response as JSON: %w (raw: %s)", err, truncate(text, 200))
@@ -267,12 +535,14 @@ func parseFixResponse(text string, req FixRequest) (*FixSuggestion, error) {
 	}
 
 	return &FixSuggestion{
-		RuleID:        req.Finding.RuleID,
-		Resource:      req.ResourceAddr,
-		HCL:           raw.HCL,
-		Explanation:   raw.Explanation,
-		Prerequisites: raw.Prerequisites,
-		Effort:        effort,
+		RuleID:             req.Finding.RuleID,
+		Resource:           req.ResourceAddr,
+		HCL:                raw.HCL,
+		Explanation:        raw.Explanation,
+		Prerequisites:      raw.Prerequisites,
+		Effort:             effort,
+		ManualReviewReason: raw.ManualReviewReason,
+		BlastRadius:        normalizeBlastRadius(raw.BlastRadius),
 	}, nil
 }
 

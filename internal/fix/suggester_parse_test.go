@@ -136,3 +136,61 @@ func TestParseFixResponse_MissingHCL(t *testing.T) {
 		t.Fatal("expected error for missing hcl field")
 	}
 }
+
+func TestParseFixResponse_AISelfAssessment_Captured(t *testing.T) {
+	text := `{
+		"hcl": "resource \"aws_s3_bucket\" \"x\" {}",
+		"explanation": "removes lifecycle rule",
+		"effort": "medium",
+		"manual_review_reason": "lifecycle rule may be required for compliance retention",
+		"blast_radius": "high"
+	}`
+	got, err := parseFixResponse(text, FixRequest{Finding: FixFinding{RuleID: "CKV_AWS_X"}})
+	if err != nil {
+		t.Fatalf("parseFixResponse: %v", err)
+	}
+	if got.ManualReviewReason == "" {
+		t.Error("expected manual_review_reason captured, got empty")
+	}
+	if got.BlastRadius != "high" {
+		t.Errorf("BlastRadius=%q, want high", got.BlastRadius)
+	}
+}
+
+func TestParseFixResponse_AISelfAssessment_DefaultsWhenAbsent(t *testing.T) {
+	text := `{"hcl":"resource \"x\" \"y\" {}","effort":"low"}`
+	got, err := parseFixResponse(text, FixRequest{})
+	if err != nil {
+		t.Fatalf("parseFixResponse: %v", err)
+	}
+	if got.ManualReviewReason != "" {
+		t.Errorf("ManualReviewReason should default to empty, got %q", got.ManualReviewReason)
+	}
+	if got.BlastRadius != "low" {
+		t.Errorf("BlastRadius should default to 'low' when absent, got %q", got.BlastRadius)
+	}
+}
+
+func TestParseBatchFixResponse_AISelfAssessment_PerFinding(t *testing.T) {
+	text := `{
+		"hcl": "resource \"aws_s3_bucket\" \"x\" {}",
+		"fixes": [
+			{"rule_id":"CKV_AWS_1","explanation":"a","effort":"low","manual_review_reason":"","blast_radius":"low"},
+			{"rule_id":"CKV_AWS_2","explanation":"b","effort":"high","manual_review_reason":"alters retention","blast_radius":"high"}
+		]
+	}`
+	reqs := []FixRequest{
+		{Finding: FixFinding{RuleID: "CKV_AWS_1"}, ResourceAddr: "aws_s3_bucket.x"},
+		{Finding: FixFinding{RuleID: "CKV_AWS_2"}, ResourceAddr: "aws_s3_bucket.x"},
+	}
+	got, err := parseBatchFixResponse(text, reqs)
+	if err != nil {
+		t.Fatalf("parseBatchFixResponse: %v", err)
+	}
+	if got[0].ManualReviewReason != "" || got[0].BlastRadius != "low" {
+		t.Errorf("fix[0] mrr=%q blast=%q, want empty/low", got[0].ManualReviewReason, got[0].BlastRadius)
+	}
+	if got[1].ManualReviewReason == "" || got[1].BlastRadius != "high" {
+		t.Errorf("fix[1] mrr=%q blast=%q, want non-empty/high", got[1].ManualReviewReason, got[1].BlastRadius)
+	}
+}

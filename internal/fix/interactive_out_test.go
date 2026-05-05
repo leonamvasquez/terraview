@@ -67,7 +67,7 @@ func TestPreview_WritesToOut(t *testing.T) {
 	sess.Preview([]PendingFix{pf})
 
 	out := buf.String()
-	if !strings.Contains(out, "Preview of 1 fix") {
+	if !strings.Contains(out, "Plan: 1 fix(es) to apply") {
 		t.Errorf("expected header in Preview output, got: %q", out)
 	}
 	if !strings.Contains(out, "terraview fix apply") {
@@ -81,12 +81,12 @@ func TestPreview_NoFileLocation(t *testing.T) {
 	sess.Preview([]PendingFix{pf})
 
 	out := buf.String()
-	if !strings.Contains(out, "Preview of 1 fix") {
+	if !strings.Contains(out, "Plan: 1 fix(es) to apply") {
 		t.Errorf("expected header, got: %q", out)
 	}
 	// Should mention that .tf file was not found
-	if !strings.Contains(out, "não localizado") {
-		t.Errorf("expected 'não localizado' warning, got: %q", out)
+	if !strings.Contains(out, ".tf file not found") {
+		t.Errorf("expected 'file not found' warning, got: %q", out)
 	}
 }
 
@@ -136,8 +136,8 @@ func TestApplyAll_CriticalWarning_Skipped(t *testing.T) {
 	if applied != 0 || failed != 1 {
 		t.Errorf("expected applied=0 failed=1, got applied=%d failed=%d", applied, failed)
 	}
-	if !strings.Contains(buf.String(), "bloqueado") {
-		t.Errorf("expected 'bloqueado' message, got: %q", buf.String())
+	if !strings.Contains(buf.String(), "blocked by critical warning") {
+		t.Errorf("expected 'blocked' message, got: %q", buf.String())
 	}
 }
 
@@ -200,8 +200,8 @@ func TestApplyAll_Success(t *testing.T) {
 	if applied != 1 || failed != 0 {
 		t.Errorf("expected applied=1 failed=0, got applied=%d failed=%d\noutput: %s", applied, failed, buf.String())
 	}
-	if !strings.Contains(buf.String(), "✓") {
-		t.Errorf("expected success checkmark, got: %q", buf.String())
+	if !strings.Contains(buf.String(), "1 applied") {
+		t.Errorf("expected '1 applied' in summary, got: %q", buf.String())
 	}
 	// File must contain the fix
 	data, _ := os.ReadFile(tf)
@@ -216,7 +216,7 @@ func TestApplyAll_SummaryLine(t *testing.T) {
 	sess, buf := newTestSession(t, t.TempDir())
 	sess.ApplyAll(nil) // 0 applied, 0 failed, 0 total
 	out := buf.String()
-	if !strings.Contains(out, "0 aplicado(s)") {
+	if !strings.Contains(out, "0 applied") {
 		t.Errorf("expected summary line, got: %q", out)
 	}
 }

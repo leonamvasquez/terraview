@@ -110,7 +110,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create AI provider
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(effectiveTimeout+util.ContextTimeoutGraceSecs)*time.Second)
+	ctx, cancel := context.WithTimeout(rootCtx, time.Duration(effectiveTimeout+util.ContextTimeoutGraceSecs)*time.Second)
 	defer cancel()
 
 	// When the provider is not ollama and no explicit URL was set, clear the

@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for TerraView synthetic test fixtures"
+paths = [
+  '''internal/sanitizer/sanitizer_test\.go''',
+]

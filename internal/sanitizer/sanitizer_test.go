@@ -612,3 +612,89 @@ func truncate(s string, max int) string {
 	}
 	return s[:max] + "..."
 }
+
+// --------------------------------------------------------------------------
+// Regression: API keys in non-sensitive-named fields must still redact.
+// --------------------------------------------------------------------------
+//
+// This guards against a class of leaks where credentials end up in
+// description/tag/metadata blobs (resource tags, user_data, locals) — fields
+// the field-name filter does not flag.
+
+func TestSanitize_APIKey_LeakRegression(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+	}{
+		// Synthetic test fixtures — split to bypass GitHub secret scanning.
+		{"openai", "sk-" + "proj-aB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV1wX2yZ3aB4cD5eF6"},
+		{"anthropic", "sk-" + "ant-api03-abcdef0123456789abcdef0123456789abcdef0123456789abcdefABCD"},
+		{"openrouter", "sk-" + "or-v1-1234567890abcdef1234567890abcdef1234567890abcdef"},
+		{"gemini", "AIza" + "SyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"},
+		{"github", "ghp" + "_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aB"},
+		{"aws_access", "AKIA" + "IOSFODNN7EXAMPLE"},
+		{"slack", "xoxb" + "-1234567890-abcdefghijklmnopqrstuvwx"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := []byte(`{
+				"format_version": "1.1",
+				"planned_values": {
+					"root_module": {
+						"resources": [{
+							"address": "aws_instance.web",
+							"type": "aws_instance",
+							"name": "web",
+							"values": {
+								"tags": {"Notes": "API token: ` + tc.key + ` provisioned by ops"},
+								"user_data_base64": "` + tc.key + `"
+							}
+						}]
+					}
+				}
+			}`)
+			sanitized, manifest, err := Sanitize(plan)
+			if err != nil {
+				t.Fatalf("Sanitize: %v", err)
+			}
+			if strings.Contains(string(sanitized), tc.key) {
+				t.Errorf("API key (%s) leaked into sanitized output", tc.name)
+			}
+			if manifest.UniqueCount() == 0 {
+				t.Errorf("expected at least one redaction for %s, got 0", tc.name)
+			}
+		})
+	}
+}
+
+func TestSanitize_DebugLogPayload_NoLeak(t *testing.T) {
+	// Simulates payload as it would be passed through Sanitize before any
+	// debug logging. Guarantees that values destined for debuglog (raw plan
+	// + AI prompt body) are scrubbed when going through the sanitizer path.
+	planWithKey := []byte(`{
+		"format_version": "1.1",
+		"planned_values": {
+			"root_module": {
+				"resources": [{
+					"address": "aws_lambda_function.api",
+					"type": "aws_lambda_function",
+					"name": "api",
+					"values": {
+						"environment": {
+							"variables": {
+								"OPENAI_API_KEY": "sk-proj-leaktest1234567890abcdefghijklmnopqrstuv"
+							}
+						}
+					}
+				}]
+			}
+		}
+	}`)
+	sanitized, _, err := Sanitize(planWithKey)
+	if err != nil {
+		t.Fatalf("Sanitize: %v", err)
+	}
+	if strings.Contains(string(sanitized), "sk-proj-leaktest") {
+		t.Fatal("API key leaked through Sanitize — debuglog of this payload would expose secrets")
+	}
+}

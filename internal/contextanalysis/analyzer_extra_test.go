@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
@@ -13,28 +15,45 @@ import (
 )
 
 // mockProvider implements ai.Provider without network calls.
+// runBatched now invokes Analyze from multiple goroutines (CTXPERF-003), so
+// counters and other shared fields are guarded by mu.
 type mockProvider struct {
 	name     string
 	findings []rules.Finding
 	summary  string
 	err      error
-	calls    int
+
+	mu    sync.Mutex
+	calls int
 }
 
 func (m *mockProvider) Name() string                                            { return m.name }
 func (m *mockProvider) Validate(_ context.Context) error                        { return nil }
 func (m *mockProvider) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
 func (m *mockProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	m.mu.Lock()
 	m.calls++
-	if m.err != nil {
-		return ai.Completion{}, m.err
+	err := m.err
+	findings := m.findings
+	summary := m.summary
+	name := m.name
+	m.mu.Unlock()
+	if err != nil {
+		return ai.Completion{}, err
 	}
 	return ai.Completion{
-		Findings: m.findings,
-		Summary:  m.summary,
+		Findings: findings,
+		Summary:  summary,
 		Model:    "test-model",
-		Provider: m.name,
+		Provider: name,
 	}, nil
+}
+
+// callCount returns the current call counter under lock.
+func (m *mockProvider) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
 }
 
 // makeResources returns n NormalizedResources with action "create".
@@ -124,8 +143,8 @@ func TestAnalyze_SingleBatch_Success(t *testing.T) {
 	if result.Findings[0].Source != "ai/context" {
 		t.Errorf("source must be 'ai/context', got %q", result.Findings[0].Source)
 	}
-	if p.calls != 1 {
-		t.Errorf("want 1 provider call, got %d", p.calls)
+	if got := p.callCount(); got != 1 {
+		t.Errorf("want 1 provider call, got %d", got)
 	}
 }
 
@@ -158,25 +177,18 @@ func TestAnalyze_ExcludedNoOp_SetOnResult(t *testing.T) {
 	if result.ExcludedNoOp != 2 {
 		t.Errorf("want ExcludedNoOp=2, got %d", result.ExcludedNoOp)
 	}
-	if p.calls != 1 {
-		t.Errorf("want 1 provider call for 2 active resources, got %d", p.calls)
+	if got := p.callCount(); got != 1 {
+		t.Errorf("want 1 provider call for 2 active resources, got %d", got)
 	}
 }
 
 // ── runBatched ─────────────────────────────────────────────────────────
 
 func TestRunBatched_MultipleBatches(t *testing.T) {
-	callCount := 0
-	p := &mockProvider{name: "mock", summary: "batch ok"}
-	p.findings = []rules.Finding{
-		{RuleID: "CTX-001", Resource: "aws_instance.r0", Severity: "HIGH", Message: "issue"},
-	}
-
-	// Override with a custom function by using a counting mock
+	// countingProvider tracks calls under its own mutex; goroutines under the
+	// parallel runBatched (CTXPERF-003) all hit it concurrently.
 	counting := &countingProvider{
-		delegate: p,
 		onCall: func(n int) ([]rules.Finding, string) {
-			callCount = n
 			return []rules.Finding{
 				{RuleID: fmt.Sprintf("CTX-%03d", n), Resource: fmt.Sprintf("r%d", n), Severity: "LOW", Message: fmt.Sprintf("issue-%d", n)},
 			}, "batch summary"
@@ -189,8 +201,11 @@ func TestRunBatched_MultipleBatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if callCount != 3 {
-		t.Errorf("want 3 batch calls, got %d", callCount)
+	counting.mu.Lock()
+	gotCalls := counting.n
+	counting.mu.Unlock()
+	if gotCalls != 3 {
+		t.Errorf("want 3 batch calls, got %d", gotCalls)
 	}
 	if len(result.Findings) != 3 {
 		t.Errorf("want 3 findings (1 per batch), got %d", len(result.Findings))
@@ -259,6 +274,61 @@ func TestRunBatched_ContextCancel(t *testing.T) {
 	}
 }
 
+// TestRunBatched_RunsInParallel asserts that batches no longer execute
+// sequentially: when each batch sleeps t, total wall-time must be < N*t for
+// N > batchConcurrency. Uses a slow provider with synchronization to detect
+// concurrent in-flight calls.
+func TestRunBatched_RunsInParallel(t *testing.T) {
+	const numBatches = 6 // > batchConcurrency (3) so parallelism is observable
+	p := &slowProvider{}
+
+	a := NewAnalyzer(p, "", "", 1) // batchSize=1 → 1 batch per resource
+	_, err := a.runBatched(context.Background(), makeResources(numBatches), nil, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	p.mu.Lock()
+	maxInFlight := p.maxInFlight
+	p.mu.Unlock()
+
+	if maxInFlight < 2 {
+		t.Errorf("expected >=2 concurrent in-flight calls under parallel runBatched, got %d", maxInFlight)
+	}
+	if maxInFlight > batchConcurrency {
+		t.Errorf("concurrency exceeded cap %d, got %d", batchConcurrency, maxInFlight)
+	}
+}
+
+// slowProvider tracks max in-flight Analyze calls so the test can verify
+// runBatched parallelism (CTXPERF-003).
+type slowProvider struct {
+	mu          sync.Mutex
+	inFlight    int
+	maxInFlight int
+}
+
+func (s *slowProvider) Name() string                                            { return "slow" }
+func (s *slowProvider) Validate(_ context.Context) error                        { return nil }
+func (s *slowProvider) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
+func (s *slowProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	s.mu.Lock()
+	s.inFlight++
+	if s.inFlight > s.maxInFlight {
+		s.maxInFlight = s.inFlight
+	}
+	s.mu.Unlock()
+
+	// Sleep long enough that concurrent goroutines reliably overlap on slow CI runners.
+	time.Sleep(50 * time.Millisecond)
+
+	s.mu.Lock()
+	s.inFlight--
+	s.mu.Unlock()
+
+	return ai.Completion{Summary: "ok"}, nil
+}
+
 func TestAnalyze_BatchedPath_Triggered(t *testing.T) {
 	p := &mockProvider{name: "mock", findings: nil, summary: "batched ok"}
 	a := NewAnalyzer(p, "", "", 2) // batchSize=2, 5 resources → runBatched
@@ -267,8 +337,8 @@ func TestAnalyze_BatchedPath_Triggered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if p.calls != 3 {
-		t.Errorf("want 3 batch calls for 5 resources with batchSize=2, got %d", p.calls)
+	if got := p.callCount(); got != 3 {
+		t.Errorf("want 3 batch calls for 5 resources with batchSize=2, got %d", got)
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
@@ -279,17 +349,21 @@ func TestAnalyze_BatchedPath_Triggered(t *testing.T) {
 
 // countingProvider counts calls and delegates result to a function.
 type countingProvider struct {
-	delegate *mockProvider
-	onCall   func(n int) ([]rules.Finding, string)
-	n        int
+	onCall func(n int) ([]rules.Finding, string)
+
+	mu sync.Mutex
+	n  int
 }
 
 func (c *countingProvider) Name() string                                            { return "counting" }
 func (c *countingProvider) Validate(_ context.Context) error                        { return nil }
 func (c *countingProvider) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
 func (c *countingProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	c.mu.Lock()
 	c.n++
-	findings, summary := c.onCall(c.n)
+	n := c.n
+	c.mu.Unlock()
+	findings, summary := c.onCall(n)
 	return ai.Completion{Findings: findings, Summary: summary, Model: "m", Provider: "p"}, nil
 }
 
@@ -297,15 +371,20 @@ func (c *countingProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completi
 type failFirstProvider struct {
 	failCalls int
 	success   ai.Completion
-	callNum   *int
+
+	mu      sync.Mutex
+	callNum *int
 }
 
 func (f *failFirstProvider) Name() string                                            { return "failfirst" }
 func (f *failFirstProvider) Validate(_ context.Context) error                        { return nil }
 func (f *failFirstProvider) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
 func (f *failFirstProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	f.mu.Lock()
 	*f.callNum++
-	if *f.callNum <= f.failCalls {
+	cur := *f.callNum
+	f.mu.Unlock()
+	if cur <= f.failCalls {
 		return ai.Completion{}, errors.New("simulated failure")
 	}
 	return f.success, nil
@@ -315,7 +394,9 @@ func (f *failFirstProvider) Analyze(_ context.Context, _ ai.Request) (ai.Complet
 type cancelOnCallProvider struct {
 	cancel      context.CancelFunc
 	cancelAfter int
-	n           int
+
+	mu sync.Mutex
+	n  int
 }
 
 func (c *cancelOnCallProvider) Name() string                     { return "cancel" }
@@ -324,8 +405,11 @@ func (c *cancelOnCallProvider) Complete(_ context.Context, _, _ string) (string,
 	return "", nil
 }
 func (c *cancelOnCallProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, error) {
+	c.mu.Lock()
 	c.n++
-	if c.n >= c.cancelAfter {
+	cur := c.n
+	c.mu.Unlock()
+	if cur >= c.cancelAfter {
 		c.cancel()
 	}
 	return ai.Completion{Summary: "ok"}, nil

@@ -121,6 +121,22 @@ terraview fix apply --severity HIGH --max 5         # combinar filtros
 
 Requer um `terraview scan` anterior no mesmo diretório do projeto.
 
+### Advisories (revisão manual)
+
+Nem todo finding é seguro de auto-aplicar. O `fix` classifica fixes em duas categorias:
+
+- **Auto-applicable** — patch textual seguro (ex.: ativar encryption, restringir SG)
+- **Advisory** — exige decisão humana e é exibido sem aplicar
+
+Um fix é promovido para advisory quando:
+
+1. **Catálogo estático** — RuleID conhecido por exigir decisão humana (IAM identity changes, RDS engine upgrades, public-access removal, rotação de secrets)
+2. **Categoria arquitetural** — design decisions, não patches textuais
+3. **Deleção com referências** — a sugestão da IA remove um recurso que tem dependentes no grafo de topologia
+4. **Histórico de falhas** — o tuplo `(projeto, regra, recurso)` falhou ≥ 2 tentativas consecutivas (registrado em `~/.terraview/failure_history.json`)
+
+Aplicações bem-sucedidas zeram o contador de falhas, permitindo recuperação automática de falhas transitórias.
+
 ---
 
 ## Diagram
