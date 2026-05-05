@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/leonamvasquez/terraview/internal/ai"
 	"github.com/leonamvasquez/terraview/internal/parser"
@@ -318,10 +319,8 @@ func (s *slowProvider) Analyze(_ context.Context, _ ai.Request) (ai.Completion, 
 	}
 	s.mu.Unlock()
 
-	// Brief work so concurrent goroutines actually overlap.
-	for i := 0; i < 100000; i++ {
-		_ = i * i
-	}
+	// Sleep long enough that concurrent goroutines reliably overlap on slow CI runners.
+	time.Sleep(50 * time.Millisecond)
 
 	s.mu.Lock()
 	s.inFlight--
