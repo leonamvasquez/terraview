@@ -19,8 +19,15 @@ Respond ONLY with a JSON object — no markdown, no code fences, no text outside
   "hcl": "<the complete corrected resource block — must be valid Terraform HCL>",
   "explanation": "<one sentence: what changed and why it fixes the issue>",
   "prerequisites": ["<full HCL block for any NEW resource that must be created — omit if nothing new is needed>"],
-  "effort": "<low|medium|high>"
+  "effort": "<low|medium|high>",
+  "manual_review_reason": "<OPTIONAL: one short sentence explaining why this fix should NOT be auto-applied. Leave empty string when the fix is safe to apply automatically. Set when: removing access that may be load-bearing for production traffic, rotating credentials in use, changing IAM identity, upgrading database engine, or any change whose blast radius extends beyond the single resource>",
+  "blast_radius": "<OPTIONAL: one of none|low|medium|high. Estimates the impact of applying this fix. Use 'high' for: deletions of resources with dependents, changes to public network entry points, IAM policy/identity rewrites, database engine/version changes, anything that interrupts production traffic. 'medium' for cross-resource changes (new SG ingress rule, KMS key rotation). 'low' for in-place attribute toggles (encryption=true, versioning=enabled). 'none' for tag-only or comment-only changes. Default to 'low' when unsure>"
 }
+
+The terraview classifier uses manual_review_reason and blast_radius to decide
+whether to auto-apply or surface for human review. Be HONEST and CONSERVATIVE:
+under-flagging is worse than over-flagging — a wrongly auto-applied fix may
+break production. When in doubt, set manual_review_reason.
 
 ## GOLDEN RULE: preserve the source, patch the minimum
 
@@ -168,10 +175,20 @@ Batch response format (JSON, no markdown):
   "hcl": "<one merged corrected resource block — applies ALL fixes>",
   "prerequisites": ["<full HCL for any new resource — omit if none>"],
   "fixes": [
-    {"rule_id": "CKV_AWS_X", "explanation": "<one sentence>", "effort": "low|medium|high"},
+    {
+      "rule_id": "CKV_AWS_X",
+      "explanation": "<one sentence>",
+      "effort": "low|medium|high",
+      "manual_review_reason": "<OPTIONAL: short sentence — set when this specific fix should NOT be auto-applied (load-bearing change, IAM identity, engine upgrade, anything with cross-resource impact). Empty string when safe.>",
+      "blast_radius": "<OPTIONAL: none|low|medium|high — estimated impact of this specific fix>"
+    },
     ...
   ]
-}`
+}
+
+The terraview classifier promotes a fix to advisory when manual_review_reason
+is non-empty OR blast_radius is "high". Be conservative — under-flagging may
+break production.`
 
 // SuggestBatch generates fixes for multiple findings on the SAME resource in a
 // single AI call. All requests must share the same ResourceAddr; the merged HCL
@@ -266,9 +283,11 @@ func parseBatchFixResponse(text string, reqs []FixRequest) ([]*FixSuggestion, er
 		HCL           string   `json:"hcl"`
 		Prerequisites []string `json:"prerequisites"`
 		Fixes         []struct {
-			RuleID      string `json:"rule_id"`
-			Explanation string `json:"explanation"`
-			Effort      string `json:"effort"`
+			RuleID             string `json:"rule_id"`
+			Explanation        string `json:"explanation"`
+			Effort             string `json:"effort"`
+			ManualReviewReason string `json:"manual_review_reason,omitempty"`
+			BlastRadius        string `json:"blast_radius,omitempty"`
 		} `json:"fixes"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
@@ -291,28 +310,48 @@ func parseBatchFixResponse(text string, reqs []FixRequest) ([]*FixSuggestion, er
 	for i, r := range reqs {
 		expl := ""
 		effort := "medium"
+		var mrr, blast string
 		if idx, ok := byRule[r.Finding.RuleID]; ok {
 			expl = raw.Fixes[idx].Explanation
 			if e := raw.Fixes[idx].Effort; e == "low" || e == "medium" || e == "high" {
 				effort = e
 			}
+			mrr = raw.Fixes[idx].ManualReviewReason
+			blast = normalizeBlastRadius(raw.Fixes[idx].BlastRadius)
 		} else if i < len(raw.Fixes) {
 			// Fallback: use positional match when rule_id absent in response.
 			expl = raw.Fixes[i].Explanation
 			if e := raw.Fixes[i].Effort; e == "low" || e == "medium" || e == "high" {
 				effort = e
 			}
+			mrr = raw.Fixes[i].ManualReviewReason
+			blast = normalizeBlastRadius(raw.Fixes[i].BlastRadius)
 		}
 		out[i] = &FixSuggestion{
-			RuleID:        r.Finding.RuleID,
-			Resource:      r.ResourceAddr,
-			HCL:           raw.HCL,
-			Explanation:   expl,
-			Prerequisites: raw.Prerequisites,
-			Effort:        effort,
+			RuleID:             r.Finding.RuleID,
+			Resource:           r.ResourceAddr,
+			HCL:                raw.HCL,
+			Explanation:        expl,
+			Prerequisites:      raw.Prerequisites,
+			Effort:             effort,
+			ManualReviewReason: mrr,
+			BlastRadius:        blast,
 		}
 	}
 	return out, nil
+}
+
+// normalizeBlastRadius coerces the AI-provided value to a known set. Unknown
+// or empty strings collapse to "low" so the classifier never promotes on a
+// hallucinated label — promotion still requires "high" or a non-empty
+// ManualReviewReason.
+func normalizeBlastRadius(v string) string {
+	switch v {
+	case "none", "low", "medium", "high":
+		return v
+	default:
+		return "low"
+	}
 }
 
 // isRetryableError returns true for errors that are likely caused by payload size
@@ -476,10 +515,12 @@ func parseFixResponse(text string, req FixRequest) (*FixSuggestion, error) {
 	cleaned := extractJSON(text)
 
 	var raw struct {
-		HCL           string   `json:"hcl"`
-		Explanation   string   `json:"explanation"`
-		Prerequisites []string `json:"prerequisites"`
-		Effort        string   `json:"effort"`
+		HCL                string   `json:"hcl"`
+		Explanation        string   `json:"explanation"`
+		Prerequisites      []string `json:"prerequisites"`
+		Effort             string   `json:"effort"`
+		ManualReviewReason string   `json:"manual_review_reason,omitempty"`
+		BlastRadius        string   `json:"blast_radius,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse fix response as JSON: %w (raw: %s)", err, truncate(text, 200))
@@ -494,12 +535,14 @@ func parseFixResponse(text string, req FixRequest) (*FixSuggestion, error) {
 	}
 
 	return &FixSuggestion{
-		RuleID:        req.Finding.RuleID,
-		Resource:      req.ResourceAddr,
-		HCL:           raw.HCL,
-		Explanation:   raw.Explanation,
-		Prerequisites: raw.Prerequisites,
-		Effort:        effort,
+		RuleID:             req.Finding.RuleID,
+		Resource:           req.ResourceAddr,
+		HCL:                raw.HCL,
+		Explanation:        raw.Explanation,
+		Prerequisites:      raw.Prerequisites,
+		Effort:             effort,
+		ManualReviewReason: raw.ManualReviewReason,
+		BlastRadius:        normalizeBlastRadius(raw.BlastRadius),
 	}, nil
 }
 

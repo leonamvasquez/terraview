@@ -146,6 +146,28 @@ func (c *Classifier) Classify(pf PendingFix) *Advisory {
 		}
 	}
 
+	// Signal 5: AI self-assessment. The provider returns two optional fields
+	// alongside the HCL: manual_review_reason (free-form explanation of why
+	// the fix needs human eyes) and blast_radius ("none"/"low"/"medium"/"high").
+	// Either signal independently promotes — the AI sees the actual HCL it
+	// proposes, so it can flag context-specific risk that the static catalog
+	// can't anticipate (e.g. removing a rule from a SG that turns out to be
+	// the SSH bastion gateway).
+	if pf.Suggestion != nil {
+		if reason := strings.TrimSpace(pf.Suggestion.ManualReviewReason); reason != "" {
+			return &Advisory{
+				Reason: "AI flagged for review: " + truncateOneLine(reason, 160),
+				Group:  AdvisoryManualReview,
+			}
+		}
+		if pf.Suggestion.BlastRadius == "high" {
+			return &Advisory{
+				Reason: "AI estimates HIGH blast radius — review impact before applying",
+				Group:  AdvisoryCrossResource,
+			}
+		}
+	}
+
 	return nil
 }
 
