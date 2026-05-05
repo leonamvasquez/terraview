@@ -37,9 +37,8 @@ type ProjectContext struct {
 // HasProvider reports whether a provider with this short name is already
 // declared. Match is case-insensitive.
 func (p *ProjectContext) HasProvider(name string) bool {
-	name = strings.ToLower(name)
 	for _, p := range p.Providers {
-		if strings.ToLower(p) == name {
+		if strings.EqualFold(p, name) {
 			return true
 		}
 	}

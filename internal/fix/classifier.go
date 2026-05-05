@@ -194,7 +194,7 @@ func proposesDeletion(pf PendingFix) bool {
 		return false
 	}
 	rType, rName := parts[0], parts[1]
-	pattern := fmt.Sprintf(`(?m)^\s*resource\s+"%s"\s+"%s"\s*\{`,
+	pattern := fmt.Sprintf(`(?m)^\s*resource\s+%q\s+%q\s*\{`,
 		regexp.QuoteMeta(rType), regexp.QuoteMeta(rName))
 	matched, err := regexp.MatchString(pattern, pf.Suggestion.HCL)
 	if err != nil {
@@ -206,7 +206,7 @@ func proposesDeletion(pf PendingFix) bool {
 // inboundRefs returns up to limit resource addresses that reference addr in
 // the dependency graph. Used to explain WHY a deletion is risky.
 func (c *Classifier) inboundRefs(addr string, limit int) []string {
-	var refs []string
+	refs := make([]string, 0, limit)
 	seen := map[string]bool{}
 	for _, e := range c.graph.Edges {
 		if e.To != addr || seen[e.From] {

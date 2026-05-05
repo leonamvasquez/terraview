@@ -631,7 +631,7 @@ func (s *ApplySession) applyFix(pf PendingFix) error {
 
 	// Refresh Location against the current file state. Earlier fixes may have
 	// shifted line offsets; using the stale StartLine/EndLine would corrupt
-	// neighbouring blocks. We re-locate by resource address right before the
+	// neighboring blocks. We re-locate by resource address right before the
 	// substitution so offsets always match the on-disk content.
 	if pf.Location != nil && s.WorkDir != "" && pf.Finding.Resource != "" {
 		if fresh, _ := FindResource(s.WorkDir, pf.Finding.Resource); fresh != nil {
@@ -736,15 +736,17 @@ func isTerraformBlock(block string) bool {
 // the required_providers { ... } sub-block of a terraform block. Returns nil
 // when the block has no required_providers section.
 func extractRequiredProviderNames(block string) []string {
-	for _, body := range findBlockBodies(block, reReqProvOpen) {
-		top := stripNestedBraces(body)
-		var names []string
-		for _, e := range reReqProviderEntry.FindAllStringSubmatch(top, -1) {
-			names = append(names, e[1])
-		}
-		return names
+	bodies := findBlockBodies(block, reReqProvOpen)
+	if len(bodies) == 0 {
+		return nil
 	}
-	return nil
+	top := stripNestedBraces(bodies[0])
+	matches := reReqProviderEntry.FindAllStringSubmatch(top, -1)
+	names := make([]string, 0, len(matches))
+	for _, e := range matches {
+		names = append(names, e[1])
+	}
+	return names
 }
 
 // parsePrereqHeader extracts (resourceType, resourceName) from the first

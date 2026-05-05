@@ -350,8 +350,7 @@ func TestAnalyze_BatchedPath_Triggered(t *testing.T) {
 
 // countingProvider counts calls and delegates result to a function.
 type countingProvider struct {
-	delegate *mockProvider
-	onCall   func(n int) ([]rules.Finding, string)
+	onCall func(n int) ([]rules.Finding, string)
 
 	mu sync.Mutex
 	n  int
