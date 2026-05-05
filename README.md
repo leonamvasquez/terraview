@@ -65,7 +65,7 @@ O Terraview roda como binário único, sem dependências externas. Quando um pro
   - **CLI (assinatura)**: Gemini CLI e Claude Code — usam sua assinatura pessoal, sem API key
   - **Custom**: qualquer API OpenAI-compatible (Grok/xAI, Groq, Mistral, Together AI, Fireworks, etc.)
 - **Supressão de findings** — arquivo `.terraview-ignore` para suprimir riscos aceitos e falsos positivos de forma permanente, com escopo AND-logic por regra, recurso ou fonte (`--ignore-file`)
-- **Sugestões de AI Fix** — `terraview fix plan` (dry-run) / `terraview fix apply` (interativo ou `--auto-approve`) geram e aplicam HCL corrigido para findings CRITICAL/HIGH com validação, backup e preview de diff
+- **Sugestões de AI Fix com classificador de advisories** — `terraview fix plan` (dry-run) / `terraview fix apply` (interativo ou `--auto-approve`) geram e aplicam HCL corrigido para findings CRITICAL/HIGH com validação, backup e preview de diff. Classificador multi-sinal (5 sinais: catálogo estático, categoria arquitetural, deleção com referências no grafo, histórico de falhas persistente, auto-avaliação da IA via `manual_review_reason`/`blast_radius`) promove fixes de risco para revisão manual antes de aplicar
 - **Teste de integração automático** — ao selecionar um provider via `provider list`, o terraview testa conectividade e retorna feedback específico por tipo (CLI instalado, API key válida, serviço acessível)
 - **Resolução de conflitos** — scanner × IA: scanner vence em caso de divergência (confidence 0.80); acordo eleva confidence para 1.00
 - **Scorecard unificado** com notas de Segurança, Compliance e Manutenibilidade (0–10)
