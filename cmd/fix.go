@@ -130,15 +130,19 @@ type fixFilter struct {
 
 // fixPlanRecord is the JSON representation of a single fix suggestion.
 type fixPlanRecord struct {
-	RuleID        string   `json:"rule_id"`
-	Severity      string   `json:"severity"`
-	Resource      string   `json:"resource"`
-	Message       string   `json:"message"`
-	File          string   `json:"file,omitempty"`
-	HCL           string   `json:"hcl"`
-	Explanation   string   `json:"explanation"`
-	Prerequisites []string `json:"prerequisites,omitempty"`
-	Effort        string   `json:"effort"`
+	RuleID             string   `json:"rule_id"`
+	Severity           string   `json:"severity"`
+	Resource           string   `json:"resource"`
+	Message            string   `json:"message"`
+	File               string   `json:"file,omitempty"`
+	HCL                string   `json:"hcl,omitempty"`
+	Explanation        string   `json:"explanation,omitempty"`
+	Prerequisites      []string `json:"prerequisites,omitempty"`
+	Effort             string   `json:"effort,omitempty"`
+	Advisory           bool     `json:"advisory,omitempty"`
+	AdvisoryReason     string   `json:"advisory_reason,omitempty"`
+	ManualReviewReason string   `json:"manual_review_reason,omitempty"`
+	BlastRadius        string   `json:"blast_radius,omitempty"`
 }
 
 func runFixPlan(_ *cobra.Command, _ []string) error {
@@ -162,14 +166,22 @@ func writeFixPlanJSON(pending []fix.PendingFix) {
 	records := make([]fixPlanRecord, 0, len(pending))
 	for _, p := range pending {
 		r := fixPlanRecord{
-			RuleID:        p.Finding.RuleID,
-			Severity:      p.Finding.Severity,
-			Resource:      p.Finding.Resource,
-			Message:       p.Finding.Message,
-			HCL:           p.Suggestion.HCL,
-			Explanation:   p.Suggestion.Explanation,
-			Prerequisites: p.Suggestion.Prerequisites,
-			Effort:        p.Suggestion.Effort,
+			RuleID:   p.Finding.RuleID,
+			Severity: p.Finding.Severity,
+			Resource: p.Finding.Resource,
+			Message:  p.Finding.Message,
+		}
+		if p.Suggestion != nil {
+			r.HCL = p.Suggestion.HCL
+			r.Explanation = p.Suggestion.Explanation
+			r.Prerequisites = p.Suggestion.Prerequisites
+			r.Effort = p.Suggestion.Effort
+			r.ManualReviewReason = p.Suggestion.ManualReviewReason
+			r.BlastRadius = p.Suggestion.BlastRadius
+		}
+		if p.Advisory != nil {
+			r.Advisory = true
+			r.AdvisoryReason = p.Advisory.Reason
 		}
 		if p.Location != nil {
 			r.File = p.Location.File
