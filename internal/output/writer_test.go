@@ -186,7 +186,7 @@ func TestGroupBySeverity_Empty(t *testing.T) {
 func TestGroupBySource(t *testing.T) {
 	findings := []rules.Finding{
 		{Source: "scanner:checkov", RuleID: "R1"},
-		{Source: "scanner:tfsec", RuleID: "R2"},
+		{Source: "scanner:trivy", RuleID: "R2"},
 		{Source: "scanner:checkov", RuleID: "R3"},
 		{Source: "llm", RuleID: "R4"},
 	}
@@ -195,8 +195,8 @@ func TestGroupBySource(t *testing.T) {
 	if len(groups["CHECKOV"]) != 2 {
 		t.Errorf("expected 2 CHECKOV, got %d", len(groups["CHECKOV"]))
 	}
-	if len(groups["TFSEC"]) != 1 {
-		t.Errorf("expected 1 TFSEC, got %d", len(groups["TFSEC"]))
+	if len(groups["TRIVY"]) != 1 {
+		t.Errorf("expected 1 TRIVY, got %d", len(groups["TRIVY"]))
 	}
 	if len(groups["AI"]) != 1 {
 		t.Errorf("expected 1 AI, got %d", len(groups["AI"]))
@@ -213,8 +213,8 @@ func TestSourceLabel(t *testing.T) {
 		want   string
 	}{
 		{"scanner:checkov", "CHECKOV"},
-		{"scanner:tfsec", "TFSEC"},
-		{"scanner:checkov+tfsec", "CHECKOV+TFSEC"},
+		{"scanner:trivy", "TRIVY"},
+		{"scanner:checkov+trivy", "CHECKOV+TRIVY"},
 		{"llm", "AI"},
 		{"ai", "AI"},
 		{"external:sarif", "SARIF (import)"},

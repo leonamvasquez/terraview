@@ -135,13 +135,13 @@ func TestPlatformInfo_String(t *testing.T) {
 
 func TestPlatformInfo_BinaryName(t *testing.T) {
 	unix := PlatformInfo{OS: "linux", BinaryExt: ""}
-	if got := unix.BinaryName("tfsec"); got != "tfsec" {
-		t.Errorf("Unix BinaryName = %q, want %q", got, "tfsec")
+	if got := unix.BinaryName("trivy"); got != "trivy" {
+		t.Errorf("Unix BinaryName = %q, want %q", got, "trivy")
 	}
 
 	win := PlatformInfo{OS: "windows", BinaryExt: ".exe"}
-	if got := win.BinaryName("tfsec"); got != "tfsec.exe" {
-		t.Errorf("Windows BinaryName = %q, want %q", got, "tfsec.exe")
+	if got := win.BinaryName("trivy"); got != "trivy.exe" {
+		t.Errorf("Windows BinaryName = %q, want %q", got, "trivy.exe")
 	}
 }
 

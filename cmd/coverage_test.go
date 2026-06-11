@@ -2785,7 +2785,7 @@ func TestRenderOutput_BRFlagWithScannerResult(t *testing.T) {
 	}
 	scanRes := &scanner.AggregatedResult{
 		ScannerStats: []scanner.ScannerStat{
-			{Name: "tfsec", Findings: 0},
+			{Name: "trivy", Findings: 0},
 		},
 	}
 
@@ -2926,10 +2926,10 @@ func TestRunScan_ScannerFromArgs(t *testing.T) {
 	staticOnly = true
 
 	// Pass a scanner name as arg — covers the args[0] branch
-	err := runScan(nil, []string{"tfsec"})
+	err := runScan(nil, []string{"trivy"})
 	// Will fail when trying to resolve/run the scanner, but the args parsing is exercised
 	if err == nil {
-		t.Log("runScan succeeded unexpectedly (tfsec may be installed)")
+		t.Log("runScan succeeded unexpectedly (trivy may be installed)")
 	}
 }
 
@@ -3228,7 +3228,7 @@ func TestResolveReviewConfig_WithPlanFile(t *testing.T) {
 
 	planFile = planPath
 
-	rc, err := resolveReviewConfig("tfsec")
+	rc, err := resolveReviewConfig("trivy")
 	if err != nil {
 		t.Fatalf("resolveReviewConfig error: %v", err)
 	}
@@ -3238,8 +3238,8 @@ func TestResolveReviewConfig_WithPlanFile(t *testing.T) {
 	if rc.effectiveFormat != "json" {
 		t.Errorf("expected format 'json', got %q", rc.effectiveFormat)
 	}
-	if rc.scannerName != "tfsec" {
-		t.Errorf("expected scanner 'tfsec', got %q", rc.scannerName)
+	if rc.scannerName != "trivy" {
+		t.Errorf("expected scanner 'trivy', got %q", rc.scannerName)
 	}
 }
 
@@ -3629,7 +3629,7 @@ func TestMergeAndScore_WithMetaAnalysis(t *testing.T) {
 	sr := scanResult{
 		hardFindings: []rules.Finding{
 			{RuleID: "SEC-001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Message: "Finding 1", Remediation: "Fix", Source: "checkov"},
-			{RuleID: "SEC-002", Severity: "MEDIUM", Category: "networking", Resource: "aws_instance.web", Message: "Finding 2", Remediation: "Fix", Source: "tfsec"},
+			{RuleID: "SEC-002", Severity: "MEDIUM", Category: "networking", Resource: "aws_instance.web", Message: "Finding 2", Remediation: "Fix", Source: "trivy"},
 		},
 	}
 

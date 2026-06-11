@@ -72,7 +72,7 @@ func TestDetectCoverageGaps_MultipleSources(t *testing.T) {
 func TestAnalyzer_MultipleSources(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "SEC001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},
-		{RuleID: "CKV_001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "tfsec"},
+		{RuleID: "CKV_001", Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "trivy"},
 		{RuleID: "BP001", Severity: "MEDIUM", Category: "best-practice", Resource: "aws_s3_bucket.data", Source: "terrascan"},
 	}
 
@@ -125,7 +125,7 @@ func TestNormalizeSource(t *testing.T) {
 	}{
 		{"checkov", "checkov"},
 		{"external:checkov", "checkov"},
-		{"external:tfsec", "tfsec"},
+		{"external:trivy", "trivy"},
 		{"", "unknown"},
 		{"llm", "llm"},
 	}
@@ -227,10 +227,10 @@ func TestComputeUnifiedScore_NaoZeraComPoucosFindings(t *testing.T) {
 func TestComputeUnifiedScore_CorrelacaoAumentaPenalidade(t *testing.T) {
 	findings := []rules.Finding{
 		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "checkov"},
-		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "tfsec"},
+		{Severity: "HIGH", Category: "security", Resource: "aws_instance.web", Source: "trivy"},
 	}
 	correlations := []Correlation{
-		{Resource: "aws_instance.web", Sources: []string{"checkov", "tfsec"}, MaxSeverity: "HIGH"},
+		{Resource: "aws_instance.web", Sources: []string{"checkov", "trivy"}, MaxSeverity: "HIGH"},
 	}
 
 	scoreWithout := computeUnifiedScore(findings, nil)

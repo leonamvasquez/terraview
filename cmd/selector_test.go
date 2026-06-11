@@ -156,7 +156,7 @@ func TestPrintItem_WithoutDetail(t *testing.T) {
 func TestRenderList_ContainsTitle(t *testing.T) {
 	items := []selectItem{
 		{Label: "checkov", Value: "checkov"},
-		{Label: "tfsec", Value: "tfsec"},
+		{Label: "trivy", Value: "trivy"},
 	}
 	out := captureStdout(func() {
 		renderList("Choose scanner", items, 0)
@@ -169,7 +169,7 @@ func TestRenderList_ContainsTitle(t *testing.T) {
 func TestRenderList_ContainsItems(t *testing.T) {
 	items := []selectItem{
 		{Label: "checkov", Value: "checkov"},
-		{Label: "tfsec", Value: "tfsec"},
+		{Label: "trivy", Value: "trivy"},
 		{Label: "terrascan", Value: "terrascan"},
 	}
 	out := captureStdout(func() {

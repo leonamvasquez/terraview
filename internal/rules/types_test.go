@@ -86,7 +86,7 @@ func TestFinding_JSONOmitEmpty(t *testing.T) {
 		Category: CategoryCompliance,
 		Resource: "aws_s3_bucket.logs",
 		Message:  "Missing versioning",
-		Source:   "tfsec",
+		Source:   "trivy",
 		// Remediation intentionally empty
 	}
 

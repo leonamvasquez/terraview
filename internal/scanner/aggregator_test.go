@@ -67,10 +67,10 @@ func TestAggregate_MultiScanner_WithDedup(t *testing.T) {
 			},
 		},
 		{
-			Scanner: "tfsec",
+			Scanner: "trivy",
 			Version: "1.0.0",
 			Findings: []rules.Finding{
-				{RuleID: "AVD-AWS-001", Severity: "HIGH", Resource: "aws_instance.web", Message: "encryption at rest not enabled", Source: "scanner:tfsec"},
+				{RuleID: "AVD-AWS-001", Severity: "HIGH", Resource: "aws_instance.web", Message: "encryption at rest not enabled", Source: "scanner:trivy"},
 			},
 		},
 	}
@@ -101,10 +101,10 @@ func TestAggregate_WithErrors(t *testing.T) {
 			Error:   errors.New("checkov not installed"),
 		},
 		{
-			Scanner: "tfsec",
+			Scanner: "trivy",
 			Version: "1.0.0",
 			Findings: []rules.Finding{
-				{RuleID: "AVD-001", Severity: "LOW", Resource: "aws_s3.b", Message: "test", Source: "scanner:tfsec"},
+				{RuleID: "AVD-001", Severity: "LOW", Resource: "aws_s3.b", Message: "test", Source: "scanner:trivy"},
 			},
 		},
 	}
@@ -114,12 +114,12 @@ func TestAggregate_WithErrors(t *testing.T) {
 	if len(agg.ScannersError) != 1 || agg.ScannersError[0] != "checkov" {
 		t.Errorf("expected ScannersError [checkov], got %v", agg.ScannersError)
 	}
-	if len(agg.ScannersUsed) != 1 || agg.ScannersUsed[0] != "tfsec" {
-		t.Errorf("expected ScannersUsed [tfsec], got %v", agg.ScannersUsed)
+	if len(agg.ScannersUsed) != 1 || agg.ScannersUsed[0] != "trivy" {
+		t.Errorf("expected ScannersUsed [trivy], got %v", agg.ScannersUsed)
 	}
 	// Findings from errored scanner should not be included
 	if len(agg.Findings) != 1 {
-		t.Errorf("expected 1 finding (from tfsec only), got %d", len(agg.Findings))
+		t.Errorf("expected 1 finding (from trivy only), got %d", len(agg.Findings))
 	}
 	// Stats should reflect both scanners
 	if len(agg.ScannerStats) != 2 {
@@ -141,7 +141,7 @@ func TestFormatScannerHeader(t *testing.T) {
 	agg := AggregatedResult{
 		ScannerStats: []ScannerStat{
 			{Name: "checkov", Findings: 3},
-			{Name: "tfsec", Findings: 5},
+			{Name: "trivy", Findings: 5},
 		},
 		TotalRaw:     10,
 		TotalDeduped: 8,
@@ -155,8 +155,8 @@ func TestFormatScannerHeader(t *testing.T) {
 	if !contains(header, "checkov (3 findings)") {
 		t.Errorf("expected 'checkov (3 findings)' in header, got: %s", header)
 	}
-	if !contains(header, "tfsec (5 findings)") {
-		t.Errorf("expected 'tfsec (5 findings)' in header, got: %s", header)
+	if !contains(header, "trivy (5 findings)") {
+		t.Errorf("expected 'trivy (5 findings)' in header, got: %s", header)
 	}
 	if !contains(header, "10 → 8 findings") {
 		t.Errorf("expected dedup line, got: %s", header)
@@ -212,12 +212,12 @@ func TestFormatScannerHeaderBR(t *testing.T) {
 func TestFormatScannerHeaderBR_WithError(t *testing.T) {
 	agg := AggregatedResult{
 		ScannerStats: []ScannerStat{
-			{Name: "tfsec", Error: "fail"},
+			{Name: "trivy", Error: "fail"},
 		},
 	}
 
 	header := FormatScannerHeaderBR(agg)
-	if !contains(header, "tfsec (erro)") {
+	if !contains(header, "trivy (erro)") {
 		t.Errorf("expected 'erro' in Portuguese header, got: %s", header)
 	}
 }
@@ -229,7 +229,7 @@ func TestFormatScannerHeaderBR_WithError(t *testing.T) {
 func TestDeduplicateFindings_NoDuplicates(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "R1", Severity: "HIGH", Resource: "aws_instance.a", Message: "msg1", Source: "scanner:checkov"},
-		{RuleID: "R2", Severity: "LOW", Resource: "aws_s3_bucket.b", Message: "msg2", Source: "scanner:tfsec"},
+		{RuleID: "R2", Severity: "LOW", Resource: "aws_s3_bucket.b", Message: "msg2", Source: "scanner:trivy"},
 	}
 	result := deduplicateFindings(findings)
 	if len(result) != 2 {
@@ -240,7 +240,7 @@ func TestDeduplicateFindings_NoDuplicates(t *testing.T) {
 func TestDeduplicateFindings_CrossScannerMerge(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "R1", Severity: "MEDIUM", Resource: "aws_instance.a", Message: "encryption at rest not enabled for s3", Source: "scanner:checkov"},
-		{RuleID: "R2", Severity: "HIGH", Resource: "aws_instance.a", Message: "encryption at rest not enabled for s3", Source: "scanner:tfsec", Remediation: "Enable encryption"},
+		{RuleID: "R2", Severity: "HIGH", Resource: "aws_instance.a", Message: "encryption at rest not enabled for s3", Source: "scanner:trivy", Remediation: "Enable encryption"},
 	}
 	result := deduplicateFindings(findings)
 	if len(result) != 1 {
@@ -251,7 +251,7 @@ func TestDeduplicateFindings_CrossScannerMerge(t *testing.T) {
 		t.Errorf("expected HIGH (kept higher), got %s", result[0].Severity)
 	}
 	// Should merge sources
-	if !contains(result[0].Source, "checkov") || !contains(result[0].Source, "tfsec") {
+	if !contains(result[0].Source, "checkov") || !contains(result[0].Source, "trivy") {
 		t.Errorf("expected merged source, got %s", result[0].Source)
 	}
 	// Should keep remediation from second finding
@@ -347,7 +347,7 @@ func TestExtractScannerName(t *testing.T) {
 		want   string
 	}{
 		{"scanner:checkov", "checkov"},
-		{"scanner:tfsec", "tfsec"},
+		{"scanner:trivy", "trivy"},
 		{"external:sarif", "sarif"},
 		{"just-name", "just-name"},
 		{"", ""},

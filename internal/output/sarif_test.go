@@ -30,7 +30,7 @@ func TestWriteSARIF_CreatesValidJSON(t *testing.T) {
 				Category: "compliance",
 				Resource: "aws_s3_bucket.data",
 				Message:  "Missing required tags",
-				Source:   "tfsec",
+				Source:   "trivy",
 			},
 		},
 	}
@@ -263,13 +263,13 @@ func TestBuildSARIF_LocationURI(t *testing.T) {
 func TestBuildSARIF_ResultMessageFormat(t *testing.T) {
 	result := aggregator.ReviewResult{
 		Findings: []rules.Finding{
-			{RuleID: "R1", Severity: "LOW", Resource: "aws_s3_bucket.b", Message: "no encryption", Source: "tfsec"},
+			{RuleID: "R1", Severity: "LOW", Resource: "aws_s3_bucket.b", Message: "no encryption", Source: "trivy"},
 		},
 	}
 	report := buildSARIF(result, "test")
 	msg := report.Runs[0].Results[0].Message.Text
 
-	want := "[tfsec] aws_s3_bucket.b: no encryption"
+	want := "[trivy] aws_s3_bucket.b: no encryption"
 	if msg != want {
 		t.Errorf("message = %q, want %q", msg, want)
 	}

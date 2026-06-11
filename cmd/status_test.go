@@ -67,7 +67,7 @@ func TestPrintStatusHeader_WithProviderAndModel(t *testing.T) {
 func TestPrintStatusHeader_ProviderNoModel(t *testing.T) {
 	ls := &history.LastScan{
 		Timestamp: time.Now(),
-		Scanner:   "tfsec",
+		Scanner:   "trivy",
 		Provider:  "gemini",
 	}
 	out := captureStatus(func() {

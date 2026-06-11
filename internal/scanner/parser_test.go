@@ -274,7 +274,7 @@ func TestParseTrivyOutput_FallbackFields(t *testing.T) {
 				"Target": "vpc.tf",
 				"Misconfigurations": [
 					{
-						"ID": "tfsec-id",
+						"ID": "trivy-id",
 						"AVDID": "",
 						"Severity": "MEDIUM",
 						"Status": "FAIL",
@@ -292,7 +292,7 @@ func TestParseTrivyOutput_FallbackFields(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// AVDID empty → should fall back to ID
-	if findings[0].RuleID != "tfsec-id" {
+	if findings[0].RuleID != "trivy-id" {
 		t.Errorf("expected ID fallback, got %s", findings[0].RuleID)
 	}
 	// Resource empty → should fall back to Target

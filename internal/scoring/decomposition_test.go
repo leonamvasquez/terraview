@@ -33,7 +33,7 @@ func TestDecompose_MatchesCalculate(t *testing.T) {
 	findings := []rules.Finding{
 		{RuleID: "CKV_AWS_18", Severity: rules.SeverityCritical, Category: rules.CategorySecurity, Resource: "aws_s3_bucket.data", Source: "scanner:checkov"},
 		{RuleID: "CKV_AWS_21", Severity: rules.SeverityHigh, Category: rules.CategorySecurity, Resource: "aws_s3_bucket.data", Source: "scanner:checkov"},
-		{RuleID: "TAG_MISSING", Severity: rules.SeverityMedium, Category: rules.CategoryCompliance, Resource: "aws_instance.web", Source: "scanner:tfsec"},
+		{RuleID: "TAG_MISSING", Severity: rules.SeverityMedium, Category: rules.CategoryCompliance, Resource: "aws_instance.web", Source: "scanner:trivy"},
 		{RuleID: "BKP_001", Severity: rules.SeverityMedium, Category: rules.CategoryReliability, Resource: "aws_rds_instance.db", Source: "llm"},
 	}
 
@@ -51,7 +51,7 @@ func TestDecompose_FindingsImpactPresent(t *testing.T) {
 	scorer := NewScorerWithWeights(5, 3, 1, 0.5)
 	findings := []rules.Finding{
 		{RuleID: "CKV_AWS_18", Severity: rules.SeverityCritical, Category: rules.CategorySecurity, Resource: "aws_s3_bucket.data", Source: "scanner:checkov", Message: "Ensure the S3 bucket has encryption enabled"},
-		{RuleID: "TAG_001", Severity: rules.SeverityMedium, Category: rules.CategoryCompliance, Resource: "aws_instance.web", Source: "scanner:tfsec"},
+		{RuleID: "TAG_001", Severity: rules.SeverityMedium, Category: rules.CategoryCompliance, Resource: "aws_instance.web", Source: "scanner:trivy"},
 	}
 
 	d := scorer.Decompose(findings, 3)

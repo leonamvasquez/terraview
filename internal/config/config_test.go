@@ -712,7 +712,7 @@ func TestSaveDefaultScanner_OverwriteExisting(t *testing.T) {
 		t.Fatalf("first save error: %v", err)
 	}
 	// Overwrite
-	if err := SaveDefaultScanner("tfsec"); err != nil {
+	if err := SaveDefaultScanner("trivy"); err != nil {
 		t.Fatalf("second save error: %v", err)
 	}
 
@@ -721,8 +721,8 @@ func TestSaveDefaultScanner_OverwriteExisting(t *testing.T) {
 		t.Fatalf("failed to read: %v", err)
 	}
 	content := string(data)
-	if !contains(content, "tfsec") {
-		t.Errorf("expected 'tfsec' in updated config, got %s", content)
+	if !contains(content, "trivy") {
+		t.Errorf("expected 'trivy' in updated config, got %s", content)
 	}
 }
 
@@ -764,7 +764,7 @@ func TestLoad_MergeScannerDefault(t *testing.T) {
 	dir := t.TempDir()
 	yaml := `
 scanner:
-  default: tfsec
+  default: trivy
 `
 	if err := os.WriteFile(filepath.Join(dir, ".terraview.yaml"), []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -773,8 +773,8 @@ scanner:
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
-	if cfg.Scanner.Default != "tfsec" {
-		t.Errorf("expected Scanner.Default=tfsec, got %q", cfg.Scanner.Default)
+	if cfg.Scanner.Default != "trivy" {
+		t.Errorf("expected Scanner.Default=trivy, got %q", cfg.Scanner.Default)
 	}
 }
 

@@ -93,7 +93,7 @@ func TestDedup_ThreeSourcesMerge(t *testing.T) {
 	agg := NewAggregator(scorer)
 	hard := []rules.Finding{
 		{RuleID: "SEC001", Severity: rules.SeverityMedium, Category: rules.CategorySecurity,
-			Resource: "aws_sg.test", Source: "tfsec"},
+			Resource: "aws_sg.test", Source: "trivy"},
 		{RuleID: "SEC001", Severity: rules.SeverityHigh, Category: rules.CategorySecurity,
 			Resource: "aws_sg.test", Source: "checkov"},
 	}
@@ -110,7 +110,7 @@ func TestDedup_ThreeSourcesMerge(t *testing.T) {
 	if f.Severity != rules.SeverityCritical {
 		t.Errorf("expected CRITICAL, got %s", f.Severity)
 	}
-	for _, src := range []string{"tfsec", "checkov", "llm"} {
+	for _, src := range []string{"trivy", "checkov", "llm"} {
 		if !strings.Contains(f.Source, src) {
 			t.Errorf("missing %q in source: %q", src, f.Source)
 		}

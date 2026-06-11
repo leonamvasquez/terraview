@@ -288,7 +288,7 @@ func TestDiskCache_PersistsToDisk(t *testing.T) {
 	planData := []byte(`{"resources":[]}`)
 	planHash := PlanHash(planData)
 
-	dc := NewDiskCache(dir, "ollama", "llama3.1:8b", "tfsec", 24)
+	dc := NewDiskCache(dir, "ollama", "llama3.1:8b", "trivy", 24)
 	dc.Put(planHash, "test-value")
 
 	// Verify both files were written
@@ -326,8 +326,8 @@ func TestDiskCache_PersistsToDisk(t *testing.T) {
 	if meta.Model != "llama3.1:8b" {
 		t.Errorf("expected model 'llama3.1:8b', got %q", meta.Model)
 	}
-	if meta.Scanner != "tfsec" {
-		t.Errorf("expected scanner 'tfsec', got %q", meta.Scanner)
+	if meta.Scanner != "trivy" {
+		t.Errorf("expected scanner 'trivy', got %q", meta.Scanner)
 	}
 	if meta.PlanHash != planHash {
 		t.Errorf("expected plan_hash %q, got %q", planHash, meta.PlanHash)
@@ -513,12 +513,12 @@ func TestDiskCache_SamePlanTTLExpired_CacheMiss(t *testing.T) {
 	now := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	// Store result
-	dc1 := NewDiskCache(dir, "claude", "opus", "tfsec", 24)
+	dc1 := NewDiskCache(dir, "claude", "opus", "trivy", 24)
 	dc1.now = func() time.Time { return now }
 	dc1.Put(planHash, `{"findings":[],"summary":"cached"}`)
 
 	// Same plan, but TTL expired (48h later)
-	dc2 := NewDiskCache(dir, "claude", "opus", "tfsec", 24)
+	dc2 := NewDiskCache(dir, "claude", "opus", "trivy", 24)
 	dc2.now = func() time.Time { return now.Add(48 * time.Hour) }
 	_, ok := dc2.Get(planHash)
 	if ok {

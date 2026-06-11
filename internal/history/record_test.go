@@ -128,7 +128,7 @@ func TestNewRecordFromResult_Static(t *testing.T) {
 		Score: scoring.Score{OverallScore: 6.0},
 	}
 
-	rec := NewRecordFromResult(result, "/tmp/proj", "tfsec", "", "", 0, true)
+	rec := NewRecordFromResult(result, "/tmp/proj", "trivy", "", "", 0, true)
 	if !rec.StaticOnly {
 		t.Error("StaticOnly should be true")
 	}

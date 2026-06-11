@@ -347,7 +347,7 @@ func TestToPipeline_BRFlag(t *testing.T) {
 
 func TestToPipeline_FieldMapping(t *testing.T) {
 	rc := reviewConfig{
-		scannerName:     "tfsec",
+		scannerName:     "trivy",
 		resolvedPlan:    "/tmp/plan.json",
 		effectiveAI:     true,
 		effectiveFormat: "json",
@@ -358,8 +358,8 @@ func TestToPipeline_FieldMapping(t *testing.T) {
 	}
 	brFlag = false
 	p := rc.toPipeline()
-	if p.ScannerName != "tfsec" {
-		t.Errorf("ScannerName = %q, want tfsec", p.ScannerName)
+	if p.ScannerName != "trivy" {
+		t.Errorf("ScannerName = %q, want trivy", p.ScannerName)
 	}
 	if p.EffectiveAI != true {
 		t.Error("EffectiveAI should be true")

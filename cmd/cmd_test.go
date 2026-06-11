@@ -103,15 +103,15 @@ func TestFilterDisabledRules_PrefixMatch(t *testing.T) {
 		{RuleID: "CKV_AWS_001"},
 		{RuleID: "CKV_AWS_002"},
 		{RuleID: "CKV_GCP_001"},
-		{RuleID: "TFSEC_001"},
+		{RuleID: "TRIVY_001"},
 	}
 	// "CKV" as a prefix (no underscore) should disable all CKV_ rules
 	got := filterDisabledRules(findings, []string{"CKV"})
 	if len(got) != 1 {
 		t.Fatalf("expected 1, got %d", len(got))
 	}
-	if got[0].RuleID != "TFSEC_001" {
-		t.Errorf("expected TFSEC_001, got %s", got[0].RuleID)
+	if got[0].RuleID != "TRIVY_001" {
+		t.Errorf("expected TRIVY_001, got %s", got[0].RuleID)
 	}
 }
 
@@ -400,13 +400,13 @@ func TestSortedScannerNames_Empty(t *testing.T) {
 
 func TestSortedScannerNames_Sorted(t *testing.T) {
 	m := map[string]scanner.Scanner{
-		"tfsec":   stubScanner{"tfsec"},
-		"checkov": stubScanner{"checkov"},
-		"trivy":   stubScanner{"trivy"},
-		"atlas":   stubScanner{"atlas"},
+		"terrascan": stubScanner{"terrascan"},
+		"checkov":   stubScanner{"checkov"},
+		"trivy":     stubScanner{"trivy"},
+		"atlas":     stubScanner{"atlas"},
 	}
 	got := sortedScannerNames(m)
-	expected := []string{"atlas", "checkov", "tfsec", "trivy"}
+	expected := []string{"atlas", "checkov", "terrascan", "trivy"}
 	if len(got) != len(expected) {
 		t.Fatalf("expected %d names, got %d", len(expected), len(got))
 	}

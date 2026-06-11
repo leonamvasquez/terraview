@@ -162,24 +162,24 @@ func TestResolveAll(t *testing.T) {
 func TestResolveSingleExplicit(t *testing.T) {
 	mgr := NewManager()
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
-	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: true, priority: 2})
 	mgr.Register(&mockScanner{name: "terrascan", available: true, priority: 3})
 
-	s, err := mgr.Resolve("tfsec")
+	s, err := mgr.Resolve("trivy")
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	if s.Name() != "tfsec" {
-		t.Errorf("expected tfsec, got %s", s.Name())
+	if s.Name() != "trivy" {
+		t.Errorf("expected trivy, got %s", s.Name())
 	}
 }
 
 func TestResolveMultipleReturnsError(t *testing.T) {
 	mgr := NewManager()
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
-	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: true, priority: 2})
 
-	_, err := mgr.Resolve("tfsec,checkov")
+	_, err := mgr.Resolve("trivy,checkov")
 	if err == nil {
 		t.Fatal("Resolve with comma-separated should return error")
 	}
@@ -427,24 +427,24 @@ func TestSortedKeys(t *testing.T) {
 
 func TestResolveDefault_ConfiguredDefault(t *testing.T) {
 	mgr := NewManager()
-	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: true, priority: 2})
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
 
-	s, err := mgr.ResolveDefault("tfsec")
+	s, err := mgr.ResolveDefault("trivy")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if s == nil || s.Name() != "tfsec" {
-		t.Errorf("expected tfsec, got %v", s)
+	if s == nil || s.Name() != "trivy" {
+		t.Errorf("expected trivy, got %v", s)
 	}
 }
 
 func TestResolveDefault_ConfiguredNotAvailable_FallsThrough(t *testing.T) {
 	mgr := NewManager()
-	mgr.Register(&mockScanner{name: "tfsec", available: false, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: false, priority: 2})
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
 
-	s, err := mgr.ResolveDefault("tfsec")
+	s, err := mgr.ResolveDefault("trivy")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestResolveDefault_ConfiguredNotAvailable_FallsThrough(t *testing.T) {
 func TestResolveDefault_Empty_PicksByPriority(t *testing.T) {
 	mgr := NewManager()
 	mgr.Register(&mockScanner{name: "terrascan", available: true, priority: 3})
-	mgr.Register(&mockScanner{name: "tfsec", available: true, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: true, priority: 2})
 	mgr.Register(&mockScanner{name: "checkov", available: true, priority: 1})
 
 	s, err := mgr.ResolveDefault("")
@@ -471,7 +471,7 @@ func TestResolveDefault_Empty_PicksByPriority(t *testing.T) {
 
 func TestResolveDefault_NoneAvailable(t *testing.T) {
 	mgr := NewManager()
-	mgr.Register(&mockScanner{name: "tfsec", available: false, priority: 2})
+	mgr.Register(&mockScanner{name: "trivy", available: false, priority: 2})
 	mgr.Register(&mockScanner{name: "checkov", available: false, priority: 1})
 
 	s, err := mgr.ResolveDefault("")
@@ -598,7 +598,7 @@ func TestFormatScannerHeaderBR_WithDedup(t *testing.T) {
 
 func TestFormatScannerHeaderBR_NoDedup(t *testing.T) {
 	result := AggregatedResult{
-		ScannerStats: []ScannerStat{{Name: "tfsec", Findings: 3}},
+		ScannerStats: []ScannerStat{{Name: "trivy", Findings: 3}},
 		TotalRaw:     3,
 		TotalDeduped: 3,
 	}

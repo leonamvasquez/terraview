@@ -33,7 +33,7 @@ func TestAdvisoryReasonForFinding_Patterns(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "tfsec wildcard policy by message",
+			name:    "trivy wildcard policy by message",
 			finding: Finding{RuleID: "AVD-AWS-0057", Message: "IAM policy uses wildcard action \"*\""},
 			want:    true,
 		},
@@ -43,7 +43,7 @@ func TestAdvisoryReasonForFinding_Patterns(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "tfsec lambda runtime deprecated",
+			name:    "trivy lambda runtime deprecated",
 			finding: Finding{RuleID: "AVD-AWS-0066", Message: "Lambda function uses a deprecated runtime"},
 			want:    true,
 		},
