@@ -7,7 +7,7 @@ func AllTools() []ToolDef {
 	return []ToolDef{
 		{
 			Name: "terraview_scan",
-			Description: `Security scan of a Terraform plan. Runs a static security scanner (checkov/tfsec/terrascan) and AI contextual analysis in parallel, then merges, deduplicates, and scores the findings.
+			Description: `Security scan of a Terraform plan. Runs a static security scanner (checkov/trivy/terrascan) and AI contextual analysis in parallel, then merges, deduplicates, and scores the findings.
 
 Prerequisites: A Terraform plan JSON must exist. Generate it with:
   terraform plan -out=tfplan && terraform show -json tfplan > plan.json
@@ -29,7 +29,7 @@ Workflow guidance:
 				"type": "object",
 				"properties": {
 					"dir":     { "type": "string", "description": "Terraform workspace directory. Defaults to current directory.", "default": "." },
-					"scanner": { "type": "string", "enum": ["checkov", "tfsec", "terrascan"], "description": "Security scanner to use. If omitted, uses the default configured scanner." },
+					"scanner": { "type": "string", "enum": ["checkov", "trivy", "terrascan"], "description": "Security scanner to use. If omitted, uses the default configured scanner." },
 					"plan":    { "type": "string", "description": "Path to a pre-generated plan JSON. If omitted, looks for plan.json or tfplan.json in dir." },
 					"static":  { "type": "boolean", "default": false, "description": "Run scanner only. Set true to skip AI contextual analysis (faster, no API calls)." }
 				}
@@ -214,7 +214,7 @@ Important: "clear" is irreversible. Deleted entries will be regenerated (with AP
 		},
 		{
 			Name: "terraview_scanners",
-			Description: `List available security scanners and their installation status. Shows which scanners (checkov, tfsec, terrascan) are installed, their versions, where they are installed, and install hints for missing ones.
+			Description: `List available security scanners and their installation status. Shows which scanners (checkov, trivy, terrascan) are installed, their versions, where they are installed, and install hints for missing ones.
 
 Output: List of scanners with status (installed/missing), version, install location, and platform-specific install commands.
 

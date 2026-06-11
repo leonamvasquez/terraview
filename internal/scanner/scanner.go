@@ -37,11 +37,11 @@ type InstallHint struct {
 }
 
 // ValidScanners lists all accepted scanner names.
-var ValidScanners = []string{"checkov", "tfsec", "terrascan", "builtin"}
+var ValidScanners = []string{"checkov", "trivy", "terrascan", "builtin"}
 
 // Scanner is the interface each vendor adapter must implement.
 type Scanner interface {
-	// Name returns the scanner's display name (e.g., "checkov", "tfsec").
+	// Name returns the scanner's display name (e.g., "checkov", "trivy").
 	Name() string
 	// Available checks if the scanner binary is installed and reachable.
 	Available() bool
@@ -145,7 +145,7 @@ func (m *ScannerManager) Missing() []struct {
 
 // Resolve validates and returns exactly one scanner.
 //
-// Accepts a single scanner name (checkov, tfsec, terrascan).
+// Accepts a single scanner name (checkov, trivy, terrascan).
 // Returns an error if input contains commas, or is "auto"/"all".
 // If input is empty, returns nil (caller should use ResolveDefault instead).
 func (m *ScannerManager) Resolve(input string) (Scanner, error) {
@@ -201,7 +201,7 @@ func (m *ScannerManager) ResolveDefault(configDefault string) (Scanner, error) {
 		// Default is set but not available — warn but fall through
 	}
 
-	// 2. Pick by priority (lower number = higher priority): checkov(1) > tfsec(2) > terrascan(3)
+	// 2. Pick by priority (lower number = higher priority): checkov(1) > trivy(2) > terrascan(3)
 	avail := m.Available()
 	if len(avail) == 0 {
 		return nil, nil
@@ -312,15 +312,14 @@ var semverRe = regexp.MustCompile(`v?\d+\.\d+[.\w-]*`)
 
 // getCommandVersion runs "cmd --version" and returns the version string.
 // It scans all output lines for a semver-like pattern so that tools that
-// print banners or warnings before the actual version (e.g., tfsec) are
-// handled correctly.
+// print banners or warnings before the actual version are handled correctly.
 func getCommandVersion(name string) string {
 	return getCommandVersionArgs(name, "--version")
 }
 
 // getCommandVersionArgs runs cmd with the given args and extracts a semver string.
-// It intentionally ignores the exit code because some tools (e.g., older tfsec)
-// print a version string even when they exit non-zero.
+// It intentionally ignores the exit code because some tools print a version
+// string even when they exit non-zero.
 func getCommandVersionArgs(name string, args ...string) string {
 	cmd := exec.Command(name, args...)
 	out, _ := cmd.CombinedOutput() // ignore error — parse whatever was printed

@@ -44,6 +44,20 @@ func DetectFormat(data []byte) string {
 		}
 	}
 
+	// Trivy: {"Results": [{"Target": ..., "Misconfigurations": [...]}]}
+	if results, ok := raw["Results"]; ok {
+		if arr, ok := results.([]interface{}); ok && len(arr) > 0 {
+			if item, ok := arr[0].(map[string]interface{}); ok {
+				if _, ok := item["Misconfigurations"]; ok {
+					return "trivy"
+				}
+				if _, ok := item["Target"]; ok {
+					return "trivy"
+				}
+			}
+		}
+	}
+
 	return "unknown"
 }
 
@@ -61,10 +75,12 @@ func Import(filePath string) ([]rules.Finding, error) {
 		return importCheckov(data)
 	case "tfsec":
 		return importTfsec(data)
+	case "trivy":
+		return importTrivy(data)
 	case "sarif":
 		return importSARIF(data)
 	default:
-		return nil, fmt.Errorf("unknown findings format in %q. Supported: checkov, tfsec, sarif", filePath)
+		return nil, fmt.Errorf("unknown findings format in %q. Supported: checkov, trivy, tfsec, sarif", filePath)
 	}
 }
 
@@ -127,6 +143,59 @@ func importTfsec(data []byte) ([]rules.Finding, error) {
 			Message:  fmt.Sprintf("[tfsec] %s: %s", result.RuleID, result.Description),
 			Source:   "external:tfsec",
 		})
+	}
+
+	return findings, nil
+}
+
+func importTrivy(data []byte) ([]rules.Finding, error) {
+	var report struct {
+		Results []struct {
+			Target            string `json:"Target"`
+			Misconfigurations []struct {
+				ID            string `json:"ID"`
+				AVDID         string `json:"AVDID"`
+				Description   string `json:"Description"`
+				Message       string `json:"Message"`
+				Severity      string `json:"Severity"`
+				Status        string `json:"Status"`
+				CauseMetadata struct {
+					Resource string `json:"Resource"`
+				} `json:"CauseMetadata"`
+			} `json:"Misconfigurations"`
+		} `json:"Results"`
+	}
+
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, fmt.Errorf("failed to parse trivy output: %w", err)
+	}
+
+	var findings []rules.Finding //nolint:prealloc
+	for _, result := range report.Results {
+		for _, m := range result.Misconfigurations {
+			if m.Status == "PASS" {
+				continue
+			}
+			ruleID := m.AVDID
+			if ruleID == "" {
+				ruleID = m.ID
+			}
+			resource := m.CauseMetadata.Resource
+			if resource == "" {
+				resource = result.Target
+			}
+			desc := m.Message
+			if desc == "" {
+				desc = m.Description
+			}
+			findings = append(findings, rules.Finding{
+				RuleID:   ruleID,
+				Severity: mapTfsecSeverity(m.Severity),
+				Resource: resource,
+				Message:  fmt.Sprintf("[trivy] %s: %s", ruleID, desc),
+				Source:   "external:trivy",
+			})
+		}
 	}
 
 	return findings, nil

@@ -233,7 +233,7 @@ Categoria vazia ou "unknown" → default para `security`.
 
 ## Resolução de Conflitos
 
-O Terraview pode receber findings de duas fontes simultâneas: **scanner** (Checkov, tfsec, etc.) e **IA** (análise contextual via LLM).
+O Terraview pode receber findings de duas fontes simultâneas: **scanner** (Checkov, Trivy, etc.) e **IA** (análise contextual via LLM).
 
 ### Estágio 1 — Normalizer (`normalizer.Deduplicate`)
 

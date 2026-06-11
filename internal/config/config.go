@@ -83,7 +83,7 @@ type HistoryConfig struct {
 
 // ScannerConfig holds scanner preferences.
 type ScannerConfig struct {
-	Default string `yaml:"default"` // default scanner name (checkov, tfsec, terrascan)
+	Default string `yaml:"default"` // default scanner name (checkov, trivy, terrascan)
 }
 
 // LLMConfig configures LLM behavior.

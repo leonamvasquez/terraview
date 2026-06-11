@@ -22,37 +22,40 @@ func testPlatform(os, arch string) platform.PlatformInfo {
 
 // --- URL mapping tests ---
 
-func TestTfsecInstaller_DownloadURL(t *testing.T) {
-	inst := &TfsecInstaller{}
+func TestTrivyInstaller_DownloadURL(t *testing.T) {
+	inst := &TrivyInstaller{}
 	version := inst.LatestVersion()
 	tests := []struct {
-		os, arch  string
-		contains  string
-		isArchive bool
+		os, arch string
+		contains string
+		empty    bool
 	}{
-		// Linux/Darwin: direct binary (no .tar.gz)
-		{"linux", "amd64", "tfsec-linux-amd64", false},
-		{"linux", "arm64", "tfsec-linux-arm64", false},
-		{"darwin", "amd64", "tfsec-darwin-amd64", false},
-		{"darwin", "arm64", "tfsec-darwin-arm64", false},
-		// Windows: tarball archive
-		{"windows", "amd64", "tfsec_" + version + "_windows_amd64.tar.gz", true},
-		{"windows", "arm64", "tfsec_" + version + "_windows_arm64.tar.gz", true},
+		// Linux/Darwin: tar.gz archives
+		{"linux", "amd64", "trivy_" + version + "_Linux-64bit.tar.gz", false},
+		{"linux", "arm64", "trivy_" + version + "_Linux-ARM64.tar.gz", false},
+		{"darwin", "amd64", "trivy_" + version + "_macOS-64bit.tar.gz", false},
+		{"darwin", "arm64", "trivy_" + version + "_macOS-ARM64.tar.gz", false},
+		// Windows ships only a .zip — no direct binary install
+		{"windows", "amd64", "", true},
+		{"windows", "arm64", "", true},
 	}
 	for _, tc := range tests {
 		p := testPlatform(tc.os, tc.arch)
 		url := inst.DownloadURL(p, version)
+		if tc.empty {
+			if url != "" {
+				t.Errorf("trivy URL for %s/%s should be empty (zip-only), got %q", tc.os, tc.arch, url)
+			}
+			continue
+		}
 		if !strings.Contains(url, tc.contains) {
-			t.Errorf("tfsec URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
+			t.Errorf("trivy URL for %s/%s = %q, want contains %q", tc.os, tc.arch, url, tc.contains)
 		}
 		if !strings.HasPrefix(url, "https://") {
 			t.Errorf("URL should start with https://, got %q", url)
 		}
-		if tc.isArchive && !strings.HasSuffix(url, ".tar.gz") {
-			t.Errorf("tfsec windows URL should end in .tar.gz, got %q", url)
-		}
-		if !tc.isArchive && strings.HasSuffix(url, ".tar.gz") {
-			t.Errorf("tfsec linux/darwin URL should NOT end in .tar.gz, got %q", url)
+		if !strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("trivy URL for %s/%s should end in .tar.gz, got %q", tc.os, tc.arch, url)
 		}
 	}
 }
@@ -219,7 +222,7 @@ func TestAllInstallers(t *testing.T) {
 	for _, inst := range all {
 		names[inst.Name()] = true
 	}
-	for _, expected := range []string{"checkov", "tfsec", "terrascan"} {
+	for _, expected := range []string{"checkov", "trivy", "terrascan"} {
 		if !names[expected] {
 			t.Errorf("missing installer for %q", expected)
 		}
@@ -227,12 +230,12 @@ func TestAllInstallers(t *testing.T) {
 }
 
 func TestInstallerFor(t *testing.T) {
-	inst := InstallerFor("tfsec")
+	inst := InstallerFor("trivy")
 	if inst == nil {
-		t.Fatal("expected tfsec installer, got nil")
+		t.Fatal("expected trivy installer, got nil")
 	}
-	if inst.Name() != "tfsec" {
-		t.Errorf("expected tfsec, got %q", inst.Name())
+	if inst.Name() != "trivy" {
+		t.Errorf("expected trivy, got %q", inst.Name())
 	}
 	if InstallerFor("unknown") != nil {
 		t.Error("unknown scanner should return nil")

@@ -148,6 +148,6 @@ history:
 # scanner — Default security scanner
 # ---------------------------------------------------------------------------
 scanner:
-  # Default scanner: checkov, tfsec, terrascan
+  # Default scanner: checkov, trivy, terrascan
   # Can be omitted — the first argument of 'scan' defines the scanner.
   # default: checkov

@@ -24,26 +24,26 @@ func allPlatforms() []platform.PlatformInfo {
 
 // --- URL mapping tests: every installer x every platform ---
 
-func TestCrossPlatform_TfsecURLsAllPlatforms(t *testing.T) {
-	inst := &TfsecInstaller{}
+func TestCrossPlatform_TrivyURLsAllPlatforms(t *testing.T) {
+	inst := &TrivyInstaller{}
 	for _, p := range allPlatforms() {
 		url := inst.DownloadURL(p, inst.LatestVersion())
-		if url == "" {
-			t.Errorf("tfsec: no URL for %s", p.String())
+		// Windows ships only a .zip — no direct binary install (choco/scoop instead)
+		if p.OS == "windows" {
+			if url != "" {
+				t.Errorf("trivy: expected empty URL for %s (zip-only), got %s", p.String(), url)
+			}
 			continue
 		}
-		if !strings.HasPrefix(url, "https://github.com/aquasecurity/tfsec/releases/download/") {
-			t.Errorf("tfsec URL for %s has wrong prefix: %s", p.String(), url)
+		if url == "" {
+			t.Errorf("trivy: no URL for %s", p.String())
+			continue
 		}
-		// Windows uses a tarball; linux/darwin use direct binaries
-		if p.OS == "windows" && !strings.HasSuffix(url, ".tar.gz") {
-			t.Errorf("tfsec URL for windows should end in .tar.gz: %s", url)
+		if !strings.HasPrefix(url, "https://github.com/aquasecurity/trivy/releases/download/") {
+			t.Errorf("trivy URL for %s has wrong prefix: %s", p.String(), url)
 		}
-		if p.OS != "windows" && strings.HasSuffix(url, ".tar.gz") {
-			t.Errorf("tfsec URL for %s should NOT end in .tar.gz: %s", p.String(), url)
-		}
-		if strings.HasSuffix(url, ".exe") {
-			t.Errorf("tfsec URL should never end in .exe (windows uses tarball): %s", url)
+		if !strings.HasSuffix(url, ".tar.gz") {
+			t.Errorf("trivy URL for %s should end in .tar.gz: %s", p.String(), url)
 		}
 	}
 }
@@ -83,13 +83,18 @@ func TestCrossPlatform_CheckovNoURLAnyPlatform(t *testing.T) {
 
 func TestCrossPlatform_NoUnmappedPlatforms(t *testing.T) {
 	// Only installers that actually ship binaries should be tested here.
+	// Trivy ships only a .zip for windows, so its direct install covers
+	// linux/darwin — windows is handled by package managers.
 	binaryInstallers := []BinaryInstaller{
-		&TfsecInstaller{},
+		&TrivyInstaller{},
 		&TerrascanInstaller{},
 	}
 
 	for _, inst := range binaryInstallers {
 		for _, p := range allPlatforms() {
+			if inst.Name() == "trivy" && p.OS == "windows" {
+				continue
+			}
 			url := inst.DownloadURL(p, inst.LatestVersion())
 			if url == "" {
 				t.Errorf("%s has no download URL for %s — this platform is unmapped",
@@ -119,7 +124,7 @@ func TestCrossPlatform_BinaryNames(t *testing.T) {
 			p.BinaryExt = ".exe"
 		}
 
-		for _, name := range []string{"tfsec", "terrascan"} {
+		for _, name := range []string{"trivy", "terrascan"} {
 			bn := p.BinaryName(name)
 			if tc.wantExt && !strings.HasSuffix(bn, ".exe") {
 				t.Errorf("%s/%s: binary name %q should end in .exe", tc.os, tc.arch, bn)
@@ -212,7 +217,7 @@ func TestCrossPlatform_FallbackMessages(t *testing.T) {
 
 func TestCrossPlatform_VersionStrings(t *testing.T) {
 	installers := []BinaryInstaller{
-		&TfsecInstaller{},
+		&TrivyInstaller{},
 		&TerrascanInstaller{},
 	}
 	for _, inst := range installers {
@@ -235,7 +240,7 @@ func TestCrossPlatform_VersionStrings(t *testing.T) {
 // --- InstallerFor lookup completeness ---
 
 func TestCrossPlatform_InstallerForAll(t *testing.T) {
-	names := []string{"checkov", "tfsec", "terrascan"}
+	names := []string{"checkov", "trivy", "terrascan"}
 	for _, name := range names {
 		inst := InstallerFor(name)
 		if inst == nil {
@@ -256,7 +261,7 @@ func TestCrossPlatform_ArchiveFlags(t *testing.T) {
 		archive bool
 		direct  bool
 	}{
-		{"tfsec", false, true},
+		{"trivy", true, true},
 		{"terrascan", true, true},
 		{"checkov", false, false},
 	}

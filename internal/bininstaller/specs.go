@@ -20,7 +20,7 @@ type ScannerSpec struct {
 	binaryInst BinaryInstaller
 
 	// pkgCmdsFn returns ordered list of package manager commands to try.
-	// Each []string is a full exec.Command: e.g. ["brew", "install", "tfsec"].
+	// Each []string is a full exec.Command: e.g. ["brew", "install", "trivy"].
 	// The first element is also used as the manager name shown in output.
 	pkgCmdsFn func(p platform.PlatformInfo) [][]string
 
@@ -34,7 +34,7 @@ type ScannerSpec struct {
 
 var allScannerSpecs = []*ScannerSpec{
 	checkovSpec(),
-	tfsecSpec(),
+	trivySpec(),
 	terrascanSpec(),
 }
 
@@ -176,24 +176,25 @@ func SmartInstall(spec *ScannerSpec, p platform.PlatformInfo, installDir string)
 // Scanner spec definitions
 // ─────────────────────────────────────────────────────────────
 
-// tfsecSpec — https://github.com/aquasecurity/tfsec
-// Binaries: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64
+// trivySpec — https://github.com/aquasecurity/trivy
+// Binaries: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 (tar.gz)
+// Windows ships only a .zip — package managers (choco/scoop) handle it.
 // Package managers: brew (macOS/Linux), choco/scoop (Windows)
-func tfsecSpec() *ScannerSpec {
+func trivySpec() *ScannerSpec {
 	return &ScannerSpec{
-		Name:       "tfsec",
-		Version:    "1.28.14",
-		binaryInst: &TfsecInstaller{},
+		Name:       "trivy",
+		Version:    "0.71.0",
+		binaryInst: &TrivyInstaller{},
 		pkgCmdsFn: func(p platform.PlatformInfo) [][]string {
 			switch p.OS {
 			case "darwin", "linux":
 				return [][]string{
-					{"brew", "install", "tfsec"},
+					{"brew", "install", "trivy"},
 				}
 			case "windows":
 				return [][]string{
-					{"choco", "install", "tfsec", "-y"},
-					{"scoop", "install", "tfsec"},
+					{"choco", "install", "trivy", "-y"},
+					{"scoop", "install", "trivy"},
 				}
 			}
 			return nil
@@ -201,13 +202,13 @@ func tfsecSpec() *ScannerSpec {
 		fallbackFn: func(p platform.PlatformInfo) string {
 			switch p.OS {
 			case "darwin":
-				return "brew install tfsec"
+				return "brew install trivy"
 			case "linux":
-				return "https://github.com/aquasecurity/tfsec/releases (or: terraview scanners install tfsec)"
+				return "https://github.com/aquasecurity/trivy/releases (or: terraview scanners install trivy)"
 			case "windows":
-				return "choco install tfsec  (or: scoop install tfsec)"
+				return "choco install trivy  (or: scoop install trivy)"
 			}
-			return "https://github.com/aquasecurity/tfsec/releases"
+			return "https://github.com/aquasecurity/trivy/releases"
 		},
 	}
 }

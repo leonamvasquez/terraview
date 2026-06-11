@@ -15,7 +15,7 @@ import (
 
 // BinaryInstaller installs a scanner binary for any supported platform.
 type BinaryInstaller interface {
-	// Name returns the scanner name (e.g., "tfsec").
+	// Name returns the scanner name (e.g., "trivy").
 	Name() string
 	// DownloadURL returns the release URL for the given platform and version.
 	// Returns empty string if the platform is not supported.
@@ -206,46 +206,55 @@ func extractFromTarGz(archivePath, targetName, destPath string) error {
 // Scanner-specific installers
 // ---------------------------------------------------------------------------
 
-// TfsecInstaller installs tfsec binary.
-// Ref: https://github.com/aquasecurity/tfsec
-// Archives available for all platforms: tfsec_{version}_{os}_{arch}.tar.gz
-// Direct binaries: tfsec-{os}-{arch} (linux/darwin only)
-type TfsecInstaller struct{}
+// TrivyInstaller installs the Trivy binary.
+// Ref: https://github.com/aquasecurity/trivy
+// Archives: trivy_{version}_{OS}-{arch}.tar.gz
+//
+//	OS: Linux, macOS  (windows ships only a .zip — not supported for direct install)
+//	arch: 64bit (amd64), ARM64 (arm64)
+type TrivyInstaller struct{}
 
-func (t *TfsecInstaller) Name() string               { return "tfsec" }
-func (t *TfsecInstaller) LatestVersion() string      { return "1.28.14" }
-func (t *TfsecInstaller) IsArchive() bool            { return false } // auto-detected from URL below
-func (t *TfsecInstaller) SupportsDirectBinary() bool { return true }
-func (t *TfsecInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
-	return p.BinaryName("tfsec")
+func (t *TrivyInstaller) Name() string               { return "trivy" }
+func (t *TrivyInstaller) LatestVersion() string      { return "0.71.0" }
+func (t *TrivyInstaller) IsArchive() bool            { return true }
+func (t *TrivyInstaller) SupportsDirectBinary() bool { return true }
+func (t *TrivyInstaller) ArchiveBinaryName(p platform.PlatformInfo) string {
+	return p.BinaryName("trivy")
 }
-func (t *TfsecInstaller) FallbackCommand(p platform.PlatformInfo) string {
+func (t *TrivyInstaller) FallbackCommand(p platform.PlatformInfo) string {
 	switch p.OS {
 	case "darwin":
-		return "brew install tfsec"
+		return "brew install trivy"
 	case "linux":
-		return fmt.Sprintf("curl -Lo tfsec https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec-linux-%s && chmod +x tfsec && sudo mv tfsec /usr/local/bin/", t.LatestVersion(), p.Arch)
+		return fmt.Sprintf("curl -L https://github.com/aquasecurity/trivy/releases/download/v%s/trivy_%s_Linux-64bit.tar.gz | tar xz trivy && sudo mv trivy /usr/local/bin/", t.LatestVersion(), t.LatestVersion())
 	case "windows":
-		return "choco install tfsec  (or: scoop install tfsec)"
+		return "choco install trivy  (or: scoop install trivy)"
 	}
-	return "https://github.com/aquasecurity/tfsec/releases"
+	return "https://github.com/aquasecurity/trivy/releases"
 }
 
-func (t *TfsecInstaller) DownloadURL(p platform.PlatformInfo, version string) string {
-	// Linux/Darwin: direct binary (no extraction needed)
-	//   https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64
-	// Windows: tarball (no .exe standalone binary on releases page)
-	//   https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec_1.28.14_windows_amd64.tar.gz
-	switch p.OS {
-	case "linux", "darwin":
-		return fmt.Sprintf("https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec-%s-%s",
-			version, p.OS, p.Arch)
-	case "windows":
-		// Windows archives exist for amd64 and arm64
-		return fmt.Sprintf("https://github.com/aquasecurity/tfsec/releases/download/v%s/tfsec_%s_%s_%s.tar.gz",
-			version, version, p.OS, p.Arch)
+func (t *TrivyInstaller) DownloadURL(p platform.PlatformInfo, version string) string {
+	// trivy naming: trivy_0.71.0_Linux-64bit.tar.gz
+	//               trivy_0.71.0_Linux-ARM64.tar.gz
+	//               trivy_0.71.0_macOS-ARM64.tar.gz
+	// Windows ships only a .zip, which the archive extractor does not support —
+	// Windows falls back to package managers (choco/scoop).
+	osName := map[string]string{
+		"darwin": "macOS",
+		"linux":  "Linux",
+	}[p.OS]
+	if osName == "" {
+		return ""
 	}
-	return ""
+	archName := map[string]string{
+		"amd64": "64bit",
+		"arm64": "ARM64",
+	}[p.Arch]
+	if archName == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://github.com/aquasecurity/trivy/releases/download/v%s/trivy_%s_%s-%s.tar.gz",
+		version, version, osName, archName)
 }
 
 // TerrascanInstaller installs Terrascan binary.
@@ -337,7 +346,7 @@ func (c *CheckovInstaller) FallbackCommand(p platform.PlatformInfo) string {
 func AllInstallers() []BinaryInstaller {
 	return []BinaryInstaller{
 		&CheckovInstaller{},
-		&TfsecInstaller{},
+		&TrivyInstaller{},
 		&TerrascanInstaller{},
 	}
 }

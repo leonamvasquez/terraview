@@ -11,7 +11,7 @@
 
 ---
 
-O TerraView escaneia infraestrutura cloud provisionada com Terraform, detecta misconfigurações de segurança e compliance utilizando scanners open-source (Checkov, tfsec, Terrascan), e enriquece automaticamente os resultados com análise contextual por IA multi-provider quando um provider está configurado.
+O TerraView escaneia infraestrutura cloud provisionada com Terraform, detecta misconfigurações de segurança e compliance utilizando scanners open-source (Checkov, Trivy, Terrascan), e enriquece automaticamente os resultados com análise contextual por IA multi-provider quando um provider está configurado.
 
 ## Início Rápido
 
@@ -26,7 +26,7 @@ terraview scan checkov
 
 ## Features Principais
 
-- **Scanners de segurança** — Checkov, tfsec e Terrascan integrados automaticamente
+- **Scanners de segurança** — Checkov, Trivy e Terrascan integrados automaticamente
 - **IA contextual em paralelo** — Ollama, Gemini, Claude, OpenAI, DeepSeek, OpenRouter, Gemini CLI, Claude Code + qualquer API OpenAI-compatible via Custom
 - **AI Fix com classificador de advisories** — `fix plan`/`fix apply` geram HCL corrigido e separam fixes seguros de fixes que exigem revisão manual via 5 sinais (catálogo, arquitetura, grafo, histórico de falhas, auto-avaliação da IA)
 - **Scorecard unificado** — scores de Segurança, Compliance, Manutenibilidade e Overall (0–10)

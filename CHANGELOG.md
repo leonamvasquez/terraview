@@ -9,6 +9,15 @@ with [SemVer](https://semver.org/) versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- **tfsec substituído por Trivy como scanner integrado** — o tfsec foi descontinuado pela Aqua Security e absorvido pelo Trivy. O adapter `tfsec` (`internal/scanner/tfsec.go`) deu lugar ao `TrivyScanner` (`internal/scanner/trivy.go`), que executa `trivy config --format json`. `ValidScanners` agora é `checkov, trivy, terrascan, builtin`; prioridade de auto-seleção: `checkov(1) > trivy(2) > terrascan(3)`. Instalador binário baixa `trivy v0.71.0` (tar.gz Linux/macOS; Windows via choco/scoop, pois o release é .zip). Findings com `Source: "scanner:trivy"` e rule IDs `AVD-*`
+- **Importer detecta Trivy JSON nativamente** — `scan --findings` agora reconhece o formato `{"Results": [...Misconfigurations]}` do Trivy (`Source: "external:trivy"`); o formato legado do tfsec continua aceito para importação
+
+### Removed
+
+- **Adapter tfsec** — `TfsecScanner`, `parseTfsecOutput` e fixtures `testdata/tfsec/` removidos. Quem tiver `scanner.default: tfsec` no `.terraview.yaml` deve trocar para `trivy`
+
 ## [0.10.0] — 2026-05-04
 
 Classificador multi-sinal de advisories (5 sinais incluindo auto-avaliação da IA), performance do `contextanalysis`, hardening de operações críticas e flag `--debug` para troubleshooting.

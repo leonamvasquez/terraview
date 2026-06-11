@@ -50,7 +50,7 @@ no duplication, no drift. If you need to change scan behavior, change it in
 | `internal/pipeline` | Reusable scan pipeline (parse → scan ‖ AI → merge → score → record) |
 | `internal/parser` | Terraform plan JSON → `NormalizedResource[]` + `TerraformPlan` |
 | `internal/topology` | Dependency graph from resource references |
-| `internal/scanner` | Subprocess adapters: Checkov, tfsec, Terrascan |
+| `internal/scanner` | Subprocess adapters: Checkov, Trivy, Terrascan |
 | `internal/contextanalysis` | AI-based findings via `ai.Provider.Analyze` |
 | `internal/ai` | `Provider` interface + factory (`NewProvider`) |
 | `internal/ai/providers` | Concrete providers: Anthropic, OpenAI, Gemini, Gemini-CLI, Ollama |
@@ -104,11 +104,11 @@ scanner + AI execution, merge, score, and history recording.
 ## ADR-002 — External scanners instead of built-in rules
 
 **Context.** TerraView could bundle its own security rules (a la Checkov
-in pure Python or tfsec in Go). This would remove the installation
+in pure Python or Trivy in Go). This would remove the installation
 requirement.
 
 **Decision.** Delegate static analysis to established scanners (Checkov,
-tfsec, Terrascan) via subprocess. TerraView provides the orchestration,
+Trivy, Terrascan) via subprocess. TerraView provides the orchestration,
 deduplication, scoring, and AI enrichment layer.
 
 **Trade-offs.**

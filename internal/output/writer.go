@@ -690,7 +690,7 @@ func sourceLabel(source string) string {
 	switch {
 	case strings.HasPrefix(source, "scanner:"):
 		name := strings.TrimPrefix(source, "scanner:")
-		// Handle merged sources like "scanner:checkov+tfsec"
+		// Handle merged sources like "scanner:checkov+trivy"
 		return strings.ToUpper(name)
 	case source == "llm" || source == "ai":
 		return "AI"

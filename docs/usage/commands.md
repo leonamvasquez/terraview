@@ -53,7 +53,7 @@ Por padrão, o terraview roda **ambos** o scanner de segurança e a análise con
 ```bash
 terraview scan                              # auto-selecionar scanner padrão
 terraview scan checkov                      # scan com Checkov (+ IA se provider configurado)
-terraview scan tfsec                        # scan com tfsec
+terraview scan trivy                        # scan com trivy
 terraview scan terrascan                    # scan com Terrascan
 terraview scan checkov --static             # apenas scanner, desabilitar IA
 terraview scan checkov --plan plan.json     # usar plan JSON existente
@@ -204,7 +204,7 @@ O comando `provider list` executa um **teste de integração automático**. Se o
 ```bash
 terraview scanners list                     # listar scanners com status de instalação
 terraview scanners install checkov          # instalar scanner específico
-terraview scanners install tfsec terrascan  # instalar múltiplos scanners
+terraview scanners install trivy terrascan  # instalar múltiplos scanners
 terraview scanners install --all            # instalar todos os scanners faltantes
 terraview scanners install --all --force    # forçar reinstalação de todos
 terraview scanners default checkov          # definir scanner padrão

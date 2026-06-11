@@ -6,7 +6,7 @@
 |---------|-----------|------------|
 | **builtin** | Scanner em Go puro embutido no terraview — 43 regras CKV_AWS, sem dependências externas | já incluído no binário |
 | [Checkov](https://www.checkov.io/) | Scanner de segurança e compliance para IaC | `terraview scanners install checkov` |
-| [tfsec](https://aquasecurity.github.io/tfsec/) | Análise estática de segurança para Terraform | `terraview scanners install tfsec` |
+| [Trivy](https://trivy.dev/) | Análise estática de segurança para Terraform | `terraview scanners install trivy` |
 | [Terrascan](https://runterrascan.io/) | Detector de violations e compliance | `terraview scanners install terrascan` |
 
 Os findings de todos os scanners são normalizados, deduplicados e exibidos em um scorecard unificado.
@@ -29,7 +29,7 @@ Quando nenhum scanner externo é detectado no `PATH`, o terraview usa o `builtin
 ```bash
 terraview scanners list                     # listar scanners com status de instalação
 terraview scanners install checkov          # instalar scanner específico
-terraview scanners install tfsec terrascan  # instalar múltiplos scanners
+terraview scanners install trivy terrascan  # instalar múltiplos scanners
 terraview scanners install --all            # instalar todos os scanners faltantes
 terraview scanners install --all --force    # forçar reinstalação de todos
 terraview scanners default checkov          # definir scanner padrão
@@ -50,7 +50,7 @@ O terraview detecta automaticamente quais scanners estão instalados e roda o sc
 O comando `terraview scanners install` suporta Linux, macOS e Windows:
 
 - **Checkov** — instalado via `pip3` (requer Python 3)
-- **tfsec** — binário estático baixado do GitHub Releases
+- **Trivy** — binário estático baixado do GitHub Releases (tar.gz; Windows via choco/scoop)
 - **Terrascan** — binário estático baixado do GitHub Releases
 
 ```bash

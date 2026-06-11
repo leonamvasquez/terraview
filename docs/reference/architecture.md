@@ -54,7 +54,7 @@
           │   Scanner      │               │   │  AI Context     │
           │  ┌───────────┐ │               │   │  Analysis       │
           │  │ Checkov   │ │               │   └────────┬────────┘
-          │  │ tfsec     │ │               │            │
+          │  │ Trivy     │ │               │            │
           │  │ Terrascan │ │               │            ▼
           │  └───────────┘ │               │  ┌─────────────────┐
           └────────┬───────┘               │  │    Validator    │
@@ -118,7 +118,7 @@
 
 ### Scanner (paralelo)
 
-- Executa o scanner selecionado (Checkov, tfsec, Terrascan) como subprocesso
+- Executa o scanner selecionado (Checkov, Trivy, Terrascan) como subprocesso
 - Parseia a saída nativa e normaliza em `[]Finding`
 - Degradação graciosa: se o scanner falhar, prossegue apenas com IA (confiança reduzida)
 

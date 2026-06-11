@@ -248,77 +248,57 @@ func TestCheckovScanner_Scan_NoContextError(t *testing.T) {
 	}
 }
 
-// ─── TfsecScanner.Version() ──────────────────────────────────────────────────
+// ─── TrivyScanner.Version() ──────────────────────────────────────────────────
 
-func TestTfsecScanner_Version_NoToolAvailable(t *testing.T) {
-	// Ensure neither tfsec nor trivy is resolvable.
+func TestTrivyScanner_Version_NoToolAvailable(t *testing.T) {
+	// Ensure trivy is not resolvable.
 	t.Setenv("PATH", t.TempDir())
 
-	s := &TfsecScanner{}
+	s := &TrivyScanner{}
 	v := s.Version()
 	if v != "" {
-		t.Errorf("expected empty version when tfsec/trivy not available, got %q", v)
+		t.Errorf("expected empty version when trivy not available, got %q", v)
 	}
 }
 
-func TestTfsecScanner_Version_FakeTfsec(t *testing.T) {
+func TestTrivyScanner_Version_FakeTrivy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipped on Windows")
 	}
 	dir := t.TempDir()
-	makeFakeBin(t, dir, "tfsec", "v1.28.11", 0)
+	makeFakeBin(t, dir, "trivy", "Version: 0.71.0", 0)
 	t.Setenv("PATH", prependToPath(dir))
 
-	s := &TfsecScanner{}
+	s := &TrivyScanner{}
 	v := s.Version()
 	if v == "" {
-		t.Error("expected non-empty version")
+		t.Error("expected non-empty version from trivy fake binary")
 	}
 }
 
-func TestTfsecScanner_Version_FakeTrivy(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipped on Windows")
-	}
-	dir := t.TempDir()
-	// Place both a fake tfsec AND a fake trivy so that regardless of whether
-	// tfsec is found first via binaryInBinDir, Version() still returns something.
-	makeFakeBin(t, dir, "tfsec", "v1.28.11", 0)
-	makeFakeBin(t, dir, "trivy", "Version: 0.55.0", 0)
-	t.Setenv("PATH", prependToPath(dir))
+// ─── TrivyScanner.Scan() ─────────────────────────────────────────────────────
 
-	s := &TfsecScanner{}
-	v := s.Version()
-	if v == "" {
-		t.Error("expected non-empty version from tfsec/trivy fake binary")
-	}
-}
-
-// ─── TfsecScanner.Scan() ─────────────────────────────────────────────────────
-
-func TestTfsecScanner_Scan_NoSourceDir(t *testing.T) {
-	s := &TfsecScanner{}
+func TestTrivyScanner_Scan_NoSourceDir(t *testing.T) {
+	s := &TrivyScanner{}
 	_, err := s.Scan(ScanContext{})
 	if err == nil {
 		t.Error("expected error when no source dir provided")
 	}
 }
 
-func TestTfsecScanner_Scan_WorkDirFallback(t *testing.T) {
+func TestTrivyScanner_Scan_WorkDirFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipped on Windows")
 	}
 	dir := t.TempDir()
-	// Fake tfsec that writes valid JSON to the output file.
-	// runTfsec uses --out <tmpfile>, so the script needs to write to the file.
-	// The simplest fake just exits 0 with no output (empty file → nil findings).
-	binPath := filepath.Join(dir, "tfsec")
+	// Fake trivy that exits 0 with no output (empty file → nil findings).
+	binPath := filepath.Join(dir, "trivy")
 	script := "#!/bin/sh\nexit 0\n"
 	os.WriteFile(binPath, []byte(script), 0o755)
 
 	t.Setenv("PATH", prependToPath(dir))
 
-	s := &TfsecScanner{}
+	s := &TrivyScanner{}
 	findings, err := s.Scan(ScanContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -326,48 +306,22 @@ func TestTfsecScanner_Scan_WorkDirFallback(t *testing.T) {
 	_ = findings
 }
 
-func TestTfsecScanner_Scan_FakeTfsecWithFindings(t *testing.T) {
+func TestTrivyScanner_Scan_FakeTrivyWithFindings(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipped on Windows")
 	}
 	dir := t.TempDir()
 
-	tfsecJSON := `{"results":[{"rule_id":"AWS006","rule_description":"S3 bucket not encrypted","description":"Encryption disabled","severity":"CRITICAL","resource":"aws_s3_bucket.data","resolution":"Enable encryption","location":{"filename":"/main.tf","start_line":1,"end_line":5}}]}`
-
-	// runTfsec writes to a temp file via --out flag. We need a script that
-	// writes the JSON to the file path passed as the last argument.
-	binPath := filepath.Join(dir, "tfsec")
-	script := `#!/bin/sh
-for arg; do OUT="$arg"; done
-cat > "$OUT" << 'ENDJSON'
-` + tfsecJSON + `
-ENDJSON
-exit 1
-`
-	os.WriteFile(binPath, []byte(script), 0o755)
-	t.Setenv("PATH", prependToPath(dir))
-
-	s := &TfsecScanner{}
-	findings, err := s.Scan(ScanContext{SourceDir: dir})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(findings) == 0 {
-		t.Log("note: fake tfsec script may not write to --out target correctly in all environments")
-	}
-}
-
-func TestTfsecScanner_Scan_FakeTrivy(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipped on Windows")
-	}
-	dir := t.TempDir()
-	// Only trivy available, no tfsec — exercises runTrivy path.
 	trivyJSON := `{"Results":[{"Target":"main.tf","Misconfigurations":[{"ID":"AVD-AWS-0086","AVDID":"AVD-AWS-0086","Title":"S3 encryption","Description":"No encryption","Message":"Bucket not encrypted","Resolution":"Enable SSE","Severity":"CRITICAL","Status":"FAIL"}]}]}`
 
+	// Scan writes to a temp file via --output flag. We need a script that
+	// writes the JSON to the file path passed after --output.
 	binPath := filepath.Join(dir, "trivy")
 	script := `#!/bin/sh
-for arg; do OUT="$arg"; done
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--output" ]; then OUT="$2"; shift; fi
+  shift
+done
 cat > "$OUT" << 'ENDJSON'
 ` + trivyJSON + `
 ENDJSON
@@ -376,12 +330,14 @@ exit 0
 	os.WriteFile(binPath, []byte(script), 0o755)
 	t.Setenv("PATH", prependToPath(dir))
 
-	s := &TfsecScanner{}
+	s := &TrivyScanner{}
 	findings, err := s.Scan(ScanContext{SourceDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_ = findings
+	if len(findings) != 1 {
+		t.Errorf("expected 1 finding from fake trivy output, got %d", len(findings))
+	}
 }
 
 // ─── TerrascanScanner.Version() and Scan() ───────────────────────────────────
@@ -475,7 +431,7 @@ func TestInstallMissing_AllAvailable(t *testing.T) {
 	dir := t.TempDir()
 
 	// Register fake binaries for all standard scanners so Available() returns true.
-	for _, name := range []string{"checkov", "tfsec", "terrascan"} {
+	for _, name := range []string{"checkov", "trivy", "terrascan"} {
 		makeFakeBin(t, dir, name, "1.0.0", 0)
 	}
 	t.Setenv("PATH", prependToPath(dir))
@@ -483,7 +439,7 @@ func TestInstallMissing_AllAvailable(t *testing.T) {
 	mgr := NewManager()
 	// Register real adapters with fake binaries in PATH.
 	mgr.Register(&CheckovScanner{})
-	mgr.Register(&TfsecScanner{})
+	mgr.Register(&TrivyScanner{})
 	mgr.Register(&TerrascanScanner{})
 
 	// force=false + all available → nothing to install.

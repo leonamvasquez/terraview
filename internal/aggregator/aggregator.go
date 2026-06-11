@@ -32,7 +32,7 @@ type ComponentStatus struct {
 	Status     string `json:"status"`                // "success", "failed", "skipped"
 	Error      string `json:"error,omitempty"`       // error message (if failed)
 	DurationMs int64  `json:"duration_ms,omitempty"` // duration in milliseconds
-	Tool       string `json:"tool,omitempty"`        // tool name (checkov, tfsec, etc.)
+	Tool       string `json:"tool,omitempty"`        // tool name (checkov, trivy, etc.)
 	Version    string `json:"version,omitempty"`     // tool version
 	Provider   string `json:"provider,omitempty"`    // AI provider (gemini, claude, etc.)
 	Model      string `json:"model,omitempty"`       // AI model

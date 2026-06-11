@@ -11,22 +11,22 @@ import (
 func TestCache_SetAndGet(t *testing.T) {
 	c := &Cache{Scanners: make(map[string]CacheEntry)}
 	result := InstallResult{
-		Scanner:   "tfsec",
+		Scanner:   "trivy",
 		Version:   "1.28.11",
-		Path:      "/tmp/test/tfsec",
+		Path:      "/tmp/test/trivy",
 		Installed: true,
 	}
 	c.Set(result)
 
-	entry, ok := c.Get("tfsec")
+	entry, ok := c.Get("trivy")
 	if !ok {
-		t.Fatal("expected tfsec in cache")
+		t.Fatal("expected trivy in cache")
 	}
 	if entry.Version != "1.28.11" {
 		t.Errorf("version = %q, want 1.28.11", entry.Version)
 	}
-	if entry.Path != "/tmp/test/tfsec" {
-		t.Errorf("path = %q, want /tmp/test/tfsec", entry.Path)
+	if entry.Path != "/tmp/test/trivy" {
+		t.Errorf("path = %q, want /tmp/test/trivy", entry.Path)
 	}
 }
 
@@ -57,13 +57,13 @@ func TestCache_IsInstalled(t *testing.T) {
 
 func TestCache_NeedsUpdate(t *testing.T) {
 	c := &Cache{Scanners: map[string]CacheEntry{
-		"tfsec": {Version: "1.28.10"},
+		"trivy": {Version: "1.28.10"},
 	}}
 
-	if !c.NeedsUpdate("tfsec", "1.28.11") {
+	if !c.NeedsUpdate("trivy", "1.28.11") {
 		t.Error("should need update when version differs")
 	}
-	if c.NeedsUpdate("tfsec", "1.28.10") {
+	if c.NeedsUpdate("trivy", "1.28.10") {
 		t.Error("should NOT need update when version matches")
 	}
 	if !c.NeedsUpdate("unknown", "1.0") {
@@ -73,11 +73,11 @@ func TestCache_NeedsUpdate(t *testing.T) {
 
 func TestCache_Remove(t *testing.T) {
 	c := &Cache{Scanners: map[string]CacheEntry{
-		"tfsec": {Version: "1.0"},
+		"trivy": {Version: "1.0"},
 	}}
-	c.Remove("tfsec")
-	if _, ok := c.Get("tfsec"); ok {
-		t.Error("tfsec should be removed from cache")
+	c.Remove("trivy")
+	if _, ok := c.Get("trivy"); ok {
+		t.Error("trivy should be removed from cache")
 	}
 }
 
@@ -101,9 +101,9 @@ func TestCache_SaveAndLoad(t *testing.T) {
 	// Create a cache and set entries
 	c := &Cache{Scanners: make(map[string]CacheEntry)}
 	c.Set(InstallResult{
-		Scanner:   "tfsec",
+		Scanner:   "trivy",
 		Version:   "1.28.11",
-		Path:      filepath.Join(tmp, "tfsec"),
+		Path:      filepath.Join(tmp, "trivy"),
 		Installed: true,
 	})
 
@@ -120,9 +120,9 @@ func TestCache_SaveAndLoad(t *testing.T) {
 	c2 := &Cache{Scanners: make(map[string]CacheEntry)}
 	json.Unmarshal(readData, c2)
 
-	entry, ok := c2.Get("tfsec")
+	entry, ok := c2.Get("trivy")
 	if !ok {
-		t.Fatal("expected tfsec in loaded cache")
+		t.Fatal("expected trivy in loaded cache")
 	}
 	if entry.Version != "1.28.11" {
 		t.Errorf("loaded version = %q, want 1.28.11", entry.Version)

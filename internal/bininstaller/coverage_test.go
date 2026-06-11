@@ -45,10 +45,10 @@ func createTestTarGz(t *testing.T, dir string, files map[string]string) string {
 func TestExtractFromTarGz_Found(t *testing.T) {
 	dir := t.TempDir()
 	archive := createTestTarGz(t, dir, map[string]string{
-		"tfsec": "binary-content",
+		"trivy": "binary-content",
 	})
 	dest := filepath.Join(dir, "output")
-	err := extractFromTarGz(archive, "tfsec", dest)
+	err := extractFromTarGz(archive, "trivy", dest)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,10 +64,10 @@ func TestExtractFromTarGz_Found(t *testing.T) {
 func TestExtractFromTarGz_NestedPath(t *testing.T) {
 	dir := t.TempDir()
 	archive := createTestTarGz(t, dir, map[string]string{
-		"dist/bin/tfsec": "nested-binary",
+		"dist/bin/trivy": "nested-binary",
 	})
 	dest := filepath.Join(dir, "output")
-	err := extractFromTarGz(archive, "tfsec", dest)
+	err := extractFromTarGz(archive, "trivy", dest)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestExtractFromTarGz_NotFound(t *testing.T) {
 		"other-binary": "content",
 	})
 	dest := filepath.Join(dir, "output")
-	err := extractFromTarGz(archive, "tfsec", dest)
+	err := extractFromTarGz(archive, "trivy", dest)
 	if err == nil {
 		t.Error("expected error for missing binary")
 	}
@@ -93,14 +93,14 @@ func TestExtractFromTarGz_InvalidArchive(t *testing.T) {
 	dir := t.TempDir()
 	bad := filepath.Join(dir, "bad.tar.gz")
 	os.WriteFile(bad, []byte("not a tarball"), 0644)
-	err := extractFromTarGz(bad, "tfsec", filepath.Join(dir, "out"))
+	err := extractFromTarGz(bad, "trivy", filepath.Join(dir, "out"))
 	if err == nil {
 		t.Error("expected error for invalid archive")
 	}
 }
 
 func TestExtractFromTarGz_MissingArchive(t *testing.T) {
-	err := extractFromTarGz("/nonexistent.tar.gz", "tfsec", "/tmp/out")
+	err := extractFromTarGz("/nonexistent.tar.gz", "trivy", "/tmp/out")
 	if err == nil {
 		t.Error("expected error for missing archive")
 	}
@@ -110,16 +110,16 @@ func TestExtractFromTarGz_MissingArchive(t *testing.T) {
 // ArchiveBinaryName for each installer
 // ---------------------------------------------------------------------------
 
-func TestTfsecInstaller_ArchiveBinaryName(t *testing.T) {
-	inst := &TfsecInstaller{}
+func TestTrivyInstaller_ArchiveBinaryName(t *testing.T) {
+	inst := &TrivyInstaller{}
 	p := platform.PlatformInfo{OS: "linux", Arch: "amd64"}
 	got := inst.ArchiveBinaryName(p)
-	if got != "tfsec" {
+	if got != "trivy" {
 		t.Errorf("got %q", got)
 	}
 	pWin := platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"}
 	got = inst.ArchiveBinaryName(pWin)
-	if got != "tfsec.exe" {
+	if got != "trivy.exe" {
 		t.Errorf("got %q for windows", got)
 	}
 }
@@ -148,14 +148,14 @@ func TestCheckovInstaller_ArchiveBinaryName(t *testing.T) {
 
 func TestCache_Save_NewDir(t *testing.T) {
 	c := &Cache{Scanners: map[string]CacheEntry{
-		"tfsec": {Version: "1.28.14", Path: "/usr/local/bin/tfsec"},
+		"trivy": {Version: "0.71.0", Path: "/usr/local/bin/trivy"},
 	}}
 
 	// Patch cachePath by manually saving
 	// Since cachePath() is hardcoded, test Save+Load round-trip via LoadCache
 	// Just verify the Cache struct methods work correctly
-	if _, ok := c.Get("tfsec"); !ok {
-		t.Error("expected tfsec in cache")
+	if _, ok := c.Get("trivy"); !ok {
+		t.Error("expected trivy in cache")
 	}
 }
 

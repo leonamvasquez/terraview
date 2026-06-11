@@ -27,7 +27,7 @@ func TestAllSpecs_NoDuplicateNames(t *testing.T) {
 }
 
 func TestSpecFor_KnownScanners(t *testing.T) {
-	for _, name := range []string{"checkov", "tfsec", "terrascan"} {
+	for _, name := range []string{"checkov", "trivy", "terrascan"} {
 		spec := SpecFor(name)
 		if spec == nil {
 			t.Errorf("SpecFor(%q) returned nil", name)
@@ -52,8 +52,8 @@ func TestSpecFor_Unknown(t *testing.T) {
 }
 
 func TestSpecFor_CaseInsensitive(t *testing.T) {
-	if SpecFor("TFSEC") == nil {
-		t.Error("SpecFor should be case-insensitive (TFSEC)")
+	if SpecFor("TRIVY") == nil {
+		t.Error("SpecFor should be case-insensitive (TRIVY)")
 	}
 	if SpecFor("Checkov") == nil {
 		t.Error("SpecFor should be case-insensitive (Checkov)")
@@ -113,12 +113,12 @@ func TestTerrascanSpec_Deprecated(t *testing.T) {
 	}
 }
 
-func TestTfsecSpec_NotDeprecated(t *testing.T) {
-	spec := SpecFor("tfsec")
+func TestTrivySpec_NotDeprecated(t *testing.T) {
+	spec := SpecFor("trivy")
 	if spec == nil {
-		t.Fatal("tfsec spec not found")
+		t.Fatal("trivy spec not found")
 	}
-	// tfsec is still maintained; may or may not be deprecated depending on version policy
+	// trivy is still maintained; may or may not be deprecated depending on version policy
 	// Just verify the field is accessible
 	_ = spec.Deprecated
 }
@@ -172,8 +172,8 @@ func TestSmartInstall_WindowsArm64Terrascan(t *testing.T) {
 // pkgCmdsFn — platform-specific branches
 // ---------------------------------------------------------------------------
 
-func TestTfsecSpec_PkgCmds_Darwin(t *testing.T) {
-	spec := tfsecSpec()
+func TestTrivySpec_PkgCmds_Darwin(t *testing.T) {
+	spec := trivySpec()
 	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "darwin", Arch: "arm64"})
 	if len(cmds) == 0 {
 		t.Fatal("expected pkg commands for darwin")
@@ -183,8 +183,8 @@ func TestTfsecSpec_PkgCmds_Darwin(t *testing.T) {
 	}
 }
 
-func TestTfsecSpec_PkgCmds_Windows(t *testing.T) {
-	spec := tfsecSpec()
+func TestTrivySpec_PkgCmds_Windows(t *testing.T) {
+	spec := trivySpec()
 	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
 	if len(cmds) == 0 {
 		t.Fatal("expected pkg commands for windows")
@@ -194,8 +194,8 @@ func TestTfsecSpec_PkgCmds_Windows(t *testing.T) {
 	}
 }
 
-func TestTfsecSpec_PkgCmds_UnknownOS(t *testing.T) {
-	spec := tfsecSpec()
+func TestTrivySpec_PkgCmds_UnknownOS(t *testing.T) {
+	spec := trivySpec()
 	cmds := spec.pkgCmdsFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
 	if cmds != nil {
 		t.Errorf("expected nil commands for freebsd, got %v", cmds)
@@ -257,16 +257,16 @@ func TestTerrascanSpec_PkgCmds_Linux(t *testing.T) {
 // fallbackFn — platform-specific branches
 // ---------------------------------------------------------------------------
 
-func TestTfsecSpec_Fallback_Windows(t *testing.T) {
-	spec := tfsecSpec()
+func TestTrivySpec_Fallback_Windows(t *testing.T) {
+	spec := trivySpec()
 	fb := spec.fallbackFn(platform.PlatformInfo{OS: "windows", Arch: "amd64", BinaryExt: ".exe"})
 	if !strings.Contains(fb, "choco") {
 		t.Errorf("expected choco in windows fallback, got %q", fb)
 	}
 }
 
-func TestTfsecSpec_Fallback_UnknownOS(t *testing.T) {
-	spec := tfsecSpec()
+func TestTrivySpec_Fallback_UnknownOS(t *testing.T) {
+	spec := trivySpec()
 	fb := spec.fallbackFn(platform.PlatformInfo{OS: "freebsd", Arch: "amd64"})
 	if !strings.Contains(fb, "github.com") {
 		t.Errorf("expected github link, got %q", fb)

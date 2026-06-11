@@ -248,111 +248,6 @@ func TestFixture_Checkov_GuidelineAsRemediation(t *testing.T) {
 }
 
 // ===========================================================================
-// tfsec — integration tests with fixtures
-// ===========================================================================
-
-func TestFixture_Tfsec_Passing(t *testing.T) {
-	data := readFixture(t, "tfsec/tfsec_passing.json")
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings for clean scan, got %d", len(findings))
-	}
-}
-
-func TestFixture_Tfsec_Mixed(t *testing.T) {
-	data := readFixture(t, "tfsec/tfsec_mixed.json")
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(findings) != 14 {
-		t.Fatalf("expected 14 findings, got %d", len(findings))
-	}
-
-	// Severity distribution
-	counts := countBySeverity(findings)
-	if counts[rules.SeverityCritical] != 3 {
-		t.Errorf("CRITICAL: expected 3, got %d", counts[rules.SeverityCritical])
-	}
-	if counts[rules.SeverityHigh] != 5 {
-		t.Errorf("HIGH: expected 5, got %d", counts[rules.SeverityHigh])
-	}
-	if counts[rules.SeverityMedium] != 4 {
-		t.Errorf("MEDIUM: expected 4, got %d", counts[rules.SeverityMedium])
-	}
-	if counts[rules.SeverityLow] != 2 {
-		t.Errorf("LOW: expected 2, got %d", counts[rules.SeverityLow])
-	}
-
-	// Spot check
-	f := findByRuleID(findings, "aws-s3-enable-bucket-encryption")
-	if f == nil {
-		t.Fatal("aws-s3-enable-bucket-encryption not found")
-	}
-	if f.Severity != rules.SeverityCritical {
-		t.Errorf("expected CRITICAL, got %s", f.Severity)
-	}
-	if f.Resource != "aws_s3_bucket.data" {
-		t.Errorf("expected resource aws_s3_bucket.data, got %s", f.Resource)
-	}
-	if f.Source != "scanner:tfsec" {
-		t.Errorf("expected source scanner:tfsec, got %s", f.Source)
-	}
-
-	// Remediation preenchida
-	if f.Remediation == "" {
-		t.Error("aws-s3-enable-bucket-encryption: remediation vazio")
-	}
-
-	// All required fields
-	assertRequiredFields(t, findings, "tfsec")
-	assertValidSeverity(t, findings)
-	assertValidCategory(t, findings)
-}
-
-func TestFixture_Tfsec_AllCritical(t *testing.T) {
-	data := readFixture(t, "tfsec/tfsec_all_critical.json")
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(findings) != 3 {
-		t.Fatalf("expected 3 findings, got %d", len(findings))
-	}
-
-	for _, f := range findings {
-		if f.Severity != rules.SeverityCritical {
-			t.Errorf("expected CRITICAL for %s, got %s", f.RuleID, f.Severity)
-		}
-	}
-}
-
-func TestFixture_Tfsec_Empty(t *testing.T) {
-	data := readFixture(t, "tfsec/tfsec_empty.json")
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings, got %d", len(findings))
-	}
-}
-
-func TestFixture_Tfsec_Malformed(t *testing.T) {
-	data := readFixture(t, "tfsec/tfsec_malformed.json")
-	// tfsec parser returns error for invalid JSON
-	_, err := parseTfsecOutput(data)
-	if err == nil {
-		t.Error("expected error for malformed JSON, got nil")
-	}
-}
-
-// ===========================================================================
 // Trivy — integration tests with fixtures
 // ===========================================================================
 
@@ -623,12 +518,10 @@ func TestFixture_Terrascan_CategoryMapping(t *testing.T) {
 func TestCrossScanner_SeverityNormalization(t *testing.T) {
 	// Carrega fixtures "mixed" de todos os scanners
 	checkovData := readFixture(t, "checkov/checkov_mixed.json")
-	tfsecData := readFixture(t, "tfsec/tfsec_mixed.json")
 	terrascanData := readFixture(t, "terrascan/terrascan_mixed.json")
 	trivyData := readFixture(t, "trivy/trivy_mixed.json")
 
 	checkovFindings, _ := parseCheckovOutput(checkovData)
-	tfsecFindings, _ := parseTfsecOutput(tfsecData)
 	terrascanFindings, _ := parseTerrascanOutput(terrascanData)
 	trivyFindings, _ := parseTrivyOutput(trivyData)
 
@@ -646,7 +539,6 @@ func TestCrossScanner_SeverityNormalization(t *testing.T) {
 		findings []rules.Finding
 	}{
 		{"checkov", checkovFindings},
-		{"tfsec", tfsecFindings},
 		{"terrascan", terrascanFindings},
 		{"trivy", trivyFindings},
 	}
@@ -663,25 +555,21 @@ func TestCrossScanner_SeverityNormalization(t *testing.T) {
 
 func TestCrossScanner_SourceTagFormat(t *testing.T) {
 	checkovData := readFixture(t, "checkov/checkov_mixed.json")
-	tfsecData := readFixture(t, "tfsec/tfsec_mixed.json")
 	terrascanData := readFixture(t, "terrascan/terrascan_mixed.json")
 	trivyData := readFixture(t, "trivy/trivy_mixed.json")
 
 	checkovFindings, _ := parseCheckovOutput(checkovData)
-	tfsecFindings, _ := parseTfsecOutput(tfsecData)
 	terrascanFindings, _ := parseTerrascanOutput(terrascanData)
 	trivyFindings, _ := parseTrivyOutput(trivyData)
 
 	expectedSources := map[string]string{
 		"checkov":   "scanner:checkov",
-		"tfsec":     "scanner:tfsec",
 		"terrascan": "scanner:terrascan",
 		"trivy":     "scanner:trivy",
 	}
 
 	allSets := map[string][]rules.Finding{
 		"checkov":   checkovFindings,
-		"tfsec":     tfsecFindings,
 		"terrascan": terrascanFindings,
 		"trivy":     trivyFindings,
 	}
@@ -699,12 +587,10 @@ func TestCrossScanner_SourceTagFormat(t *testing.T) {
 
 func TestCrossScanner_AllFindingsHaveCategory(t *testing.T) {
 	checkovData := readFixture(t, "checkov/checkov_mixed.json")
-	tfsecData := readFixture(t, "tfsec/tfsec_mixed.json")
 	terrascanData := readFixture(t, "terrascan/terrascan_mixed.json")
 	trivyData := readFixture(t, "trivy/trivy_mixed.json")
 
 	checkovFindings, _ := parseCheckovOutput(checkovData)
-	tfsecFindings, _ := parseTfsecOutput(tfsecData)
 	terrascanFindings, _ := parseTerrascanOutput(terrascanData)
 	trivyFindings, _ := parseTrivyOutput(trivyData)
 
@@ -713,7 +599,6 @@ func TestCrossScanner_AllFindingsHaveCategory(t *testing.T) {
 		findings []rules.Finding
 	}{
 		{"checkov", checkovFindings},
-		{"tfsec", tfsecFindings},
 		{"terrascan", terrascanFindings},
 		{"trivy", trivyFindings},
 	}
@@ -728,7 +613,7 @@ func TestCrossScanner_AllFindingsHaveCategory(t *testing.T) {
 }
 
 func TestCrossScanner_DeduplicateOverlappingFindings(t *testing.T) {
-	// Simulate situation where Checkov and tfsec find the same issue
+	// Simulate situation where Checkov and Trivy find the same issue
 	// on the same resource — dedup should merge
 	checkov := []rules.Finding{
 		{
@@ -740,20 +625,20 @@ func TestCrossScanner_DeduplicateOverlappingFindings(t *testing.T) {
 			Source:   "scanner:checkov",
 		},
 	}
-	tfsec := []rules.Finding{
+	trivy := []rules.Finding{
 		{
-			RuleID:      "aws-s3-enable-bucket-encryption",
+			RuleID:      "AVD-AWS-0088",
 			Severity:    rules.SeverityCritical,
 			Category:    rules.CategorySecurity,
 			Resource:    "aws_s3_bucket.data",
-			Message:     "[tfsec] aws-s3-enable-bucket-encryption: Bucket does not have encryption enabled",
+			Message:     "[trivy] AVD-AWS-0088: Bucket does not have encryption enabled",
 			Remediation: "Configure server-side encryption",
-			Source:      "scanner:tfsec",
+			Source:      "scanner:trivy",
 		},
 	}
 
 	// Combina findings como o aggregator faria
-	combined := append(checkov, tfsec...)
+	combined := append(checkov, trivy...)
 	deduped := deduplicateFindings(combined)
 
 	// Dedup by message heuristic — both mention encryption + s3
@@ -773,12 +658,10 @@ func TestCrossScanner_DeduplicateOverlappingFindings(t *testing.T) {
 func TestCrossScanner_FieldConsistency(t *testing.T) {
 	// Verify that all scanners produce the same struct with the same fields
 	checkovData := readFixture(t, "checkov/checkov_mixed.json")
-	tfsecData := readFixture(t, "tfsec/tfsec_mixed.json")
 	terrascanData := readFixture(t, "terrascan/terrascan_mixed.json")
 	trivyData := readFixture(t, "trivy/trivy_mixed.json")
 
 	checkovFindings, _ := parseCheckovOutput(checkovData)
-	tfsecFindings, _ := parseTfsecOutput(tfsecData)
 	terrascanFindings, _ := parseTerrascanOutput(terrascanData)
 	trivyFindings, _ := parseTrivyOutput(trivyData)
 
@@ -787,7 +670,6 @@ func TestCrossScanner_FieldConsistency(t *testing.T) {
 		findings []rules.Finding
 	}{
 		{"checkov", checkovFindings},
-		{"tfsec", tfsecFindings},
 		{"terrascan", terrascanFindings},
 		{"trivy", trivyFindings},
 	}
@@ -809,9 +691,9 @@ func TestCrossScanner_FieldConsistency(t *testing.T) {
 			}
 		}
 
-		// tfsec and trivy should have remediation; terrascan does not provide it
+		// trivy should have remediation; terrascan does not provide it
 		switch set.name {
-		case "tfsec", "trivy":
+		case "trivy":
 			if !hasRemediation {
 				t.Errorf("[%s] nenhum finding tem remediation preenchida", set.name)
 			}
@@ -826,12 +708,10 @@ func TestCrossScanner_FieldConsistency(t *testing.T) {
 func TestCrossScanner_MessagePrefixFormat(t *testing.T) {
 	// Verify that messages follow the format [scanner] RuleID: description
 	checkovData := readFixture(t, "checkov/checkov_mixed.json")
-	tfsecData := readFixture(t, "tfsec/tfsec_mixed.json")
 	terrascanData := readFixture(t, "terrascan/terrascan_mixed.json")
 	trivyData := readFixture(t, "trivy/trivy_mixed.json")
 
 	checkovFindings, _ := parseCheckovOutput(checkovData)
-	tfsecFindings, _ := parseTfsecOutput(tfsecData)
 	terrascanFindings, _ := parseTerrascanOutput(terrascanData)
 	trivyFindings, _ := parseTrivyOutput(trivyData)
 
@@ -843,7 +723,6 @@ func TestCrossScanner_MessagePrefixFormat(t *testing.T) {
 
 	cases := []prefixCase{
 		{"checkov", "[checkov]", checkovFindings},
-		{"tfsec", "[tfsec]", tfsecFindings},
 		{"terrascan", "[terrascan]", terrascanFindings},
 		{"trivy", "[trivy]", trivyFindings},
 	}

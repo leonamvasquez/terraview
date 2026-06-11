@@ -48,7 +48,7 @@ var rootCmd = &cobra.Command{
 	Short: "Security scanner + AI contextual analysis for Terraform plans",
 	Long: `terraview — Security scanner + AI contextual analysis for Terraform plans
 
-Combines static security scanners (Checkov, tfsec, Terrascan) with AI-powered
+Combines static security scanners (Checkov, Trivy, Terrascan) with AI-powered
 contextual analysis that detects cross-resource risks scanners cannot find.
 Scanner and AI run in parallel by default.
 
@@ -163,7 +163,7 @@ func applyBRTranslations() {
 	rootCmd.Short = "Scanner de segurança + análise contextual IA para planos Terraform"
 	rootCmd.Long = `terraview — Scanner de segurança + análise contextual IA para planos Terraform
 
-Combina scanners de segurança estáticos (Checkov, tfsec, Terrascan) com análise
+Combina scanners de segurança estáticos (Checkov, Trivy, Terrascan) com análise
 contextual por IA que detecta riscos entre recursos que scanners não encontram.
 Scanner e IA rodam em paralelo por padrão.
 
@@ -507,7 +507,7 @@ Exemplos:
 
 Exemplos:
   terraview scanners install checkov
-  terraview scanners install tfsec terrascan
+  terraview scanners install trivy terrascan
   terraview scanners install --all
   terraview scanners install checkov --force`
 	scannersDefaultCmd.Short = "Definir ou exibir o scanner padrão"

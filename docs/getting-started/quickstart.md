@@ -23,7 +23,7 @@ Saída esperada:
   Security Scanners
 
   [✓] checkov      3.2.504
-  [✗] tfsec        Install with: terraview scanners install tfsec
+  [✗] trivy        Install with: terraview scanners install trivy
   [✗] terrascan    Install with: terraview scanners install terrascan
 
   AI Providers

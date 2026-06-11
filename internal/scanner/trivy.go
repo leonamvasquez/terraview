@@ -11,95 +11,57 @@ import (
 )
 
 func init() {
-	Register(&TfsecScanner{})
+	Register(&TrivyScanner{})
 }
 
-// TfsecScanner implements the Scanner interface for Aqua tfsec (now trivy).
-type TfsecScanner struct{}
+// TrivyScanner implements the Scanner interface for Aqua Trivy
+// (misconfiguration scanning via "trivy config" — successor of tfsec).
+type TrivyScanner struct{}
 
-func (s *TfsecScanner) Name() string { return "tfsec" }
+func (s *TrivyScanner) Name() string { return "trivy" }
 
-func (s *TfsecScanner) Available() bool {
-	// Check for both tfsec and trivy (tfsec is now part of trivy)
-	return commandExists("tfsec") || commandExists("trivy")
+func (s *TrivyScanner) Available() bool {
+	return commandExists("trivy")
 }
 
-func (s *TfsecScanner) Priority() int { return 2 }
+func (s *TrivyScanner) Priority() int { return 2 }
 
-func (s *TfsecScanner) EnsureInstalled() (bool, InstallHint) {
+func (s *TrivyScanner) EnsureInstalled() (bool, InstallHint) {
 	if s.Available() {
 		return true, InstallHint{}
 	}
 	// Try auto-install via bininstaller
-	result := AutoInstallScanner("tfsec")
+	result := AutoInstallScanner("trivy")
 	if result.Installed {
 		return true, InstallHint{}
 	}
 	return false, InstallHint{
-		Brew:    "brew install tfsec",
-		URL:     "https://aquasecurity.github.io/tfsec/",
-		Default: "terraview scanners install tfsec",
+		Brew:    "brew install trivy",
+		URL:     "https://trivy.dev/latest/getting-started/installation/",
+		Default: "terraview scanners install trivy",
 	}
 }
 
-func (s *TfsecScanner) Version() string {
-	if commandExists("tfsec") {
-		return getCommandVersion("tfsec")
-	}
+func (s *TrivyScanner) Version() string {
 	if commandExists("trivy") {
 		return getCommandVersion("trivy")
 	}
 	return ""
 }
 
-func (s *TfsecScanner) SupportedModes() []ScanMode {
+func (s *TrivyScanner) SupportedModes() []ScanMode {
 	return []ScanMode{ScanModeSource}
 }
 
-func (s *TfsecScanner) Scan(ctx ScanContext) ([]rules.Finding, error) {
+func (s *TrivyScanner) Scan(ctx ScanContext) ([]rules.Finding, error) {
 	scanDir := ctx.SourceDir
 	if scanDir == "" {
 		scanDir = ctx.WorkDir
 	}
 	if scanDir == "" {
-		return nil, fmt.Errorf("tfsec: no source directory provided")
+		return nil, fmt.Errorf("trivy: no source directory provided")
 	}
 
-	// Try tfsec first, then trivy
-	if commandExists("tfsec") {
-		return s.runTfsec(scanDir)
-	}
-	return s.runTrivy(scanDir)
-}
-
-func (s *TfsecScanner) runTfsec(dir string) ([]rules.Finding, error) {
-	tmpFile, err := os.CreateTemp("", "tfsec-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("tfsec: failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
-
-	cmd := exec.Command("tfsec",
-		dir,
-		"--format", "json",
-		"--out", tmpFile.Name(),
-		"--no-color",
-		"--exclude-downloaded-modules",
-	)
-
-	// tfsec exits non-zero when findings exist
-	_ = cmd.Run()
-
-	data, err := os.ReadFile(tmpFile.Name())
-	if err != nil || len(data) == 0 {
-		return nil, nil
-	}
-
-	return parseTfsecOutput(data)
-}
-
-func (s *TfsecScanner) runTrivy(dir string) ([]rules.Finding, error) {
 	tmpFile, err := os.CreateTemp("", "trivy-*.json")
 	if err != nil {
 		return nil, fmt.Errorf("trivy: failed to create temp file: %w", err)
@@ -111,9 +73,11 @@ func (s *TfsecScanner) runTrivy(dir string) ([]rules.Finding, error) {
 		"config",
 		"--format", "json",
 		"--output", tmpFile.Name(),
-		dir,
+		scanDir,
 	)
 
+	// trivy exits non-zero when findings exist (with --exit-code) or on partial
+	// errors; parse whatever was written regardless.
 	_ = cmd.Run()
 
 	data, err := os.ReadFile(tmpFile.Name())
@@ -122,65 +86,6 @@ func (s *TfsecScanner) runTrivy(dir string) ([]rules.Finding, error) {
 	}
 
 	return parseTrivyOutput(data)
-}
-
-// tfsec JSON output structures
-type tfsecReport struct {
-	Results []tfsecResult `json:"results"`
-}
-
-type tfsecResult struct {
-	RuleID      string `json:"rule_id"`
-	LongID      string `json:"long_id"`
-	RuleDesc    string `json:"rule_description"`
-	Description string `json:"description"`
-	Impact      string `json:"impact"`
-	Resolution  string `json:"resolution"`
-	Severity    string `json:"severity"`
-	Resource    string `json:"resource"`
-	Location    struct {
-		Filename  string `json:"filename"`
-		StartLine int    `json:"start_line"`
-		EndLine   int    `json:"end_line"`
-	} `json:"location"`
-	Links []string `json:"links"`
-}
-
-func parseTfsecOutput(data []byte) ([]rules.Finding, error) {
-	var report tfsecReport
-	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("tfsec: failed to parse output: %w", err)
-	}
-
-	findings := make([]rules.Finding, 0, len(report.Results))
-	for _, r := range report.Results {
-		resource := r.Resource
-		if resource == "" {
-			resource = r.Location.Filename
-		}
-
-		desc := r.Description
-		if desc == "" {
-			desc = r.RuleDesc
-		}
-
-		ruleID := r.RuleID
-		if ruleID == "" {
-			ruleID = r.LongID
-		}
-
-		findings = append(findings, rules.Finding{
-			RuleID:      ruleID,
-			Severity:    mapTfsecSeverity(r.Severity),
-			Category:    inferTfsecCategory(ruleID),
-			Resource:    resource,
-			Message:     fmt.Sprintf("[tfsec] %s: %s", ruleID, desc),
-			Remediation: r.Resolution,
-			Source:      "scanner:tfsec",
-		})
-	}
-
-	return findings, nil
 }
 
 // trivy config JSON output structures
@@ -243,8 +148,8 @@ func parseTrivyOutput(data []byte) ([]rules.Finding, error) {
 
 			findings = append(findings, rules.Finding{
 				RuleID:      ruleID,
-				Severity:    mapTfsecSeverity(m.Severity),
-				Category:    inferTfsecCategory(ruleID),
+				Severity:    mapTrivySeverity(m.Severity),
+				Category:    inferTrivyCategory(ruleID),
 				Resource:    resource,
 				Message:     fmt.Sprintf("[trivy] %s: %s", ruleID, desc),
 				Remediation: m.Resolution,
@@ -256,7 +161,7 @@ func parseTrivyOutput(data []byte) ([]rules.Finding, error) {
 	return findings, nil
 }
 
-func mapTfsecSeverity(severity string) string {
+func mapTrivySeverity(severity string) string {
 	switch strings.ToUpper(severity) {
 	case "CRITICAL":
 		return rules.SeverityCritical
@@ -271,7 +176,7 @@ func mapTfsecSeverity(severity string) string {
 	}
 }
 
-func inferTfsecCategory(ruleID string) string {
+func inferTrivyCategory(ruleID string) string {
 	id := strings.ToLower(ruleID)
 	switch {
 	case strings.Contains(id, "iam") || strings.Contains(id, "auth") || strings.Contains(id, "encrypt"):

@@ -27,5 +27,5 @@ type Finding struct {
 	Message     string   `json:"message" yaml:"message"`
 	Remediation string   `json:"remediation,omitempty" yaml:"remediation,omitempty"`
 	References  []string `json:"references,omitempty" yaml:"references,omitempty"` // CIS/NIST/CVE links (AI findings)
-	Source      string   `json:"source" yaml:"source"`                             // e.g. "checkov", "tfsec", "llm"
+	Source      string   `json:"source" yaml:"source"`                             // e.g. "checkov", "trivy", "llm"
 }

@@ -110,9 +110,9 @@ var scannersInstallCmd = &cobra.Command{
 
 Examples:
   tv scanners install checkov        # install checkov only
-  tv scanners install tfsec          # install tfsec only
+  tv scanners install trivy          # install trivy only
   tv scanners install terrascan      # install terrascan only
-  tv scanners install checkov tfsec  # install specific scanners
+  tv scanners install checkov trivy  # install specific scanners
   tv scanners install --all          # install all missing scanners`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, _ := platform.Detect()
@@ -123,9 +123,9 @@ Examples:
 		// Require either scanner names or --all
 		if len(args) == 0 && !installAll {
 			if brFlag {
-				return fmt.Errorf("especifique um scanner ou use --all\n\nExemplos:\n  terraview scanners install checkov\n  terraview scanners install tfsec\n  terraview scanners install terrascan\n  terraview scanners install --all")
+				return fmt.Errorf("especifique um scanner ou use --all\n\nExemplos:\n  terraview scanners install checkov\n  terraview scanners install trivy\n  terraview scanners install terrascan\n  terraview scanners install --all")
 			}
-			return fmt.Errorf("specify a scanner or use --all\n\nExamples:\n  terraview scanners install checkov\n  terraview scanners install tfsec\n  terraview scanners install terrascan\n  terraview scanners install --all")
+			return fmt.Errorf("specify a scanner or use --all\n\nExamples:\n  terraview scanners install checkov\n  terraview scanners install trivy\n  terraview scanners install terrascan\n  terraview scanners install --all")
 		}
 
 		if brFlag {
@@ -243,7 +243,7 @@ var scannersDefaultCmd = &cobra.Command{
 Examples:
   tv scanners default              # show current default
   tv scanners default checkov      # set checkov as default
-  tv scanners default tfsec        # set tfsec as default`,
+  tv scanners default trivy        # set trivy as default`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load(workDir)
@@ -256,12 +256,12 @@ Examples:
 			if cfg.Scanner.Default == "" {
 				if brFlag {
 					fmt.Println("  Nenhum scanner padrão configurado.")
-					fmt.Println("  O scanner será selecionado automaticamente por prioridade: checkov > tfsec > terrascan")
+					fmt.Println("  O scanner será selecionado automaticamente por prioridade: checkov > trivy > terrascan")
 					fmt.Println()
 					fmt.Printf("  %sDefina com: terraview scanners default <nome>%s\n", ansiDim, ansiReset)
 				} else {
 					fmt.Println("  No default scanner configured.")
-					fmt.Println("  Scanner will be auto-selected by priority: checkov > tfsec > terrascan")
+					fmt.Println("  Scanner will be auto-selected by priority: checkov > trivy > terrascan")
 					fmt.Println()
 					fmt.Printf("  %sSet with: terraview scanners default <name>%s\n", ansiDim, ansiReset)
 				}

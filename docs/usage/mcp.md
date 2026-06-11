@@ -66,7 +66,7 @@ Cada tool aceita parâmetros via JSON no campo `arguments` da mensagem `tools/ca
 |-----------|------|-----------|
 | `dir` | string | Diretório do workspace Terraform (default: `.`) |
 | `plan` | string | Caminho para plan JSON pré-gerado |
-| `scanner` | string | Scanner a usar: `checkov`, `tfsec`, `terrascan` |
+| `scanner` | string | Scanner a usar: `checkov`, `trivy`, `terrascan` |
 | `static` | boolean | Desabilitar análise IA (apenas scanner) |
 
 ## Exemplo de mensagem

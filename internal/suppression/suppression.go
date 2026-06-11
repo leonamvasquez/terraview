@@ -43,7 +43,7 @@ type Entry struct {
 	RuleID string `yaml:"rule_id"`
 	// Resource suppresses findings on a specific resource address. If empty, matches any resource.
 	Resource string `yaml:"resource"`
-	// Source suppresses findings from a specific scanner source (checkov, tfsec, llm, etc.).
+	// Source suppresses findings from a specific scanner source (checkov, trivy, llm, etc.).
 	// If empty, matches any source.
 	Source string `yaml:"source"`
 	// Reason is a human-readable explanation. Recommended but not required.

@@ -320,7 +320,7 @@ func TestAdaptersPriority(t *testing.T) {
 		priority int
 	}{
 		{"checkov", 1},
-		{"tfsec", 2},
+		{"trivy", 2},
 		{"terrascan", 3},
 	}
 
@@ -351,7 +351,7 @@ func TestAdaptersEnsureInstalled(t *testing.T) {
 }
 
 func TestAdaptersRegisteredInDefaultManager(t *testing.T) {
-	expected := []string{"checkov", "tfsec", "terrascan"}
+	expected := []string{"checkov", "trivy", "terrascan"}
 	all := DefaultManager.All()
 	for _, name := range expected {
 		if _, ok := all[name]; !ok {
@@ -561,8 +561,8 @@ func TestCheckovSupportedModes(t *testing.T) {
 	}
 }
 
-func TestTfsecSupportedModes(t *testing.T) {
-	s := &TfsecScanner{}
+func TestTrivySupportedModes(t *testing.T) {
+	s := &TrivyScanner{}
 	modes := s.SupportedModes()
 	if len(modes) != 1 || modes[0] != ScanModeSource {
 		t.Errorf("expected [source], got %v", modes)

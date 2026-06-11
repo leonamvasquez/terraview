@@ -173,90 +173,6 @@ func TestInferCheckovCategory(t *testing.T) {
 }
 
 // ===========================================================================
-// TFSec parser tests
-// ===========================================================================
-
-func TestParseTfsecOutput_Valid(t *testing.T) {
-	data := []byte(`{
-		"results": [
-			{
-				"rule_id": "aws-iam-no-policy-wildcards",
-				"long_id": "aws-iam-no-policy-wildcards",
-				"rule_description": "IAM policy should avoid wildcards",
-				"description": "IAM policy document uses wildcard",
-				"severity": "HIGH",
-				"resource": "aws_iam_policy.admin",
-				"resolution": "Restrict IAM actions",
-				"location": {"filename": "main.tf", "start_line": 10, "end_line": 15}
-			}
-		]
-	}`)
-
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-	f := findings[0]
-	if f.Severity != rules.SeverityHigh {
-		t.Errorf("expected HIGH, got %s", f.Severity)
-	}
-	if f.Source != "scanner:tfsec" {
-		t.Errorf("expected source scanner:tfsec, got %s", f.Source)
-	}
-	if f.Remediation != "Restrict IAM actions" {
-		t.Errorf("expected remediation, got %s", f.Remediation)
-	}
-}
-
-func TestParseTfsecOutput_InvalidJSON(t *testing.T) {
-	_, err := parseTfsecOutput([]byte("not json"))
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func TestParseTfsecOutput_EmptyResults(t *testing.T) {
-	data := []byte(`{"results": []}`)
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings, got %d", len(findings))
-	}
-}
-
-func TestParseTfsecOutput_FallbackFields(t *testing.T) {
-	data := []byte(`{
-		"results": [
-			{
-				"rule_id": "",
-				"long_id": "aws-s3-long-id",
-				"rule_description": "fallback desc",
-				"description": "",
-				"severity": "LOW",
-				"resource": "",
-				"location": {"filename": "s3.tf"}
-			}
-		]
-	}`)
-
-	findings, err := parseTfsecOutput(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if findings[0].RuleID != "aws-s3-long-id" {
-		t.Errorf("expected long_id fallback, got %s", findings[0].RuleID)
-	}
-	if findings[0].Resource != "s3.tf" {
-		t.Errorf("expected filename fallback, got %s", findings[0].Resource)
-	}
-}
-
-// ===========================================================================
 // Trivy parser tests
 // ===========================================================================
 
@@ -385,7 +301,7 @@ func TestParseTrivyOutput_FallbackFields(t *testing.T) {
 	}
 }
 
-func TestMapTfsecSeverity(t *testing.T) {
+func TestMapTrivySeverity(t *testing.T) {
 	tests := []struct {
 		severity string
 		want     string
@@ -399,13 +315,13 @@ func TestMapTfsecSeverity(t *testing.T) {
 		{"", rules.SeverityMedium},
 	}
 	for _, tt := range tests {
-		if got := mapTfsecSeverity(tt.severity); got != tt.want {
-			t.Errorf("mapTfsecSeverity(%q) = %q, want %q", tt.severity, got, tt.want)
+		if got := mapTrivySeverity(tt.severity); got != tt.want {
+			t.Errorf("mapTrivySeverity(%q) = %q, want %q", tt.severity, got, tt.want)
 		}
 	}
 }
 
-func TestInferTfsecCategory(t *testing.T) {
+func TestInferTrivyCategory(t *testing.T) {
 	tests := []struct {
 		ruleID string
 		want   string
@@ -421,8 +337,8 @@ func TestInferTfsecCategory(t *testing.T) {
 		{"aws-some-other-check", rules.CategorySecurity}, // default
 	}
 	for _, tt := range tests {
-		if got := inferTfsecCategory(tt.ruleID); got != tt.want {
-			t.Errorf("inferTfsecCategory(%q) = %q, want %q", tt.ruleID, got, tt.want)
+		if got := inferTrivyCategory(tt.ruleID); got != tt.want {
+			t.Errorf("inferTrivyCategory(%q) = %q, want %q", tt.ruleID, got, tt.want)
 		}
 	}
 }

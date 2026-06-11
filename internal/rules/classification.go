@@ -17,7 +17,7 @@ import (
 // cost a rollback and erode trust.
 //
 // The map only covers rules where the ID is the most reliable signal. For the
-// long tail (Checkov has ~500 AWS rules, tfsec ~200, Terrascan ~150), pattern
+// long tail (Checkov has ~500 AWS rules, Trivy ~200, Terrascan ~150), pattern
 // matching against message/remediation handles cross-scanner coverage —
 // see advisoryPatterns and AdvisoryReasonForFinding.
 var advisoryRules = map[string]string{
@@ -78,7 +78,7 @@ var advisoryRules = map[string]string{
 
 // advisoryPattern matches a finding by regex against a composite of its
 // rule_id, message, and remediation. Patterns cover cross-scanner cases
-// where rule IDs differ (Checkov vs tfsec vs Terrascan) but the underlying
+// where rule IDs differ (Checkov vs Trivy vs Terrascan) but the underlying
 // remediation is the same human decision.
 type advisoryPattern struct {
 	match  *regexp.Regexp
@@ -189,7 +189,7 @@ func AdvisoryReason(ruleID string) (string, bool) {
 
 // AdvisoryReasonForFinding evaluates the static catalog first, then falls
 // back to pattern matching against the finding's message + remediation. This
-// catches cross-scanner cases (tfsec, Terrascan) where rule IDs differ but
+// catches cross-scanner cases (Trivy, Terrascan) where rule IDs differ but
 // the underlying human decision is the same.
 func AdvisoryReasonForFinding(f Finding) (string, bool) {
 	if reason, ok := advisoryRules[f.RuleID]; ok {

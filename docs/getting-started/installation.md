@@ -119,4 +119,4 @@ Após configurar, reabra o terminal e use `terraview <Tab>` para autocompletar c
 ## Requisitos
 
 - Terraform >= 0.12
-- Um ou mais scanners instalados (Checkov, tfsec, Terrascan) — o terraview pode instalá-los por você via `terraview scanners install --all`
+- Um ou mais scanners instalados (Checkov, Trivy, Terrascan) — o terraview pode instalá-los por você via `terraview scanners install --all`

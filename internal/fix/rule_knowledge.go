@@ -2,7 +2,7 @@ package fix
 
 import "strings"
 
-// ruleRequiredResources maps a Checkov/tfsec rule ID to the Terraform resource type
+// ruleRequiredResources maps a Checkov/Trivy rule ID to the Terraform resource type
 // that must be created (or referenced) to remediate it.
 // Used to look up existing resources in the plan before the AI invents names.
 var ruleRequiredResources = map[string]string{
