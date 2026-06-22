@@ -373,6 +373,184 @@ terraview scan checkov --provider gemini-cli --model gemini-3
 terraview scan checkov --provider claude-code --model claude-sonnet-4-5
 ```
 
+### Terragrunt
+
+TerraView supports **Terragrunt** as an alternative executor to Terraform. Terragrunt is a Terraform wrapper that adds:
+
+- **Automatic remote state management** — centralized backend configuration
+- **Multi-module orchestration** — plan and apply module dependencies in sequence
+- **Variables and composition** — reuse configurations via `terragrunt.hcl`
+- **Dependency validation** — executes modules in the correct order
+
+#### Auto-detection
+
+TerraView automatically detects Terragrunt projects when it finds a `terragrunt.hcl` file in the root directory:
+
+```bash
+cd my-terragrunt-project
+terraview scan checkov                      # auto-detects Terragrunt
+```
+
+If it finds a `terragrunt.hcl`, TerraView will notify you:
+
+```
+[terraview] Auto-detected Terragrunt project at /path/to/project
+[terraview] Terragrunt mode: auto-detect
+```
+
+#### Explicit usage
+
+Use `--terragrunt` to explicitly enable Terragrunt mode:
+
+```bash
+terraview scan checkov --terragrunt           # auto-detect config in terragrunt.hcl
+terraview scan checkov --terragrunt dev.hcl  # use specific config file
+terraview scan trivy --terragrunt prd.hcl    # Terragrunt with specific scanner
+```
+
+#### Syntax
+
+The `--terragrunt` flag supports three forms:
+
+| Syntax | Behavior |
+|--------|----------|
+| `terraview scan checkov` | Use Terraform (auto-detect if `terragrunt.hcl` present) |
+| `terraview scan checkov --terragrunt` | Auto-detect Terragrunt config file |
+| `terraview scan checkov --terragrunt dev.hcl` | Use `dev.hcl` as Terragrunt config |
+
+#### Multi-module projects
+
+TerraView automatically detects multi-module Terragrunt structures and:
+
+1. Executes `terragrunt run-all plan` to generate plans for all modules
+2. Merges the plans into a single result
+3. Runs scanners and AI on the merged plan
+
+Example structure:
+
+```
+infrastructure/
+├── terragrunt.hcl           # root config
+├── dev/
+│   ├── terragrunt.hcl
+│   ├── vpc/
+│   │   └── terragrunt.hcl
+│   └── rds/
+│       └── terragrunt.hcl
+└── prd/
+    ├── terragrunt.hcl
+    ├── vpc/
+    │   └── terragrunt.hcl
+    └── rds/
+        └── terragrunt.hcl
+```
+
+To scan only the `dev/vpc` module:
+
+```bash
+cd infrastructure/dev/vpc
+terraview scan checkov --terragrunt           # scan this specific module
+```
+
+To scan the entire `dev` structure:
+
+```bash
+cd infrastructure/dev
+terraview scan checkov --terragrunt           # scan dev/ + all submodules
+```
+
+#### Custom config file
+
+When you specify a config file, TerraView passes it to Terragrunt via `--terragrunt-config`:
+
+```bash
+# Use terragrunt.hcl from a specific directory
+terraview scan checkov --terragrunt /path/to/custom/terragrunt.hcl
+
+# Useful for non-standard structures or monorepos
+cd my-monorepo
+terraview scan checkov --terragrunt apps/backend/terragrunt.hcl
+```
+
+#### Compatible flags with Terragrunt
+
+Terragrunt works with all TerraView flags:
+
+```bash
+terraview scan checkov --terragrunt -d /path/to/project  # specific directory
+terraview scan checkov --terragrunt -f sarif             # SARIF output
+terraview scan checkov --terragrunt --static             # scanner only, no AI
+terraview scan checkov --terragrunt --provider claude    # with specific AI
+terraview diagram --terragrunt                           # ASCII diagram
+terraview explain --terragrunt                           # AI explanation
+terraview fix plan --terragrunt                          # fix preview
+```
+
+#### Differences between Terraform and Terragrunt
+
+| Aspect | Terraform | Terragrunt |
+|--------|-----------|-----------|
+| **Executor** | `terraform init/plan/show` | `terragrunt init/plan/show` |
+| **Multi-module** | Manual (multiple `terraform` calls) | Automatic (`run-all`) |
+| **Remote state** | Configured in `terraform {}` | Centralized in `terragrunt.hcl` |
+| **Dependencies** | Managed via output.tf | Automatically resolved |
+| **Composition** | Copy-paste or modules | Variables + `inputs` |
+
+#### Workspace validation
+
+TerraView validates the Terragrunt workspace before executing:
+
+- Verifies that `terragrunt` is installed
+- Validates `terragrunt.hcl` syntax
+- Ensures the directory contains valid Terragrunt code
+
+If validation fails, TerraView reports the error:
+
+```
+[terraview] Error: terragrunt validation failed: [error reason]
+```
+
+#### Practical examples
+
+**Scan dev with auto-detection:**
+```bash
+cd infrastructure/dev
+terraview scan checkov --terragrunt
+```
+
+**Scan prd with specific file:**
+```bash
+cd infrastructure
+terraview scan trivy --terragrunt prd/terragrunt.hcl
+```
+
+**Generate infrastructure diagram:**
+```bash
+cd infrastructure
+terraview diagram --terragrunt
+```
+
+**Multi-environment infrastructure explanation:**
+```bash
+cd infrastructure/dev
+terraview explain --terragrunt --provider claude-code
+```
+
+**Dry-run fixes:**
+```bash
+cd infrastructure/prd
+terraview scan checkov --terragrunt
+terraview fix plan --terragrunt      # preview diffs
+```
+
+**CI/CD — scan before apply:**
+```bash
+terraview scan checkov --terragrunt -f sarif -o ./reports
+terraview fix plan --terragrunt      # detect issues before apply
+```
+
+For detailed documentation on Terragrunt integration, see [docs/terragrunt.md](docs/terragrunt.md).
+
 ### Status
 
 Shows open findings from the last scan with a delta against the previous scan. Reads from the persisted `LastScan` so it does not re-run the scanner.

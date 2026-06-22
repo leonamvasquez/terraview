@@ -151,3 +151,29 @@ scanner:
   # Default scanner: checkov, trivy, terrascan
   # Can be omitted — the first argument of 'scan' defines the scanner.
   # default: checkov
+
+# ---------------------------------------------------------------------------
+# terragrunt — Terragrunt executor configuration
+# ---------------------------------------------------------------------------
+# Note: For most use cases, auto-detection is sufficient.
+#       Use this section only for custom Terragrunt setups.
+#
+# TerraView supports Terragrunt as an executor alternative to Terraform.
+# Enable with: terraview scan checkov --terragrunt [config-file]
+#
+# Auto-detection behavior:
+#   1. If --terragrunt is used with no file: auto-detects terragrunt.hcl
+#   2. If --terragrunt <file> is used: uses that file as config
+#   3. If no --terragrunt: uses Terraform (or auto-detects if terragrunt.hcl found)
+#
+# Examples:
+#   terraview scan checkov --terragrunt              # auto-detect
+#   terraview scan checkov --terragrunt dev.hcl      # specific config
+#   terraview diagram --terragrunt                   # diagrams with Terragrunt
+#   terraview explain --terragrunt                   # explains with Terragrunt
+#
+# For multi-module projects:
+#   cd infrastructure/dev
+#   terraview scan checkov --terragrunt              # scans all modules in dev/
+#
+# For full documentation, see: docs/terragrunt.md
